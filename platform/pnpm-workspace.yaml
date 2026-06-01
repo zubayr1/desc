@@ -1,0 +1,4 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+# services/ai is Python — intentionally not a pnpm workspace member.

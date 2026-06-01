@@ -1,0 +1,174 @@
+# Project Idea — Final Features Document (V1 Planning Complete)
+
+*Planning phase complete for V1. This document is now the source of truth for what V1 is, and the roadmap for V2+.*
+
+**Status legend:**
+- ✅ Confirmed
+- 🔮 Future scope — committed to as a later phase
+- 🚫 Considered and set aside
+
+---
+
+## Product Identity
+
+✅ **This is a formalization tool, not a marketplace.** Two parties who have already agreed to a deal (on Twitter, Discord, Telegram, LinkedIn, anywhere) come to the platform to formalize it: escrow the funds, define checkable acceptance criteria, let AI moderators verify delivery, and settle. The platform does not host listings, does not facilitate discovery, does not match buyers with sellers.
+
+This identity is preserved through V1, V2, and V3. Marketplace dynamics, yield products, and tokenization are explicitly out of scope until very late phases (V4+).
+
+### Why this matters
+
+- No two-sided liquidity problem at any phase until very late.
+- Each contract is a discrete win — acquisition is per-deal, not per-user.
+- Marketing message is sharp: *"You already made the deal — now make it safe."*
+- Competitive moat is verification quality + formalization UX, not network effects.
+- Resists the founder temptation to bolt on a marketplace prematurely.
+
+---
+
+## Vision vs. Launch
+
+✅ **Vision**: A neutral trust layer for any freelance or small-contract work, globally — addressing scams, non-payment, and unresolved disputes in both Web2 and Web3 contexts. Crypto rails are the implementation; the problem is universal.
+
+✅ **Launch wedge**: Solana **bounty hunters** specifically — bounty-style dev work where the deliverable is objectively checkable (merged PR, deployed contract, test suite pass, written technical report against a defined spec). Crypto-only at v1.
+
+---
+
+## V1 Features (the launch product)
+
+1. ✅ **A formalization tool for Solana bounty-style freelance work**, positioned around the trust-gap problem (scams, non-payment, unresolved disputes). Two parties bring their pre-agreed deal here to make it safe.
+
+2. ✅ **On-chain escrow on Solana** — funds held by the protocol, not by either party.
+
+3. ✅ **Decentralized AI moderator agents verify delivery** — multiple independent AI agents reach consensus on whether acceptance criteria were met.
+
+4. ✅ **Helper AI for the initiator** — assists in writing the project brief and drafting checkable acceptance criteria. Non-negotiable for v1.
+
+5. ✅ **Launch constraint: objectively-verifiable deliverables only** — v1 only accepts tasks whose acceptance criteria can be checked programmatically or near-programmatically.
+
+6. ✅ **Positioning vs. Web2 incumbents**: faster settlement, lower fees, less regulatory overhead, more automated dispute resolution.
+
+7. ✅ **Random moderator assignment by protocol** — initiators do not pick their own moderators. Random selection from the eligible pool prevents collusion and Sybil bias.
+
+8. ✅ **USDC as the settlement currency at launch** — no native token at v1.
+
+9. ✅ **Pricing model**: 2% base protocol fee on each contract + per-moderator surcharge that flows to moderator operators. Number of moderators set by the protocol based on contract value.
+
+10. ✅ **Standalone platform at launch** — direct user-facing product. SDK is a later phase.
+
+11. ✅ **Federated moderator pool at launch** — platform runs multiple moderator agent instances with different prompts/models. Third-party pluggable moderators come in a later phase.
+
+12. ✅ **Formalization flow is the only flow at v1** — no marketplace, no listings, no discovery. The entry point is "I have a deal, let's formalize it."
+
+13. ✅ **Shareable contract link as the primary onboarding mechanism** — initiator drafts the contract, gets a link, sends it to the committer through whatever channel they already used (Discord, Twitter DM, Telegram, etc.). Committer opens the link, connects wallet, reviews, accepts. No prior account creation required. This matches how deals actually happen and reinforces the formalization-tool identity at the UX level.
+
+14. ✅ **Manual dispute review by the platform team at v1** — when AI moderators disagree or one party contests a verdict, the platform team reviews manually. Acceptable at launch volume; replaced by the human juror tier in V2+.
+
+---
+
+## Operational Notes (not features, but real commitments)
+
+- **Dispute review SLA**: manual review means someone on the team must be available to investigate disputes within a defined window (suggest: 48 business hours at launch). This is an operational cost that scales with volume and needs to be planned for, including coverage during off-hours, vacations, and unexpected volume spikes.
+- **Helper AI quality is the make-or-break factor**: if acceptance criteria are vague, verification fails, disputes go up, manual review load explodes. Investing in Helper AI prompting and templates is the single highest-leverage v1 work.
+- **Cold-start expectation**: this is a formalization tool, so cold-start is per-deal, not per-user — but the first deals still need to come from somewhere. Expect to source the first 10–20 deals from your own network (Solana dev communities, Superteam Discord, Twitter), not from organic traffic.
+
+---
+
+## Future Scope — committed to as later phases
+
+### 🔮 V2 — Multi-task projects and decomposition
+
+When expanding to dev-for-contracts work in V2, projects become naturally multi-component and decomposition becomes valuable.
+- 🔮 Atomic task decomposition — large projects broken into sub-tasks.
+- 🔮 One committer per atomic task.
+- 🔮 Privacy via decomposition — no single committer sees the whole project.
+- 🔮 Helper AI extended to propose sub-task graphs.
+
+**Plan**: After bounty wedge proves out (~20–50 successful contracts, <10% manual intervention rate), extend the contract model to support a parent contract with child sub-task contracts, each with their own committer, escrow allotment, and verification.
+
+### 🔮 V2 — Niche expansion beyond bounties
+
+- 🔮 **Phase 2a — Devs hired for one-off contracts**, ~3–6 months after bounty launch.
+- 🔮 **Phase 2b — Campaign and marketing work**, ~6–12 months after bounty launch. Requires reputation-weighted moderation and/or the human-juror escalation tier first.
+
+**Plan**: Each niche expansion ships its own template library, its own Helper AI prompt set, and its own verification agent configurations. Re-use the core protocol; specialize the layer on top.
+
+### 🔮 V2 — Human juror escalation tier
+
+**Plan**: Build a staked-juror system (Kleros-style or lightweight homegrown) so disputes that exceed AI disagreement threshold escalate to humans instead of the platform team. Required before subjective deliverables are allowed. Likely the first thing built after the bounty launch stabilizes.
+
+### 🔮 V2 — Pluggable third-party moderator market
+
+**Plan**: Open the moderator pool to external operators who stake tokens and run their own AI agents. Verdicts that match consensus earn fees + reputation; disagreement burns stake. Requires designing staking economics, Sybil resistance for moderators, and verdict commit-reveal to prevent copying.
+
+### 🔮 V2 — SDK / infrastructure offering
+
+**Plan**: Once standalone has real volume and a credible track record (~3–6 months of consistent operation), offer the escrow + verification primitive as an SDK/API for platforms like Superteam Earn, Layer3, Dework, Charmverse, Questbook, Bountycaster. Pitch backed by real metrics, not vapor.
+
+### 🔮 V2 — Web2 access (embedded wallets, fiat on/off ramps)
+
+**Plan**: Integrate Privy/Dynamic/Turnkey-style embedded wallets so users sign up with email and never see the crypto layer. Add fiat ramps (card → USDC → escrow → USDC → bank). Opens the vision-level market (general freelance, LinkedIn deals).
+
+### 🔮 V2+ — Reputation system for users
+
+**Plan**: On-chain reputation for initiators and committers, accumulated over completed deals. Reduces the "every contract starts at zero trust" problem and feeds into moderator weighting decisions.
+
+### 🔮 V2+ — Subjective deliverable support
+
+**Plan**: Once reputation-weighted moderation and human-juror escalation are live, allow subjective work (design, writing, creative). Acceptance criteria stay required but no longer need to be 100% programmatically checkable.
+
+### 🔮 V4+ — Yield, tokenization, marketplace
+
+Explicitly deferred to very late phases. Only after the formalization tool is a proven, widely-used trust primitive across multiple verticals.
+
+- 🔮 **Yield products** — possibly never if it doesn't fit the product identity.
+- 🔮 **Native token** — only if it solves a real problem (moderator staking, governance, fee discounts), not as a gimmick.
+- 🔮 **Marketplace / discovery side** — only if there's clear user demand beyond what off-platform sources already provide.
+
+---
+
+## Features explicitly set aside
+
+- 🚫 Marketplace, listings, discovery, matching — V4+ at earliest. Possibly never.
+- 🚫 Yield products — V4+ at earliest.
+- 🚫 Native token — V4+ at earliest.
+- 🚫 Atomic task decomposition — V2.
+- 🚫 One committer per atomic task — V2.
+- 🚫 Privacy via decomposition — V2.
+- 🚫 Pluggable third-party moderators — V2.
+- 🚫 Marketing/campaign work at launch — V2 Phase 2b.
+- 🚫 Dev-for-contract work at launch — V2 Phase 2a.
+- 🚫 SDK offering at launch — V2.
+- 🚫 Embedded wallets / email signup — V2.
+- 🚫 Fiat on/off ramps — V2.
+- 🚫 Subjective deliverables — V2+.
+- 🚫 Milestone-based partial releases — over-engineering for v1.
+- 🚫 Initiator picks moderators — rejected. Random assignment only.
+- 🚫 Human juror escalation tier at launch — V2+.
+- 🚫 Reputation system for users at launch — V2+.
+
+---
+
+## V1 Summary
+
+A formalization tool for Solana bounty deals. Two parties who already agreed somewhere else come here to make their deal safe — on-chain USDC escrow, Helper AI writes checkable acceptance criteria, federated AI moderators randomly verify deliverables, 2% protocol fee plus per-moderator surcharge. Shareable contract link as the primary onboarding flow. Manual dispute review by the platform team. Objectively-verifiable bounty work only. No marketplace, no discovery, no listings — just formalization.
+
+That's V1. Buildable, focused, and with a clear identity that holds through multiple expansion phases.
+
+---
+
+## V1 — Minimum Buildable Surface
+
+The product reduces to roughly these components:
+
+1. **Solana escrow program (Anchor)** — deposit, lock, release on verdict, refund on timeout.
+2. **Helper AI service** — takes a project brief and a bounty type, returns proposed acceptance criteria; initiator edits before commit.
+3. **Moderator agent service** — N (probably 3–5) platform-run instances, each running verification with different prompts/models, returning verdict + confidence.
+4. **Verdict aggregator** — consensus → settle; no consensus → flag for manual review.
+5. **Frontend** — four primary screens: draft contract, review-and-accept (from shareable link), submit deliverable, view verdict and settlement.
+6. **Manual dispute review tool** — admin interface for the team to investigate flagged cases.
+
+---
+
+## Planning Phase: Complete
+
+Everything from here forward is execution: validation conversations with target users, then building the V1 surface above. The features document is now the reference for what V1 is and what is deliberately deferred.

@@ -1,0 +1,15 @@
+[project]
+name = "desc-ai"
+version = "0.0.0"
+description = "Helper AI + moderator agents for the desc formalization tool"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    # "anthropic",  # add when wiring up LLM calls
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

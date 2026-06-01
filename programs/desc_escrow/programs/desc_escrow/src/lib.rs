@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
 
-declare_id!("6MTUNmtgYJs4LASCDHTnQDQmZMh6EptVBr7wNgyr3ZaA");
+declare_id!("4Q1jTgR9UVpbbVo57Dx1cpjo77Hx8oBn78ieex4gY2CU");
 
 #[program]
-pub mod program {
+pub mod desc_escrow {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {

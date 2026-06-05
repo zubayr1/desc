@@ -28,30 +28,40 @@ export const DEFAULT_PROTOCOL_FEE_BPS = 200; // 2%
 // Enums / unions
 // ---------------------------------------------------------------------------
 
-export type Role = "initiator" | "committer" | "admin";
+/* Each enum is declared as an `as const` array (the runtime source of truth)
+ * with its type derived from it — so a value list and a type come from ONE
+ * declaration, importable by both compile-time and runtime code. */
 
-export type DeliverableType =
-  | "merged_pr"
-  | "deployed_contract"
-  | "test_suite_pass"
-  | "technical_report";
+export const ROLES = ["initiator", "committer", "admin"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const DELIVERABLE_TYPES = [
+  "merged_pr",
+  "deployed_contract",
+  "test_suite_pass",
+  "technical_report",
+] as const;
+export type DeliverableType = (typeof DELIVERABLE_TYPES)[number];
 
 /**
  * Contract lifecycle. Mirrors the program's on-chain `EscrowStatus` 1:1 — the
  * contract only exists once `create_escrow` lands on-chain, so it is born
  * `funded` (no off-chain `draft` state in the MVP).
  */
-export type ContractStatus =
-  | "funded"
-  | "active"
-  | "submitted"
-  | "settled"
-  | "refunded"
-  | "cancelled";
+export const CONTRACT_STATUSES = [
+  "funded",
+  "active",
+  "submitted",
+  "settled",
+  "refunded",
+  "cancelled",
+] as const;
+export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 
 /** Verdict result. Mirrors the program's on-chain `Outcome`.
  *  In the MVP this is set manually by the admin/settlement authority. */
-export type Outcome = "pass" | "fail";
+export const OUTCOMES = ["pass", "fail"] as const;
+export type Outcome = (typeof OUTCOMES)[number];
 
 // ---------------------------------------------------------------------------
 // Off-chain entities

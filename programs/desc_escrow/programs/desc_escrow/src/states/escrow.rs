@@ -59,6 +59,10 @@ pub enum Outcome {
 pub struct Escrow {
     /// Schema version of this account. Set to `VERSION` at init.
     pub version: u8,
+    /// The protocol `Config` governing this escrow. Bound at creation so later
+    /// instructions load the *current* `settlement_authority` / `treasury` live
+    /// (keeping `settlement_authority` rotatable — the V1->V2 seam).
+    pub config: Pubkey,
     pub initiator: Pubkey,
     /// None until the shareable link is accepted by a committer.
     pub committer: Option<Pubkey>,

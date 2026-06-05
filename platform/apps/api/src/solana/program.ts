@@ -1,24 +1,26 @@
-import { readFileSync } from "node:fs";
-import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { AnchorProvider, Program } from "@coral-xyz/anchor";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { CONTRACT_STATUSES, OUTCOMES, type ContractStatus, type Outcome } from "@repo/shared";
 import type { DescEscrow } from "./idl/desc_escrow";
 import idl from "./idl/desc_escrow.json";
-import { env, expandHome } from "../config/env";
+import { env } from "../config/env";
+import { settlementWallet } from "./signer";
+
+export { settlementPublicKey } from "./signer";
 
 export const connection = new Connection(env.RPC_URL, "confirmed");
 
-/** Platform key — Config authority AND settlement authority in the MVP. The
- *  only key the api holds; used only to sign `record_verdict`. */
-export const platformKeypair = Keypair.fromSecretKey(
-  Uint8Array.from(JSON.parse(readFileSync(expandHome(env.PLATFORM_KEYPAIR_PATH), "utf8")))
-);
-
-const wallet = new Wallet(platformKeypair);
-export const provider = new AnchorProvider(connection, wallet, { commitment: "confirmed" });
+/** Provider signs with the hot settlement key — used ONLY for `record_verdict`.
+ *  User txns are built unsigned and never touch this wallet. */
+export const provider = new AnchorProvider(connection, settlementWallet, {
+  commitment: "confirmed",
+});
 export const program = new Program<DescEscrow>(idl as DescEscrow, provider);
 export const programId = program.programId;
 export const usdcMint = new PublicKey(env.USDC_MINT);
+
+/** Cold admin authority pubkey — seeds the Config PDA (no secret held by the api). */
+export const configAuthority = new PublicKey(env.CONFIG_AUTHORITY);
 
 // --- PDA derivations (mirror the program seeds) ---------------------------
 
@@ -40,8 +42,8 @@ export const vaultPda = (escrow: PublicKey) =>
     programId
   )[0];
 
-/** The platform's Config PDA (seeded by the platform pubkey). */
-export const platformConfigPda = configPda(platformKeypair.publicKey);
+/** The platform's Config PDA (seeded by the cold authority pubkey). */
+export const platformConfigPda = configPda(configAuthority);
 
 // --- On-chain reads -------------------------------------------------------
 

@@ -1,15 +1,16 @@
 /**
  * Dev bootstrap: prepares a local chain so the api has something to talk to.
- *   1. airdrop SOL to the platform key (if low)
- *   2. create a dev USDC mint (6 decimals)
- *   3. create the protocol treasury token account
- *   4. initialize_config (authority + settlement_authority = platform key)
+ *   1. load the COLD authority (Anchor deployer) — signs initialize_config
+ *   2. load-or-generate the HOT settlement keypair (saved to a file)
+ *   3. airdrop SOL to the authority (if low)
+ *   4. create a dev USDC mint (6 decimals) + protocol treasury token account
+ *   5. initialize_config(authority = cold, settlement_authority = hot)
  *
- * Prereq: a validator is running with the program deployed (`anchor localnet`
- * or `anchor deploy`). Run with: `pnpm bootstrap`.
+ * Prereq: a validator is running with the program deployed (`anchor localnet`).
+ * Run with: `pnpm bootstrap`.
  */
 import "dotenv/config";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import {
@@ -23,60 +24,81 @@ import { createMint, getOrCreateAssociatedTokenAccount } from "@solana/spl-token
 import type { DescEscrow } from "../src/solana/idl/desc_escrow";
 import idl from "../src/solana/idl/desc_escrow.json";
 
+const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
+
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
-const KP_PATH = (process.env.PLATFORM_KEYPAIR_PATH ?? "~/.config/solana/id.json").replace(
-  /^~/,
-  homedir()
+const AUTHORITY_PATH = expand(
+  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
+);
+const SETTLEMENT_PATH = expand(
+  process.env.SETTLEMENT_KEYPAIR_PATH ?? "./settlement-keypair.json"
 );
 const FEE_BPS = 200;
 
+function loadKeypair(path: string): Keypair {
+  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
+}
+
+function loadOrCreateKeypair(path: string): { kp: Keypair; created: boolean } {
+  if (existsSync(path)) return { kp: loadKeypair(path), created: false };
+  const kp = Keypair.generate();
+  writeFileSync(path, JSON.stringify(Array.from(kp.secretKey)));
+  return { kp, created: true };
+}
+
 async function main() {
   const connection = new Connection(RPC, "confirmed");
-  const platform = Keypair.fromSecretKey(
-    Uint8Array.from(JSON.parse(readFileSync(KP_PATH, "utf8")))
-  );
-  const provider = new AnchorProvider(connection, new Wallet(platform), {
+
+  // Cold authority (signs init) + hot settlement key (set as settlement_authority).
+  const authority = loadKeypair(AUTHORITY_PATH);
+  const { kp: settlement, created } = loadOrCreateKeypair(SETTLEMENT_PATH);
+
+  const provider = new AnchorProvider(connection, new Wallet(authority), {
     commitment: "confirmed",
   });
   const program = new Program<DescEscrow>(idl as DescEscrow, provider);
 
-  // 1. airdrop if low
-  if ((await connection.getBalance(platform.publicKey)) < LAMPORTS_PER_SOL) {
-    const sig = await connection.requestAirdrop(platform.publicKey, 2 * LAMPORTS_PER_SOL);
+  // airdrop if low
+  if ((await connection.getBalance(authority.publicKey)) < LAMPORTS_PER_SOL) {
+    const sig = await connection.requestAirdrop(authority.publicKey, 2 * LAMPORTS_PER_SOL);
     await connection.confirmTransaction(sig, "confirmed");
   }
 
-  // 2. dev USDC mint
-  const mint = await createMint(connection, platform, platform.publicKey, null, 6);
-
-  // 3. treasury token account (owned by the platform key)
+  // dev USDC mint + treasury token account
+  const mint = await createMint(connection, authority, authority.publicKey, null, 6);
   const treasury = await getOrCreateAssociatedTokenAccount(
     connection,
-    platform,
+    authority,
     mint,
-    platform.publicKey
+    authority.publicKey
   );
 
-  // 4. initialize_config
+  // initialize_config — authority = cold key, settlement_authority = hot key
   const [config] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config"), platform.publicKey.toBuffer()],
+    [Buffer.from("config"), authority.publicKey.toBuffer()],
     program.programId
   );
   await program.methods
-    .initializeConfig(platform.publicKey, treasury.address, FEE_BPS)
+    .initializeConfig(settlement.publicKey, treasury.address, FEE_BPS)
     .accountsPartial({
-      authority: platform.publicKey,
+      authority: authority.publicKey,
       config,
       systemProgram: SystemProgram.programId,
     })
     .rpc();
 
   console.log("Bootstrap complete:");
-  console.log("  platform :", platform.publicKey.toBase58());
-  console.log("  config   :", config.toBase58());
-  console.log("  treasury :", treasury.address.toBase58());
-  console.log("  feeBps   :", FEE_BPS);
-  console.log("\nAdd this to apps/api/.env:");
+  console.log("  authority (cold) :", authority.publicKey.toBase58());
+  console.log(
+    "  settlement (hot) :",
+    settlement.publicKey.toBase58(),
+    created ? "(generated)" : "(existing)"
+  );
+  console.log("  config           :", config.toBase58());
+  console.log("  treasury         :", treasury.address.toBase58());
+  console.log("\nSet these in apps/api/.env:");
+  console.log("  CONFIG_AUTHORITY=" + authority.publicKey.toBase58());
+  console.log("  SETTLEMENT_KEYPAIR_PATH=" + SETTLEMENT_PATH);
   console.log("  USDC_MINT=" + mint.toBase58());
 }
 

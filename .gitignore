@@ -15,6 +15,10 @@ build/
 .env.local
 .env.*.local
 
+# Secrets — the hot settlement keypair (never commit)
+settlement-keypair.json
+**/settlement-keypair.json
+
 # Rust / Anchor
 target/
 .anchor/

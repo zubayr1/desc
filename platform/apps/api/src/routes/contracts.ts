@@ -6,6 +6,8 @@ import {
   submitContract,
   prepareCancel,
   submitCancel,
+  prepareRelease,
+  submitRelease,
   getContract,
 } from "../contracts/service";
 
@@ -26,6 +28,7 @@ const createSchema = z.object({
 });
 
 const submitSchema = z.object({ signedTx: z.string().min(1) });
+const releaseSchema = z.object({ signer: z.string().min(1) });
 
 export function registerContractRoutes(app: FastifyInstance) {
   // Draft + build the unsigned create_escrow tx.
@@ -52,6 +55,20 @@ export function registerContractRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { signedTx } = submitSchema.parse(req.body);
     return submitCancel(id, signedTx);
+  });
+
+  // Release (either party) — build the unsigned tx.
+  app.post("/contracts/:id/release/prepare", async (req) => {
+    const { id } = req.params as { id: string };
+    const { signer } = releaseSchema.parse(req.body);
+    return prepareRelease(id, signer);
+  });
+
+  // Release — submit the signed tx (Pass → settled, committer + treasury paid).
+  app.post("/contracts/:id/release/submit", async (req) => {
+    const { id } = req.params as { id: string };
+    const { signedTx } = submitSchema.parse(req.body);
+    return submitRelease(id, signedTx);
   });
 
   // Merged read (DB metadata + live chain state).

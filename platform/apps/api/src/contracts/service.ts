@@ -6,4 +6,5 @@
  */
 export { createContract, submitContract } from "./create";
 export { prepareCancel, submitCancel } from "./cancel";
-export { getContract } from "./read";
+export { prepareAccept, submitAccept } from "./accept";
+export { getContract, getContractByLink } from "./read";

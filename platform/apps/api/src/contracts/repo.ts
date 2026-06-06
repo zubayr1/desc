@@ -8,3 +8,13 @@ export async function getRow(id: string): Promise<ContractRow> {
   if (!row) throw Object.assign(new Error("contract not found"), { statusCode: 404 });
   return row;
 }
+
+/** Resolve a contract row by its shareable link token, or throw 404. */
+export async function getRowByLink(token: string): Promise<ContractRow> {
+  const [row] = await db
+    .select()
+    .from(contracts)
+    .where(eq(contracts.linkToken, token));
+  if (!row) throw Object.assign(new Error("link not found"), { statusCode: 404 });
+  return row;
+}

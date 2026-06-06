@@ -18,7 +18,8 @@ import {
   readEscrow,
   type OnChainEscrow,
 } from "../solana/program";
-import { buildCreateEscrowTx, submitSigned } from "../solana/tx";
+import { buildCreateEscrow } from "../solana/instructions/createEscrow";
+import { submitSignedTx } from "../solana/rpc";
 import { generateLinkToken } from "../links/token";
 
 /** Map a DB row + live on-chain escrow into the domain `Contract`. */
@@ -84,7 +85,7 @@ export async function createContract(
   }));
   const deadline = new Date(req.deadline);
 
-  const unsignedTx = await buildCreateEscrowTx({
+  const unsignedTx = await buildCreateEscrow({
     initiator,
     contractIdBytes: Array.from(contractIdBuf),
     escrow,
@@ -130,7 +131,7 @@ export async function submitContract(
   signedTx: string
 ): Promise<Contract> {
   const row = await getRow(id);
-  await submitSigned(signedTx);
+  await submitSignedTx(signedTx);
 
   // Confirm the escrow now exists + is funded on-chain.
   const oc = await readEscrow(new PublicKey(row.escrowAddress));

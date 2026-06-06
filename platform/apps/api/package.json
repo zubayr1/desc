@@ -10,7 +10,8 @@
     "check-types": "tsc --noEmit",
     "bootstrap": "tsx scripts/bootstrap.ts",
     "update-config": "tsx scripts/update-config.ts",
-    "e2e": "tsx scripts/e2e.ts",
+    "e2e:create": "tsx scripts/e2e/e2e_create.ts",
+    "e2e:cancel": "tsx scripts/e2e/e2e_cancel.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

@@ -23,11 +23,13 @@ export function toContract(row: ContractRow, oc: OnChainEscrow): Contract {
     vaultAddress: row.vaultAddress,
     linkToken: row.linkToken,
     outcome: oc.outcome,
-    deliverable: row.deliverablePayload
+    // Shown only once the submit tx has confirmed (submittedAt set), even though
+    // payload + hash are stashed at prepare time.
+    deliverable: row.deliverableSubmittedAt
       ? {
-          payload: row.deliverablePayload,
+          payload: row.deliverablePayload ?? "",
           deliverableHash: row.deliverableHash ?? "",
-          submittedAt: (row.deliverableSubmittedAt ?? new Date()).toISOString(),
+          submittedAt: row.deliverableSubmittedAt.toISOString(),
         }
       : null,
     deadline: row.deadline.toISOString(),

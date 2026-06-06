@@ -7,4 +7,5 @@
 export { createContract, submitContract } from "./create";
 export { prepareCancel, submitCancel } from "./cancel";
 export { prepareAccept, submitAccept } from "./accept";
+export { prepareDeliverable, submitDeliverable } from "./deliverable";
 export { getContract, getContractByLink } from "./read";

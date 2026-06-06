@@ -4,6 +4,8 @@ import { DELIVERABLE_TYPES } from "@repo/shared";
 import {
   createContract,
   submitContract,
+  prepareCancel,
+  submitCancel,
   getContract,
 } from "../contracts/service";
 
@@ -37,6 +39,19 @@ export function registerContractRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { signedTx } = submitSchema.parse(req.body);
     return submitContract(id, signedTx);
+  });
+
+  // Cancel (initiator) — build the unsigned tx.
+  app.post("/contracts/:id/cancel/prepare", async (req) => {
+    const { id } = req.params as { id: string };
+    return prepareCancel(id);
+  });
+
+  // Cancel — submit the signed tx (refund + mark cancelled).
+  app.post("/contracts/:id/cancel/submit", async (req) => {
+    const { id } = req.params as { id: string };
+    const { signedTx } = submitSchema.parse(req.body);
+    return submitCancel(id, signedTx);
   });
 
   // Merged read (DB metadata + live chain state).

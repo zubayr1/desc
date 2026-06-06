@@ -16,6 +16,7 @@
     "e2e:submit": "tsx scripts/e2e/e2e_submit.ts",
     "e2e:verdict": "tsx scripts/e2e/e2e_verdict.ts",
     "e2e:release": "tsx scripts/e2e/e2e_release.ts",
+    "e2e:refund": "tsx scripts/e2e/e2e_refund.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

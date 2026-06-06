@@ -8,6 +8,8 @@ import {
   submitCancel,
   prepareRelease,
   submitRelease,
+  prepareRefund,
+  submitRefund,
   getContract,
 } from "../contracts/service";
 
@@ -69,6 +71,19 @@ export function registerContractRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { signedTx } = submitSchema.parse(req.body);
     return submitRelease(id, signedTx);
+  });
+
+  // Refund (initiator) — build the unsigned tx.
+  app.post("/contracts/:id/refund/prepare", async (req) => {
+    const { id } = req.params as { id: string };
+    return prepareRefund(id);
+  });
+
+  // Refund — submit the signed tx (Fail/ghost → refunded).
+  app.post("/contracts/:id/refund/submit", async (req) => {
+    const { id } = req.params as { id: string };
+    const { signedTx } = submitSchema.parse(req.body);
+    return submitRefund(id, signedTx);
   });
 
   // Merged read (DB metadata + live chain state).

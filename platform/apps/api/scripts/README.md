@@ -10,14 +10,15 @@ for `record_verdict`.)
 |---|---|---|
 | `bootstrap.ts` | `initialize_config` | Once per cluster, at setup |
 | `update-config.ts` | `update_config` | Whenever protocol params change |
-| `e2e.ts` | (none — drives the api) | Manual end-to-end check |
+| `e2e/*.ts` | (none — drive the api) | Manual end-to-end checks |
 
 Run them with pnpm from `apps/api`:
 
 ```bash
 pnpm bootstrap
 pnpm update-config <flags>
-pnpm e2e
+pnpm e2e:create
+pnpm e2e:cancel
 ```
 
 ---
@@ -81,15 +82,17 @@ program and api are unchanged.
 
 ---
 
-## `e2e` — end-to-end check (create → fund)
+## `e2e/` — end-to-end checks
 
-Drives the running api through the create→fund flow against localnet: funds a
-fresh initiator, `POST /contracts`, signs the returned tx, `POST /:id/submit`,
-then `GET /:id` and asserts `status === "funded"`.
+Drive the running api against localnet, one flow per file.
 
-**Prereq:** validator + program, `pnpm bootstrap` done, `pnpm db:push` done, and
-the api running (`pnpm dev`).
+**Prereq (all):** validator + program, `pnpm bootstrap` done, `pnpm db:push`
+done, and the api running (`pnpm dev`).
 
-```bash
-pnpm e2e     # → "✅ create → fund flow OK"
-```
+| Command | File | Flow |
+|---|---|---|
+| `pnpm e2e:create` | `e2e/e2e_create.ts` | create → fund; asserts `status === "funded"` |
+| `pnpm e2e:cancel` | `e2e/e2e_cancel.ts` | create → fund → cancel; asserts full refund + `cancelled` |
+
+Each funds a fresh initiator, builds the tx via the api, signs it locally, and
+submits it back through the api.

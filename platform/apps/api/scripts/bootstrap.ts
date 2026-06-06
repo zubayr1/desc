@@ -58,25 +58,39 @@ async function main() {
   });
   const program = new Program<DescEscrow>(idl as DescEscrow, provider);
 
-  // airdrop if low
-  if ((await connection.getBalance(authority.publicKey)) < LAMPORTS_PER_SOL) {
-    const sig = await connection.requestAirdrop(authority.publicKey, 2 * LAMPORTS_PER_SOL);
-    await connection.confirmTransaction(sig, "confirmed");
+  // Fund BOTH keys: the authority pays for setup, and the hot settlement key
+  // pays gas for every `record_verdict` tx — so it needs SOL too.
+  await fundIfLow(connection, authority.publicKey);
+  await fundIfLow(connection, settlement.publicKey);
+
+  const [config] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config"), authority.publicKey.toBuffer()],
+    program.programId
+  );
+
+  // Idempotent: if the Config already exists, just (re)fund the keys and stop —
+  // initialize_config is one-shot, and re-running shouldn't mint a new USDC.
+  const existing = await program.account.config.fetchNullable(config);
+  if (existing) {
+    console.log("Config already initialized — funded keys, nothing else to do.");
+    console.log("  authority (cold) :", authority.publicKey.toBase58());
+    console.log(
+      "  settlement (hot) :",
+      settlement.publicKey.toBase58(),
+      created ? "(generated)" : "(existing)"
+    );
+    console.log("  config           :", config.toBase58());
+    console.log("  treasury         :", existing.treasury.toBase58());
+    return;
   }
 
-  // dev USDC mint + treasury token account
+  // First-time setup: dev USDC mint + treasury + initialize_config.
   const mint = await createMint(connection, authority, authority.publicKey, null, 6);
   const treasury = await getOrCreateAssociatedTokenAccount(
     connection,
     authority,
     mint,
     authority.publicKey
-  );
-
-  // initialize_config — authority = cold key, settlement_authority = hot key
-  const [config] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config"), authority.publicKey.toBuffer()],
-    program.programId
   );
   await program.methods
     .initializeConfig(settlement.publicKey, treasury.address, FEE_BPS)
@@ -100,6 +114,13 @@ async function main() {
   console.log("  CONFIG_AUTHORITY=" + authority.publicKey.toBase58());
   console.log("  SETTLEMENT_KEYPAIR_PATH=" + SETTLEMENT_PATH);
   console.log("  USDC_MINT=" + mint.toBase58());
+}
+
+async function fundIfLow(connection: Connection, pubkey: PublicKey) {
+  if ((await connection.getBalance(pubkey)) < LAMPORTS_PER_SOL) {
+    const sig = await connection.requestAirdrop(pubkey, 2 * LAMPORTS_PER_SOL);
+    await connection.confirmTransaction(sig, "confirmed");
+  }
 }
 
 main()

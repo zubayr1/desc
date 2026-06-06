@@ -91,8 +91,15 @@ done, and the api running (`pnpm dev`).
 
 | Command | File | Flow |
 |---|---|---|
-| `pnpm e2e:create` | `e2e/e2e_create.ts` | create → fund; asserts `status === "funded"` |
-| `pnpm e2e:cancel` | `e2e/e2e_cancel.ts` | create → fund → cancel; asserts full refund + `cancelled` |
+| `pnpm e2e:all` | `e2e/all.ts` | runs every flow below + prints a summary |
+| `pnpm e2e:create` | `e2e/e2e_create.ts` | create → fund |
+| `pnpm e2e:cancel` | `e2e/e2e_cancel.ts` | create → fund → cancel (full refund) |
+| `pnpm e2e:accept` | `e2e/e2e_accept.ts` | … → accept (funded → active) |
+| `pnpm e2e:submit` | `e2e/e2e_submit.ts` | … → submit deliverable (hash verified) |
+| `pnpm e2e:verdict` | `e2e/e2e_verdict.ts` | … → record_verdict (API-signed) |
+| `pnpm e2e:release` | `e2e/e2e_release.ts` | full happy path → settled |
+| `pnpm e2e:refund` | `e2e/e2e_refund.ts` | verdict(fail) → refund |
+| `pnpm e2e:mutual-cancel` | `e2e/e2e_mutual_cancel.ts` | two-signer unwind → refunded |
 
-Each funds a fresh initiator, builds the tx via the api, signs it locally, and
-submits it back through the api.
+Each funds a fresh initiator/committer, builds the tx via the api, signs it
+locally, and submits it back through the api.

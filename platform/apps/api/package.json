@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
+    "@fastify/cors": "^11.2.0",
     "@repo/shared": "workspace:*",
     "@solana/web3.js": "^1.98.0",
     "dotenv": "^16.4.7",

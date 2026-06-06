@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Button } from "@/components/ui/Button";
+import { ConnectButton } from "./ConnectButton";
 
 export function Header() {
   return (
@@ -11,9 +11,7 @@ export function Header() {
           </span>
           desc
         </Link>
-        <Button variant="outline" className="font-mono text-xs">
-          Connect wallet
-        </Button>
+        <ConnectButton />
       </div>
     </header>
   );

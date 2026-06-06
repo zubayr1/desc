@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { env } from "./config/env";
 import { pool } from "./db/client";
 import { program, platformConfigPda } from "./solana/program";
@@ -7,6 +8,9 @@ import { registerLinkRoutes } from "./routes/links";
 import { registerAdminRoutes } from "./routes/admin";
 
 const app = Fastify({ logger: true });
+
+// Allow the web/admin frontends (different origin) to call the api.
+await app.register(cors, { origin: true });
 
 registerContractRoutes(app);
 registerLinkRoutes(app);

@@ -9,6 +9,7 @@
     "build": "tsc",
     "check-types": "tsc --noEmit",
     "bootstrap": "tsx scripts/bootstrap.ts",
+    "update-config": "tsx scripts/update-config.ts",
     "e2e": "tsx scripts/e2e.ts",
     "db:push": "drizzle-kit push"
   },

@@ -17,6 +17,7 @@
     "e2e:verdict": "tsx scripts/e2e/e2e_verdict.ts",
     "e2e:release": "tsx scripts/e2e/e2e_release.ts",
     "e2e:refund": "tsx scripts/e2e/e2e_refund.ts",
+    "e2e:mutual-cancel": "tsx scripts/e2e/e2e_mutual_cancel.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

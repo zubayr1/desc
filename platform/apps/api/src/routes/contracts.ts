@@ -10,6 +10,8 @@ import {
   submitRelease,
   prepareRefund,
   submitRefund,
+  prepareMutualCancel,
+  submitMutualCancel,
   getContract,
 } from "../contracts/service";
 
@@ -84,6 +86,19 @@ export function registerContractRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { signedTx } = submitSchema.parse(req.body);
     return submitRefund(id, signedTx);
+  });
+
+  // Mutual cancel (both parties) — build the unsigned tx (needs two signatures).
+  app.post("/contracts/:id/mutual-cancel/prepare", async (req) => {
+    const { id } = req.params as { id: string };
+    return prepareMutualCancel(id);
+  });
+
+  // Mutual cancel — submit the doubly-signed tx (→ refunded).
+  app.post("/contracts/:id/mutual-cancel/submit", async (req) => {
+    const { id } = req.params as { id: string };
+    const { signedTx } = submitSchema.parse(req.body);
+    return submitMutualCancel(id, signedTx);
   });
 
   // Merged read (DB metadata + live chain state).

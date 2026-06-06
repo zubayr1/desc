@@ -131,7 +131,8 @@ export interface Contract {
 // API DTOs (api ⇄ web/admin)
 // ---------------------------------------------------------------------------
 
-/** Register a contract once its `create_escrow` tx has landed on-chain. */
+/** Draft a contract + get back the unsigned `create_escrow` tx to sign.
+ *  The api generates the on-chain `contract_id` server-side. */
 export interface CreateContractRequest {
   initiator: Address;
   title: string;
@@ -142,8 +143,21 @@ export interface CreateContractRequest {
   moderatorCount: number;
   moderatorSurcharge: TokenAmount;
   deadline: Timestamp;
-  /** On-chain `contract_id` chosen client-side, hex-encoded. */
+}
+
+/** Response to `POST /contracts` — the unsigned tx for the wallet to sign. */
+export interface CreateContractResponse {
+  id: string;
   contractId: string;
+  escrowAddress: Address;
+  /** Base64 serialized unsigned transaction. */
+  unsignedTx: string;
+}
+
+/** Body for any submit endpoint — the wallet-signed transaction. */
+export interface SubmitTxRequest {
+  /** Base64 serialized signed transaction. */
+  signedTx: string;
 }
 
 /** Committer opens the shareable link and accepts. */

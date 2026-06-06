@@ -2,8 +2,11 @@ import Fastify from "fastify";
 import { env } from "./config/env";
 import { pool } from "./db/client";
 import { program, platformConfigPda } from "./solana/program";
+import { registerContractRoutes } from "./routes/contracts";
 
 const app = Fastify({ logger: true });
+
+registerContractRoutes(app);
 
 app.get("/health", async () => {
   // DB reachable?

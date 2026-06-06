@@ -3,7 +3,7 @@ import type { Contract } from "@repo/shared";
 import type { ContractRow } from "../db/schema";
 import { readEscrow } from "../solana/program";
 import { toContract } from "./mapper";
-import { getRow, getRowByLink } from "./repo";
+import { getRow, getRowByLink, getAllRows } from "./repo";
 
 /** Merge a row with live chain state; null if the escrow isn't on-chain yet. */
 async function merge(row: ContractRow): Promise<Contract | null> {
@@ -25,4 +25,11 @@ export async function getContractByLink(
   token: string
 ): Promise<Contract | null> {
   return merge(await getRowByLink(token));
+}
+
+/** All contracts, merged with live chain state (admin queue). */
+export async function listContracts(): Promise<Contract[]> {
+  const rows = await getAllRows();
+  const merged = await Promise.all(rows.map(merge));
+  return merged.filter((c): c is Contract => c !== null);
 }

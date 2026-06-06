@@ -4,11 +4,13 @@ import { pool } from "./db/client";
 import { program, platformConfigPda } from "./solana/program";
 import { registerContractRoutes } from "./routes/contracts";
 import { registerLinkRoutes } from "./routes/links";
+import { registerAdminRoutes } from "./routes/admin";
 
 const app = Fastify({ logger: true });
 
 registerContractRoutes(app);
 registerLinkRoutes(app);
+registerAdminRoutes(app);
 
 app.get("/health", async () => {
   // DB reachable?

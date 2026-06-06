@@ -1,6 +1,11 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { contracts, type ContractRow } from "../db/schema";
+
+/** All contract rows, newest first. */
+export async function getAllRows(): Promise<ContractRow[]> {
+  return db.select().from(contracts).orderBy(desc(contracts.createdAt));
+}
 
 /** Fetch a contract row by id, or throw a 404-tagged error. */
 export async function getRow(id: string): Promise<ContractRow> {

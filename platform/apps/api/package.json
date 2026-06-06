@@ -14,6 +14,7 @@
     "e2e:cancel": "tsx scripts/e2e/e2e_cancel.ts",
     "e2e:accept": "tsx scripts/e2e/e2e_accept.ts",
     "e2e:submit": "tsx scripts/e2e/e2e_submit.ts",
+    "e2e:verdict": "tsx scripts/e2e/e2e_verdict.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

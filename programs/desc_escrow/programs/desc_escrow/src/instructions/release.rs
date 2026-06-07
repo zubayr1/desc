@@ -23,27 +23,27 @@ pub struct Release<'info> {
         has_one = vault,
         has_one = initiator,
     )]
-    pub escrow: Account<'info, Escrow>,
+    pub escrow: Box<Account<'info, Escrow>>,
 
     #[account(has_one = treasury)]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
     #[account(mut)]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: Box<Account<'info, TokenAccount>>,
 
     /// Committer's USDC account — receives the payout.
     #[account(
         mut,
         constraint = committer_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
     )]
-    pub committer_token_account: Account<'info, TokenAccount>,
+    pub committer_token_account: Box<Account<'info, TokenAccount>>,
 
     /// Protocol treasury token account — receives fee + surcharge.
     #[account(
         mut,
         constraint = treasury.mint == escrow.mint @ EscrowError::Unauthorized,
     )]
-    pub treasury: Account<'info, TokenAccount>,
+    pub treasury: Box<Account<'info, TokenAccount>>,
 
     /// Initiator — receives the vault's rent on close.
     #[account(mut)]

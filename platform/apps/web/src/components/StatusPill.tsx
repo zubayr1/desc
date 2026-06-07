@@ -1,6 +1,6 @@
-import type { Status } from "@/lib/mock";
+import type { ContractStatus } from "@repo/shared";
 
-const META: Record<Status, { label: string; varName: string }> = {
+const META: Record<ContractStatus, { label: string; varName: string }> = {
   funded: { label: "Funded", varName: "--color-st-funded" },
   active: { label: "Active", varName: "--color-st-active" },
   submitted: { label: "Submitted", varName: "--color-st-submitted" },
@@ -9,7 +9,7 @@ const META: Record<Status, { label: string; varName: string }> = {
   cancelled: { label: "Cancelled", varName: "--color-st-cancelled" },
 };
 
-export function StatusPill({ status }: { status: Status }) {
+export function StatusPill({ status }: { status: ContractStatus }) {
   const m = META[status];
   return (
     <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-zinc-200">

@@ -1,6 +1,7 @@
 import { Buffer } from "buffer";
 import { Transaction } from "@solana/web3.js";
 import type { WalletContextState } from "@solana/wallet-adapter-react";
+import type { Contract, CreateContractRequest } from "@repo/shared";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -42,4 +43,20 @@ export async function prepareSignSubmit<T>(
   const signed = await signTransaction(tx);
   const signedTx = signed.serialize().toString("base64");
   return api.post<T>(submitPath, { signedTx });
+}
+
+/** Create flow: POST /contracts returns { id, unsignedTx }; sign; then submit. */
+export async function createAndFund(
+  body: CreateContractRequest,
+  signTransaction: Signer
+): Promise<Contract> {
+  const { id, unsignedTx } = await api.post<{ id: string; unsignedTx: string }>(
+    "/contracts",
+    body
+  );
+  const tx = Transaction.from(Buffer.from(unsignedTx, "base64"));
+  const signed = await signTransaction(tx);
+  return api.post<Contract>(`/contracts/${id}/submit`, {
+    signedTx: signed.serialize().toString("base64"),
+  });
 }

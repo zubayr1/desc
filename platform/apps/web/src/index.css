@@ -41,6 +41,18 @@ body {
   background-attachment: fixed;
 }
 
+/* ── Base ──────────────────────────────────────────────────────── */
+@layer base {
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  /* native <select> dropdown options default to white — match the dark theme */
+  option {
+    background: #0d0d14;
+    color: #e7e7ef;
+  }
+}
+
 /* ── Reusable bits ─────────────────────────────────────────────── */
 @layer components {
   /* frosted glass panel */

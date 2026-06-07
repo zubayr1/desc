@@ -7,7 +7,7 @@ import { program, platformConfigPda, readEscrow } from "../solana/program";
 import { buildRelease } from "../solana/instructions/release";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
-import { getRow } from "./repo";
+import { getRow, cacheFields } from "./repo";
 
 /** Build the unsigned `release` tx. Signed by either party; requires a Pass
  *  verdict. Committer + treasury are read from chain/Config, not the client. */
@@ -62,7 +62,7 @@ export async function submitRelease(
   const oc = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db
     .update(contracts)
-    .set({ updatedAt: new Date() })
+    .set(cacheFields(oc))
     .where(eq(contracts.id, id))
     .returning();
   return toContract(updated, oc);

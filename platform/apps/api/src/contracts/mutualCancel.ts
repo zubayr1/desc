@@ -7,7 +7,7 @@ import { readEscrow } from "../solana/program";
 import { buildMutualCancel } from "../solana/instructions/mutualCancel";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
-import { getRow } from "./repo";
+import { getRow, cacheFields } from "./repo";
 
 /** Build the unsigned `mutual_cancel` tx (both parties sign it). Valid from an
  *  active or submitted escrow. Committer is read from chain. */
@@ -49,7 +49,7 @@ export async function submitMutualCancel(
   const oc = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db
     .update(contracts)
-    .set({ updatedAt: new Date() })
+    .set(cacheFields(oc))
     .where(eq(contracts.id, id))
     .returning();
   return toContract(updated, oc);

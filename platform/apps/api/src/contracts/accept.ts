@@ -7,7 +7,7 @@ import { readEscrow } from "../solana/program";
 import { buildAccept } from "../solana/instructions/accept";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
-import { getRowByLink } from "./repo";
+import { getRowByLink, cacheFields } from "./repo";
 
 /** Build the unsigned `accept` tx for a committer (resolved via link token). */
 export async function prepareAccept(
@@ -33,7 +33,7 @@ export async function submitAccept(
   const oc = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db
     .update(contracts)
-    .set({ updatedAt: new Date() })
+    .set(cacheFields(oc))
     .where(eq(contracts.id, row.id))
     .returning();
   return toContract(updated, oc);

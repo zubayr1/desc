@@ -7,7 +7,7 @@ import { contracts } from "../db/schema";
 import { readEscrow } from "../solana/program";
 import { sendRecordVerdict } from "../solana/instructions/recordVerdict";
 import { toContract } from "./mapper";
-import { getRow } from "./repo";
+import { getRow, cacheFields } from "./repo";
 
 /**
  * Admin / settlement-authority records the verdict (the MVP stand-in for AI
@@ -44,7 +44,7 @@ export async function recordVerdict(
   const after = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db
     .update(contracts)
-    .set({ verdictNote: note ?? null, updatedAt: new Date() })
+    .set({ verdictNote: note ?? null, ...cacheFields(after) })
     .where(eq(contracts.id, id))
     .returning();
 

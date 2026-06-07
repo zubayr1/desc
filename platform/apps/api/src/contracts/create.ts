@@ -20,7 +20,7 @@ import { buildCreateEscrow } from "../solana/instructions/createEscrow";
 import { submitSignedTx } from "../solana/rpc";
 import { generateLinkToken } from "../links/token";
 import { toContract } from "./mapper";
-import { getRow } from "./repo";
+import { getRow, cacheFields } from "./repo";
 
 /** Build the unsigned create_escrow tx + persist the off-chain metadata. */
 export async function createContract(
@@ -97,7 +97,7 @@ export async function submitContract(
 
   const [updated] = await db
     .update(contracts)
-    .set({ linkToken: generateLinkToken(), updatedAt: new Date() })
+    .set({ linkToken: generateLinkToken(), ...cacheFields(oc) })
     .where(eq(contracts.id, id))
     .returning();
 

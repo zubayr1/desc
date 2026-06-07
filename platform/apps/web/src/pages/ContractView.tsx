@@ -224,35 +224,46 @@ function Actions({
         return <Passive>Awaiting the committer&apos;s deliverable.</Passive>;
 
       case "submitted":
-        if (c.outcome === "pass" && (isInitiator || isCommitter)) {
-          return (
-            <div>
-              <div className="mb-3 flex items-center gap-2 text-sm text-st-settled">
-                <Check className="size-4" /> Verdict: PASS
+        if (c.outcome === "pass") {
+          if (isInitiator || isCommitter) {
+            return (
+              <div>
+                <div className="mb-3 flex items-center gap-2 text-sm text-st-settled">
+                  <Check className="size-4" /> Verdict: PASS
+                </div>
+                <Button
+                  variant="accent"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => release.mutate()}
+                >
+                  {release.isPending ? spin : `Release ${usd(c.amount)} to committer`}
+                </Button>
               </div>
-              <Button
-                variant="accent"
-                className="w-full"
-                disabled={busy}
-                onClick={() => release.mutate()}
-              >
-                {release.isPending ? spin : `Release ${usd(c.amount)} to committer`}
-              </Button>
-            </div>
-          );
+            );
+          }
+          return <Passive ok>Verdict: PASS — awaiting release.</Passive>;
         }
-        if (c.outcome === "fail" && isInitiator) {
+        if (c.outcome === "fail") {
+          if (isInitiator) {
+            return (
+              <div>
+                <div className="mb-3 text-sm text-st-submitted">Verdict: FAIL</div>
+                <Button
+                  variant="accent"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => refund.mutate()}
+                >
+                  {refund.isPending ? spin : "Reclaim deposit"}
+                </Button>
+              </div>
+            );
+          }
+          // Committer (and any other viewer): just the outcome, no action.
           return (
-            <div>
-              <div className="mb-3 text-sm text-st-submitted">Verdict: FAIL</div>
-              <Button
-                variant="accent"
-                className="w-full"
-                disabled={busy}
-                onClick={() => refund.mutate()}
-              >
-                {refund.isPending ? spin : "Reclaim deposit"}
-              </Button>
+            <div className="flex items-center gap-2 text-sm text-st-submitted">
+              <span className="size-2 rounded-full bg-st-submitted" /> Verdict: FAIL
             </div>
           );
         }

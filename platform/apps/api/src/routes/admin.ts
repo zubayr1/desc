@@ -14,7 +14,7 @@ const verdictSchema = z.object({
 
 export function registerAdminRoutes(app: FastifyInstance) {
   // Admin queue — all contracts merged with live chain state.
-  app.get("/admin/contracts", async () => listContracts());
+  app.get("/admin/contracts", async () => listContracts({}));
 
   // Record the verdict — API signs with the hot settlement key (no user wallet).
   app.post("/admin/contracts/:id/verdict", async (req) => {

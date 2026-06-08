@@ -28,6 +28,11 @@ const TYPE_LABEL: Record<string, string> = {
   technical_report: "Technical report",
 };
 
+/** The deliverable is an independent external URL — force an absolute href so it
+ *  never resolves as a path inside the app. */
+const externalHref = (url: string) =>
+  /^https?:\/\//i.test(url) ? url : `https://${url}`;
+
 function Field({
   label,
   value,
@@ -377,9 +382,14 @@ export function ContractView() {
             <div className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
               Deliverable
             </div>
-            <span className="inline-flex items-center gap-2 break-all font-mono text-sm text-accent-2">
+            <a
+              href={externalHref(contract.deliverable.payload)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 break-all font-mono text-sm text-accent-2 hover:underline"
+            >
               {contract.deliverable.payload} <ExternalLink className="size-3.5 shrink-0" />
-            </span>
+            </a>
           </div>
         )}
 

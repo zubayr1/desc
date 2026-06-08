@@ -11,8 +11,11 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
     ...opts,
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `${res.status} ${res.statusText}`);
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
+    throw new Error(body.error ?? body.message ?? `${res.status} ${res.statusText}`);
   }
   return res.json() as Promise<T>;
 }

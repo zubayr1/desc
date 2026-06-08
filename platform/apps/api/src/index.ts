@@ -6,11 +6,19 @@ import { program, platformConfigPda } from "./solana/program";
 import { registerContractRoutes } from "./routes/contracts";
 import { registerLinkRoutes } from "./routes/links";
 import { registerAdminRoutes } from "./routes/admin";
+import { humanizeError } from "./errors";
 
 const app = Fastify({ logger: true });
 
 // Allow the web/admin frontends (different origin) to call the api.
 await app.register(cors, { origin: true });
+
+// Full error to the logs; a clean `{ error }` message to the client.
+app.setErrorHandler((err, _req, reply) => {
+  app.log.error(err);
+  const { status, message } = humanizeError(err);
+  reply.code(status).send({ error: message });
+});
 
 registerContractRoutes(app);
 registerLinkRoutes(app);

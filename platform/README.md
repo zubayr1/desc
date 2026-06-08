@@ -87,6 +87,30 @@ docker compose up → anchor localnet → pnpm bootstrap (edit .env, restart api
 
 ---
 
+## Reset local state (keep validator ↔ DB in sync)
+
+Restarting `anchor localnet` gives a **fresh chain** (no escrows), but Postgres
+**persists** — so the dashboard would show stale contracts pointing at accounts
+that no longer exist. After a validator restart, clear the DB so the two stay in
+sync:
+
+```bash
+# wipe contract rows (keeps the schema)
+docker exec platform-postgres-1 psql -U desc -d desc -c "truncate contracts;"
+```
+
+Full reset (also drops the Postgres volume):
+```bash
+cd platform
+docker compose down -v && docker compose up -d
+pnpm --filter api db:push          # recreate the schema
+```
+
+> Localnet/devnet only. On mainnet the chain is never wiped, so the DB (off-chain
+> metadata) and chain stay naturally in sync — you never truncate there.
+
+---
+
 ## Point Phantom at localnet
 
 Phantom simulates against whatever cluster it's set to, so it **must** target the

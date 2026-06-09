@@ -1,15 +1,28 @@
-import type { Contract, DeliverableType } from "@repo/shared";
+import type {
+  Contract,
+  ContractStatus,
+  DeliverableType,
+  Outcome,
+} from "@repo/shared";
 import type { ContractRow } from "../db/schema";
-import type { OnChainEscrow } from "../solana/program";
 
-/** Map a DB row + live on-chain escrow into the domain `Contract`. */
-export function toContract(row: ContractRow, oc: OnChainEscrow): Contract {
+/** The mutable on-chain state — supplied either from a live `readEscrow`
+ *  (detail) or from the cached columns (list). `OnChainEscrow` is structurally
+ *  assignable to this. */
+export interface EscrowState {
+  status: ContractStatus;
+  committer: string | null;
+  outcome: Outcome | null;
+}
+
+/** Map a DB row + escrow state into the domain `Contract`. */
+export function toContract(row: ContractRow, state: EscrowState): Contract {
   return {
     id: row.id,
     contractId: row.contractId,
-    status: oc.status,
+    status: state.status,
     initiator: row.initiator,
-    committer: oc.committer,
+    committer: state.committer,
     title: row.title,
     brief: row.brief,
     deliverableType: row.deliverableType as DeliverableType,
@@ -22,9 +35,7 @@ export function toContract(row: ContractRow, oc: OnChainEscrow): Contract {
     escrowAddress: row.escrowAddress,
     vaultAddress: row.vaultAddress,
     linkToken: row.linkToken,
-    outcome: oc.outcome,
-    // Shown only once the submit tx has confirmed (submittedAt set), even though
-    // payload + hash are stashed at prepare time.
+    outcome: state.outcome,
     deliverable: row.deliverableSubmittedAt
       ? {
           payload: row.deliverablePayload ?? "",

@@ -23,7 +23,9 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
+    "@fastify/cors": "^11.2.0",
     "@repo/shared": "workspace:*",
+    "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.0",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.3",
@@ -32,7 +34,6 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@solana/spl-token": "^0.4.14",
     "@types/node": "^24.12.3",
     "@types/pg": "^8.11.10",
     "drizzle-kit": "^0.30.1",

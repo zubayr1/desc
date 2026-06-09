@@ -9,18 +9,22 @@
  * Prereq: a validator is running with the program deployed (`anchor localnet`).
  * Run with: `pnpm bootstrap`.
  */
-import "dotenv/config";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import {
+  createMint,
+  getAccount,
+  getOrCreateAssociatedTokenAccount,
+} from "@solana/spl-token";
 import {
   Connection,
   Keypair,
+  LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
-  LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
-import { createMint, getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
+import "dotenv/config";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import type { DescEscrow } from "../src/solana/idl/desc_escrow";
 import idl from "../src/solana/idl/desc_escrow.json";
 
@@ -72,6 +76,8 @@ async function main() {
   // initialize_config is one-shot, and re-running shouldn't mint a new USDC.
   const existing = await program.account.config.fetchNullable(config);
   if (existing) {
+    // Recover the existing USDC mint from the treasury token account.
+    const treasuryAcc = await getAccount(connection, existing.treasury);
     console.log("Config already initialized — funded keys, nothing else to do.");
     console.log("  authority (cold) :", authority.publicKey.toBase58());
     console.log(
@@ -81,6 +87,7 @@ async function main() {
     );
     console.log("  config           :", config.toBase58());
     console.log("  treasury         :", existing.treasury.toBase58());
+    console.log("  USDC_MINT=" + treasuryAcc.mint.toBase58());
     return;
   }
 

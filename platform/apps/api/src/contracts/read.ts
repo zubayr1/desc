@@ -1,11 +1,11 @@
 import { PublicKey } from "@solana/web3.js";
-import type { Contract } from "@repo/shared";
+import type { Contract, ContractStatus } from "@repo/shared";
 import type { ContractRow } from "../db/schema";
 import { readEscrow } from "../solana/program";
 import { toContract } from "./mapper";
-import { getRow, getRowByLink, getAllRows } from "./repo";
+import { getRow, getRowByLink, getRows } from "./repo";
 
-/** Merge a row with live chain state; null if the escrow isn't on-chain yet. */
+/** Detail read: live chain state. Null if the escrow isn't on-chain yet. */
 async function merge(row: ContractRow): Promise<Contract | null> {
   try {
     const oc = await readEscrow(new PublicKey(row.escrowAddress));
@@ -15,21 +15,27 @@ async function merge(row: ContractRow): Promise<Contract | null> {
   }
 }
 
-/** Merged read by id: DB metadata + live chain state. */
 export async function getContract(id: string): Promise<Contract | null> {
   return merge(await getRow(id));
 }
 
-/** Merged read by shareable link token (the committer's review view). */
 export async function getContractByLink(
   token: string
 ): Promise<Contract | null> {
   return merge(await getRowByLink(token));
 }
 
-/** All contracts, merged with live chain state (admin queue). */
-export async function listContracts(): Promise<Contract[]> {
-  const rows = await getAllRows();
-  const merged = await Promise.all(rows.map(merge));
-  return merged.filter((c): c is Contract => c !== null);
+/** List read: built from the cached columns — no per-row chain reads. */
+export async function listContracts(opts: {
+  initiator?: string;
+  status?: ContractStatus;
+}): Promise<Contract[]> {
+  const rows = await getRows(opts);
+  return rows.map((row) =>
+    toContract(row, {
+      status: row.status as ContractStatus,
+      committer: row.committer,
+      outcome: row.outcome,
+    })
+  );
 }

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { DELIVERABLE_TYPES } from "@repo/shared";
+import { DELIVERABLE_TYPES, CONTRACT_STATUSES, type ContractStatus } from "@repo/shared";
 import {
   createContract,
   submitContract,
@@ -13,6 +13,7 @@ import {
   prepareMutualCancel,
   submitMutualCancel,
   getContract,
+  listContracts,
 } from "../contracts/service";
 
 const createSchema = z.object({
@@ -26,7 +27,7 @@ const createSchema = z.object({
     }),
   acceptanceCriteria: z.array(z.object({ description: z.string().min(1) })).min(1),
   amount: z.string().regex(/^\d+$/),
-  moderatorCount: z.number().int().positive(),
+  moderatorCount: z.number().int().nonnegative(),
   moderatorSurcharge: z.string().regex(/^\d+$/),
   deadline: z.string().min(1),
 });
@@ -99,6 +100,19 @@ export function registerContractRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { signedTx } = submitSchema.parse(req.body);
     return submitMutualCancel(id, signedTx);
+  });
+
+  // List (read model) — filter by initiator and/or status.
+  app.get("/contracts", async (req) => {
+    const { initiator, status } = req.query as {
+      initiator?: string;
+      status?: string;
+    };
+    const validStatus =
+      status && (CONTRACT_STATUSES as readonly string[]).includes(status)
+        ? (status as ContractStatus)
+        : undefined;
+    return listContracts({ initiator, status: validStatus });
   });
 
   // Merged read (DB metadata + live chain state).

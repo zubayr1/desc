@@ -8,7 +8,7 @@ import { readEscrow } from "../solana/program";
 import { buildSubmitDeliverable } from "../solana/instructions/submitDeliverable";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
-import { getRowByLink } from "./repo";
+import { getRowByLink, cacheFields } from "./repo";
 
 /**
  * Build the unsigned `submit` tx. The committer is read from chain (the bound
@@ -63,7 +63,7 @@ export async function submitDeliverable(
   const oc = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db
     .update(contracts)
-    .set({ deliverableSubmittedAt: new Date(), updatedAt: new Date() })
+    .set({ deliverableSubmittedAt: new Date(), ...cacheFields(oc) })
     .where(eq(contracts.id, row.id))
     .returning();
   return toContract(updated, oc);

@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: desc
       POSTGRES_DB: desc
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - desc_pg:/var/lib/postgresql/data
 

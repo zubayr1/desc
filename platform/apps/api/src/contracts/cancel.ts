@@ -7,7 +7,7 @@ import { readEscrow } from "../solana/program";
 import { buildCancel } from "../solana/instructions/cancel";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
-import { getRow } from "./repo";
+import { getRow, cacheFields } from "./repo";
 
 /** Build the unsigned `cancel` tx for an initiator to sign. */
 export async function prepareCancel(
@@ -32,7 +32,7 @@ export async function submitCancel(
   const oc = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db
     .update(contracts)
-    .set({ updatedAt: new Date() })
+    .set(cacheFields(oc))
     .where(eq(contracts.id, id))
     .returning();
   return toContract(updated, oc);

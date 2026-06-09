@@ -81,6 +81,7 @@ function Actions({
   const me = publicKey?.toBase58();
   const isInitiator = me === c.initiator;
   const isCommitter = me === c.committer;
+  const pastDeadline = Date.now() > new Date(c.deadline).getTime();
 
   const accept = useMutation({
     mutationFn: () =>
@@ -226,7 +227,32 @@ function Actions({
             </div>
           );
         }
-        return <Passive>Awaiting the committer&apos;s deliverable.</Passive>;
+        if (isInitiator && pastDeadline) {
+          return (
+            <div>
+              <div className="mb-3 text-sm text-st-submitted">
+                Deadline passed with no deliverable — the committer ghosted.
+              </div>
+              <Button
+                variant="accent"
+                className="w-full"
+                disabled={busy}
+                onClick={() => refund.mutate()}
+              >
+                {refund.isPending ? spin : "Reclaim deposit"}
+              </Button>
+            </div>
+          );
+        }
+        return (
+          <Passive>
+            Awaiting the committer&apos;s deliverable
+            {isInitiator
+              ? ` (until ${new Date(c.deadline).toLocaleDateString()})`
+              : ""}
+            .
+          </Passive>
+        );
 
       case "submitted":
         if (c.outcome === "pass") {

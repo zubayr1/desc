@@ -150,16 +150,36 @@ spl-token mint <USDC_MINT> 1000000 --recipient-owner <WALLET> \
 ## Record a verdict (settlement authority)
 
 `record_verdict` is **signed by the api** (the settlement key in
-`settlement-keypair.json`), not by a wallet. The admin UI isn't built yet, so trigger
-it directly. The contract must be in **`submitted`** state first.
+`settlement-keypair.json`), not by a wallet. The contract must be in **`submitted`**
+state first.
 
+### Admin auth (required)
+The `/admin/*` routes are gated by a bearer token and are **fail-closed** — if
+`ADMIN_TOKEN` isn't set, every admin request is rejected. Set one in
+`apps/api/.env` and restart the api:
+```bash
+# generate a token
+openssl rand -hex 32
+# → put it in apps/api/.env as:  ADMIN_TOKEN=<that value>   (then restart the api)
+```
+
+### Via the moderator console (preferred)
+```bash
+cd platform/apps/admin && pnpm dev   # → http://localhost:5174
+```
+Open it, paste the `ADMIN_TOKEN` at the login, and Pass/Fail each submitted
+contract. (Token is stored in the browser; a 401 signs you back out.)
+
+### Via curl (alternative)
 ```bash
 # PASS → unlocks "Release" on the contract page
 curl -X POST localhost:3000/admin/contracts/<CONTRACT_ID>/verdict \
+  -H "authorization: Bearer $ADMIN_TOKEN" \
   -H 'content-type: application/json' -d '{"outcome":"pass"}'
 
 # FAIL → unlocks "Reclaim deposit" for the initiator
 curl -X POST localhost:3000/admin/contracts/<CONTRACT_ID>/verdict \
+  -H "authorization: Bearer $ADMIN_TOKEN" \
   -H 'content-type: application/json' -d '{"outcome":"fail","note":"criteria not met"}'
 ```
 `<CONTRACT_ID>` is the contract **uuid** — from the `/contracts/<uuid>` URL or the
@@ -186,6 +206,7 @@ The api signs + submits the verdict; refresh the contract page to see the new ac
 | Service | URL |
 |---|---|
 | Web | http://localhost:5173 |
+| Admin (moderator console) | http://localhost:5174 |
 | API | http://localhost:3000 |
 | Validator RPC | http://localhost:8899 |
 | Postgres | localhost:5433 (or `POSTGRES_PORT`) |

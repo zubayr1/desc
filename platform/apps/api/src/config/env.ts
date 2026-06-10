@@ -14,6 +14,9 @@ const schema = z.object({
   SETTLEMENT_KEYPAIR_PATH: z.string().min(1),
   /** USDC mint the platform settles in (created by the bootstrap script on localnet). */
   USDC_MINT: z.string().min(1),
+  /** Bearer token gating the /admin/* routes. If unset, admin is fail-closed
+   *  (every admin request is rejected). Set a long random value in prod. */
+  ADMIN_TOKEN: z.string().min(1).optional(),
 });
 
 export const env = schema.parse(process.env);

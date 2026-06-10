@@ -36,11 +36,16 @@ const submitSchema = z.object({ signedTx: z.string().min(1) });
 const releaseSchema = z.object({ signer: z.string().min(1) });
 
 export function registerContractRoutes(app: FastifyInstance) {
-  // Draft + build the unsigned create_escrow tx.
-  app.post("/contracts", async (req) => {
-    const body = createSchema.parse(req.body);
-    return createContract({ ...body, deliverableType: body.deliverableType as any });
-  });
+  // Draft + build the unsigned create_escrow tx. Tighter rate limit: this writes
+  // an (unfunded) draft row before any wallet signature, so it's the spam vector.
+  app.post(
+    "/contracts",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (req) => {
+      const body = createSchema.parse(req.body);
+      return createContract({ ...body, deliverableType: body.deliverableType as any });
+    }
+  );
 
   // Submit the signed tx, confirm funded, mint the link token.
   app.post("/contracts/:id/submit", async (req) => {

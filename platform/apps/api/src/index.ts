@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import { env } from "./config/env";
 import { pool } from "./db/client";
 import { program, platformConfigPda } from "./solana/program";
@@ -12,6 +13,10 @@ const app = Fastify({ logger: true });
 
 // Allow the web/admin frontends (different origin) to call the api.
 await app.register(cors, { origin: true });
+
+// Basic DoS guard: per-IP request cap. Default applies to every route; the
+// draft-creating POST /contracts gets a tighter override (see routes/contracts).
+await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 
 // Full error to the logs; a clean `{ error }` message to the client.
 app.setErrorHandler((err, _req, reply) => {

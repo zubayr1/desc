@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, LogOut, RefreshCw, X } from "lucide-react";
 import type { Contract } from "@repo/shared";
-import { api } from "@/lib/api";
+import { api, clearToken, getToken, setToken } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { cn, externalHref, short, usd } from "@/lib/utils";
@@ -164,13 +164,18 @@ function Row({ c }: { c: Contract }) {
   );
 }
 
-export default function App() {
+function Console({ onSignOut }: { onSignOut: () => void }) {
   const qc = useQueryClient();
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ["admin-contracts"],
     queryFn: () => api.get<Contract[]>("/admin/contracts"),
     refetchInterval: 10_000,
   });
+  // A 401 clears the token in api — bounce back to the login screen.
+  useEffect(() => {
+    if (error instanceof Error && error.message === "Unauthorized") onSignOut();
+  }, [error, onSignOut]);
+
   const refresh = () => qc.invalidateQueries({ queryKey: ["admin-contracts"] });
 
   const all = data ?? [];
@@ -189,10 +194,15 @@ export default function App() {
             settlement authority.
           </p>
         </div>
-        <Button variant="ghost" onClick={refresh} disabled={isFetching}>
-          <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
-          Refresh
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="ghost" onClick={refresh} disabled={isFetching}>
+            <RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button variant="ghost" onClick={onSignOut} title="Sign out">
+            <LogOut className="size-4" />
+          </Button>
+        </div>
       </header>
 
       {isLoading ? (
@@ -242,5 +252,67 @@ export default function App() {
         </>
       )}
     </div>
+  );
+}
+
+function Login({ onAuth }: { onAuth: (t: string) => void }) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="mx-auto max-w-sm px-5 py-24">
+      <div className="glass p-6">
+        <h1 className="text-lg font-semibold">
+          <span className="text-gradient">desc</span> · moderator
+        </h1>
+        <p className="mb-4 mt-1 text-sm text-zinc-500">
+          Enter the admin token to continue.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (value.trim()) onAuth(value.trim());
+          }}
+        >
+          <input
+            className="inp"
+            type="password"
+            placeholder="Admin token"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus
+          />
+          <Button
+            variant="accent"
+            type="submit"
+            className="mt-3 w-full"
+            disabled={!value.trim()}
+          >
+            Enter console
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [token, setTokenState] = useState<string | null>(() => getToken());
+
+  if (!token) {
+    return (
+      <Login
+        onAuth={(t) => {
+          setToken(t);
+          setTokenState(t);
+        }}
+      />
+    );
+  }
+  return (
+    <Console
+      onSignOut={() => {
+        clearToken();
+        setTokenState(null);
+      }}
+    />
   );
 }

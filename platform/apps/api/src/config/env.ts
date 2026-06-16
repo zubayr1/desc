@@ -17,6 +17,8 @@ const schema = z.object({
   /** Bearer token gating the /admin/* routes. If unset, admin is fail-closed
    *  (every admin request is rejected). Set a long random value in prod. */
   ADMIN_TOKEN: z.string().min(1).optional(),
+  /** Local object-storage dir for deliverable bundles (dev). Swap for S3/R2. */
+  STORAGE_DIR: z.string().default("./storage"),
 });
 
 export const env = schema.parse(process.env);

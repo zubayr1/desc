@@ -7,6 +7,14 @@
  * arrive with the `ai` service.
  */
 
+// Deterministic deliverable bundling (validation + Merkle root). Used by `web`
+// now; the `api` will reuse it as the verification authority later.
+export * from "./bundle";
+
+// Deliverable encryption — multi-recipient envelope (age). Browser encrypts to
+// the moderators; a moderator service decrypts.
+export * from "./crypto";
+
 // ---------------------------------------------------------------------------
 // Primitives / constants
 // ---------------------------------------------------------------------------
@@ -73,13 +81,26 @@ export interface AcceptanceCriterion {
   description: string;
 }
 
-/** What the committer submits as proof of work. */
+/**
+ * What the committer delivered — a content-addressed bundle, **sealed**
+ * (encrypted to the moderators). The server stores only the ciphertext + these
+ * anchors; the file list is inside the ciphertext, visible only after a moderator
+ * decrypts (or the initiator on PASS).
+ */
 export interface Deliverable {
-  /** Repo URL, tx signature, report text, etc. */
-  payload: string;
-  /** 32-byte hash recorded on-chain at submit, hex-encoded. */
+  /** sha256(manifest) recorded on-chain at submit, hex-encoded. */
   deliverableHash: string;
+  /** Merkle root over the files (R_plain), hex-encoded. */
+  root: string;
   submittedAt: Timestamp;
+}
+
+/** Committer uploads the encrypted bundle (server stores it blind). */
+export interface DeliverableUploadRequest {
+  deliverableHash: string;
+  root: string;
+  /** age ciphertext of the canonical bundle blob, base64-encoded. */
+  ciphertext: string;
 }
 
 /**

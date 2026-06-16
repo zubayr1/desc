@@ -36,13 +36,14 @@ export function toContract(row: ContractRow, state: EscrowState): Contract {
     vaultAddress: row.vaultAddress,
     linkToken: row.linkToken,
     outcome: state.outcome,
-    deliverable: row.deliverableSubmittedAt
-      ? {
-          payload: row.deliverablePayload ?? "",
-          deliverableHash: row.deliverableHash ?? "",
-          submittedAt: row.deliverableSubmittedAt.toISOString(),
-        }
-      : null,
+    deliverable:
+      row.deliverableSubmittedAt && row.deliverableHash
+        ? {
+            deliverableHash: row.deliverableHash,
+            root: row.deliverableRoot ?? "",
+            submittedAt: row.deliverableSubmittedAt.toISOString(),
+          }
+        : null,
     deadline: row.deadline.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

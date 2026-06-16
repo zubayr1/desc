@@ -19,6 +19,10 @@
     "e2e:release": "tsx scripts/e2e/e2e_release.ts",
     "e2e:refund": "tsx scripts/e2e/e2e_refund.ts",
     "e2e:mutual-cancel": "tsx scripts/e2e/e2e_mutual_cancel.ts",
+    "test:bundle": "tsx scripts/test-bundle.ts",
+    "test:crypto": "tsx scripts/test-crypto.ts",
+    "moderator-register": "tsx scripts/moderator-register.ts",
+    "deliverable-decrypt": "tsx scripts/deliverable-decrypt.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

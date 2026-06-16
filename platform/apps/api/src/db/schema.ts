@@ -6,6 +6,7 @@ import {
   jsonb,
   timestamp,
   index,
+  boolean,
 } from "drizzle-orm/pg-core";
 import type { AcceptanceCriterion, ContractStatus, Outcome } from "@repo/shared";
 
@@ -50,9 +51,11 @@ export const contracts = pgTable(
     // Onboarding
     linkToken: text("link_token").unique(),
 
-    // Deliverable (set on submit)
-    deliverablePayload: text("deliverable_payload"),
-    deliverableHash: text("deliverable_hash"),
+    // Deliverable bundle — sealed (ciphertext in storage). Server keeps only the
+    // anchors; the file list lives inside the ciphertext. submittedAt on confirm.
+    deliverableHash: text("deliverable_hash"), // sha256(manifest), on-chain anchor
+    deliverableRoot: text("deliverable_root"), // Merkle root (R_plain)
+    deliverableStorageKey: text("deliverable_storage_key"),
     deliverableSubmittedAt: timestamp("deliverable_submitted_at", {
       withTimezone: true,
     }),
@@ -75,3 +78,19 @@ export const contracts = pgTable(
 
 export type ContractRow = typeof contracts.$inferSelect;
 export type NewContractRow = typeof contracts.$inferInsert;
+
+/**
+ * Moderator registry. Each row is one moderator's PUBLIC age recipient — the
+ * committer's browser encrypts deliverables to every `active` recipient
+ * (multi-recipient envelope). The matching SECRET identity is never here; it's
+ * held by that moderator's own service. Add a moderator = insert a row.
+ */
+export const moderators = pgTable("moderators", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  recipient: text("recipient").notNull().unique(), // age1…
+  label: text("label").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type ModeratorRow = typeof moderators.$inferSelect;

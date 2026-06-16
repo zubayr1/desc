@@ -7,6 +7,7 @@ import { program, platformConfigPda } from "./solana/program";
 import { registerContractRoutes } from "./routes/contracts";
 import { registerLinkRoutes } from "./routes/links";
 import { registerAdminRoutes } from "./routes/admin";
+import { registerConfigRoutes } from "./routes/config";
 import { humanizeError } from "./errors";
 
 const app = Fastify({ logger: true });
@@ -28,6 +29,7 @@ app.setErrorHandler((err, _req, reply) => {
 registerContractRoutes(app);
 registerLinkRoutes(app);
 registerAdminRoutes(app);
+registerConfigRoutes(app);
 
 app.get("/health", async () => {
   // DB reachable?

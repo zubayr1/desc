@@ -1,11 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Loader2, LogOut, RefreshCw, X } from "lucide-react";
+import { Check, Loader2, LogOut, RefreshCw, X } from "lucide-react";
 import type { Contract } from "@repo/shared";
 import { api, clearToken, getToken, setToken } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/Button";
-import { cn, externalHref, short, usd } from "@/lib/utils";
+import { cn, short, usd } from "@/lib/utils";
 
 const TYPE_LABEL: Record<string, string> = {
   merged_pr: "Merged PR",
@@ -13,6 +13,7 @@ const TYPE_LABEL: Record<string, string> = {
   test_suite_pass: "Passing test suite",
   technical_report: "Technical report",
 };
+
 
 function Label({ children }: { children: ReactNode }) {
   return (
@@ -86,14 +87,12 @@ function VerdictCard({ c, onDone }: { c: Contract; onDone: () => void }) {
       <div className="mt-5">
         <Label>Deliverable</Label>
         {c.deliverable ? (
-          <a
-            href={externalHref(c.deliverable.payload)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 inline-flex items-center gap-2 break-all font-mono text-sm text-accent-2 hover:underline"
-          >
-            {c.deliverable.payload} <ExternalLink className="size-3.5 shrink-0" />
-          </a>
+          <div className="mt-1 text-sm text-zinc-400">
+            🔒 sealed — decrypt with your moderator key to view.
+            <div className="mt-1 break-all font-mono text-xs text-zinc-500">
+              hash {short(c.deliverable.deliverableHash)} · root {short(c.deliverable.root)}
+            </div>
+          </div>
         ) : (
           <div className="mt-1 text-sm text-zinc-500">none submitted</div>
         )}

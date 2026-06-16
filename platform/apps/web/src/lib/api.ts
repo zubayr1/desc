@@ -1,7 +1,11 @@
 import { Buffer } from "buffer";
 import { Transaction } from "@solana/web3.js";
 import type { WalletContextState } from "@solana/wallet-adapter-react";
-import type { Contract, CreateContractRequest } from "@repo/shared";
+import type {
+  Contract,
+  CreateContractRequest,
+  DeliverableUploadRequest,
+} from "@repo/shared";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -63,3 +67,10 @@ export async function createAndFund(
     signedTx: signed.serialize().toString("base64"),
   });
 }
+
+/** Upload the encrypted deliverable bundle (server stores it blind). */
+export const uploadDeliverable = (token: string, payload: DeliverableUploadRequest) =>
+  api.post<{ ok: boolean; deliverableHash: string }>(
+    `/links/${token}/deliverable/upload`,
+    payload
+  );

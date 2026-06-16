@@ -7,7 +7,12 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
-import type { AcceptanceCriterion, ContractStatus, Outcome } from "@repo/shared";
+import type {
+  AcceptanceCriterion,
+  ContractStatus,
+  Manifest,
+  Outcome,
+} from "@repo/shared";
 
 /**
  * Off-chain contract metadata. The chain is the source of truth for status,
@@ -50,9 +55,11 @@ export const contracts = pgTable(
     // Onboarding
     linkToken: text("link_token").unique(),
 
-    // Deliverable (set on submit)
-    deliverablePayload: text("deliverable_payload"),
-    deliverableHash: text("deliverable_hash"),
+    // Deliverable bundle — hash/manifest set on upload; submittedAt on confirm.
+    deliverableHash: text("deliverable_hash"), // sha256(manifest), on-chain anchor
+    deliverableRoot: text("deliverable_root"), // Merkle root (R_plain)
+    deliverableStorageKey: text("deliverable_storage_key"),
+    deliverableManifest: jsonb("deliverable_manifest").$type<Manifest>(),
     deliverableSubmittedAt: timestamp("deliverable_submitted_at", {
       withTimezone: true,
     }),

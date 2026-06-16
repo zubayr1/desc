@@ -4,12 +4,17 @@ import {
   getContractByLink,
   prepareAccept,
   submitAccept,
+  uploadDeliverable,
   prepareDeliverable,
   submitDeliverable,
 } from "../contracts/service";
 
 const prepareSchema = z.object({ committer: z.string().min(1) });
-const deliverableSchema = z.object({ payload: z.string().min(1) });
+const uploadSchema = z.object({
+  files: z
+    .array(z.object({ path: z.string().min(1), contentBase64: z.string() }))
+    .min(1),
+});
 const submitSchema = z.object({ signedTx: z.string().min(1) });
 
 export function registerLinkRoutes(app: FastifyInstance) {
@@ -37,11 +42,21 @@ export function registerLinkRoutes(app: FastifyInstance) {
     return submitAccept(token, signedTx);
   });
 
-  // Submit deliverable — build the unsigned tx (committer read from chain).
+  // Upload the deliverable bundle — server validates + hashes + stores (no chain).
+  app.post(
+    "/links/:token/deliverable/upload",
+    { bodyLimit: 160 * 1024 * 1024 },
+    async (req) => {
+      const { token } = req.params as { token: string };
+      const { files } = uploadSchema.parse(req.body);
+      return uploadDeliverable(token, files);
+    }
+  );
+
+  // Submit deliverable — build the unsigned tx from the uploaded bundle's hash.
   app.post("/links/:token/deliverable/prepare", async (req) => {
     const { token } = req.params as { token: string };
-    const { payload } = deliverableSchema.parse(req.body);
-    return prepareDeliverable(token, payload);
+    return prepareDeliverable(token);
   });
 
   // Submit deliverable — submit the signed tx (active → submitted).

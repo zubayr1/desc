@@ -1,7 +1,12 @@
 import { Buffer } from "buffer";
 import { Transaction } from "@solana/web3.js";
 import type { WalletContextState } from "@solana/wallet-adapter-react";
-import type { Contract, CreateContractRequest } from "@repo/shared";
+import type {
+  Contract,
+  CreateContractRequest,
+  DeliverableUpload,
+  UploadFile,
+} from "@repo/shared";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -63,3 +68,7 @@ export async function createAndFund(
     signedTx: signed.serialize().toString("base64"),
   });
 }
+
+/** Upload a deliverable bundle — server validates + hashes + stores it. */
+export const uploadDeliverable = (token: string, files: UploadFile[]) =>
+  api.post<DeliverableUpload>(`/links/${token}/deliverable/upload`, { files });

@@ -7,6 +7,10 @@
  * arrive with the `ai` service.
  */
 
+// Deterministic deliverable bundling (validation + Merkle root). Used by `web`
+// now; the `api` will reuse it as the verification authority later.
+export * from "./bundle";
+
 // ---------------------------------------------------------------------------
 // Primitives / constants
 // ---------------------------------------------------------------------------
@@ -73,13 +77,39 @@ export interface AcceptanceCriterion {
   description: string;
 }
 
-/** What the committer submits as proof of work. */
+/** A file inside the delivered bundle (content lives in storage, not here). */
+export interface DeliverableFile {
+  path: string;
+  size: number;
+}
+
+/** What the committer delivered — a content-addressed bundle of files. */
 export interface Deliverable {
-  /** Repo URL, tx signature, report text, etc. */
-  payload: string;
-  /** 32-byte hash recorded on-chain at submit, hex-encoded. */
+  /** sha256(manifest) recorded on-chain at submit, hex-encoded. */
   deliverableHash: string;
+  /** Merkle root over the files (R_plain), hex-encoded. */
+  root: string;
+  fileCount: number;
+  totalSize: number;
+  files: DeliverableFile[];
   submittedAt: Timestamp;
+}
+
+/** One file in an upload request (content base64-encoded). */
+export interface UploadFile {
+  path: string;
+  contentBase64: string;
+}
+
+/** Result of uploading + bundling a deliverable (server-validated, pre-submit). */
+export interface DeliverableUpload {
+  ok: boolean;
+  deliverableHash: string | null;
+  root: string | null;
+  fileCount: number;
+  totalSize: number;
+  files: DeliverableFile[];
+  rejected: { path: string; reason: string }[];
 }
 
 /**

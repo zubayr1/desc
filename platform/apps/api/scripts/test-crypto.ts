@@ -7,6 +7,8 @@ import {
   generateModerationKeypair,
   encryptToRecipients,
   decryptWithIdentity,
+  buildBundle,
+  type BundleBlob,
 } from "@repo/shared";
 
 const enc = new TextEncoder();
@@ -55,6 +57,29 @@ await check("encrypting with no recipients throws", async () => {
 await check("keypair shapes look like age strings", async () => {
   assert.match(modA.identity, /^AGE-SECRET-KEY-1/i);
   assert.match(modA.recipient, /^age1/);
+});
+
+// The full deliverable chain: bundle → encrypt → decrypt → re-verify the hash.
+await check("pack → encrypt → decrypt → re-verify round-trips", async () => {
+  const inputs = [
+    { path: "src/b.txt", content: enc.encode("world") },
+    { path: "a.txt", content: enc.encode("hello") },
+  ];
+  const built = buildBundle(inputs, { withBlob: true });
+  assert.ok(built.ok && built.blob, "bundle should build with a blob");
+
+  const ct = await encryptToRecipients(built.blob!, [modA.recipient]);
+  const blob = JSON.parse(dec.decode(await decryptWithIdentity(ct, modA.identity))) as BundleBlob;
+
+  const reInputs = blob.files.map((f) => ({
+    path: f.path,
+    content: new Uint8Array(Buffer.from(f.contentBase64, "base64")),
+  }));
+  const salt = new Uint8Array(Buffer.from(blob.manifest.salt, "hex"));
+  const verify = buildBundle(reInputs, { salt });
+
+  assert.equal(verify.deliverableHash, built.deliverableHash, "hash must match after round-trip");
+  assert.equal(verify.root, blob.manifest.root, "root must match the manifest");
 });
 
 console.log(`\n${passed} checks passed`);

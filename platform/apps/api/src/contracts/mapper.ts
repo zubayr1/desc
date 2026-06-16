@@ -41,11 +41,6 @@ export function toContract(row: ContractRow, state: EscrowState): Contract {
         ? {
             deliverableHash: row.deliverableHash,
             root: row.deliverableRoot ?? "",
-            fileCount: row.deliverableManifest?.files.length ?? 0,
-            totalSize:
-              row.deliverableManifest?.files.reduce((s, f) => s + f.size, 0) ?? 0,
-            files:
-              row.deliverableManifest?.files.map((f) => ({ path: f.path, size: f.size })) ?? [],
             submittedAt: row.deliverableSubmittedAt.toISOString(),
           }
         : null,

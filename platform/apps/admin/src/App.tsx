@@ -14,12 +14,6 @@ const TYPE_LABEL: Record<string, string> = {
   technical_report: "Technical report",
 };
 
-const fmtSize = (n: number) =>
-  n < 1024
-    ? `${n} B`
-    : n < 1024 * 1024
-      ? `${(n / 1024).toFixed(1)} KB`
-      : `${(n / 1024 / 1024).toFixed(2)} MB`;
 
 function Label({ children }: { children: ReactNode }) {
   return (
@@ -91,26 +85,14 @@ function VerdictCard({ c, onDone }: { c: Contract; onDone: () => void }) {
       </div>
 
       <div className="mt-5">
-        <Label>
-          Deliverable
-          {c.deliverable
-            ? ` — ${c.deliverable.fileCount} files · ${fmtSize(c.deliverable.totalSize)}`
-            : ""}
-        </Label>
+        <Label>Deliverable</Label>
         {c.deliverable ? (
-          <>
-            <div className="mt-1 mb-2 break-all font-mono text-xs text-zinc-500">
-              root {short(c.deliverable.root)}
+          <div className="mt-1 text-sm text-zinc-400">
+            🔒 sealed — decrypt with your moderator key to view.
+            <div className="mt-1 break-all font-mono text-xs text-zinc-500">
+              hash {short(c.deliverable.deliverableHash)} · root {short(c.deliverable.root)}
             </div>
-            <ul className="space-y-1 font-mono text-xs text-zinc-300">
-              {c.deliverable.files.map((file) => (
-                <li key={file.path} className="flex items-center gap-2">
-                  <span className="truncate">{file.path}</span>
-                  <span className="ml-auto shrink-0 text-zinc-600">{fmtSize(file.size)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
+          </div>
         ) : (
           <div className="mt-1 text-sm text-zinc-500">none submitted</div>
         )}

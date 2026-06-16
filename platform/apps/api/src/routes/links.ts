@@ -11,9 +11,9 @@ import {
 
 const prepareSchema = z.object({ committer: z.string().min(1) });
 const uploadSchema = z.object({
-  files: z
-    .array(z.object({ path: z.string().min(1), contentBase64: z.string() }))
-    .min(1),
+  deliverableHash: z.string().regex(/^[0-9a-f]{64}$/),
+  root: z.string().regex(/^[0-9a-f]{64}$/),
+  ciphertext: z.string().min(1), // base64 age ciphertext
 });
 const submitSchema = z.object({ signedTx: z.string().min(1) });
 
@@ -42,14 +42,13 @@ export function registerLinkRoutes(app: FastifyInstance) {
     return submitAccept(token, signedTx);
   });
 
-  // Upload the deliverable bundle — server validates + hashes + stores (no chain).
+  // Upload the (encrypted) deliverable bundle — server stores it blind (no chain).
   app.post(
     "/links/:token/deliverable/upload",
     { bodyLimit: 160 * 1024 * 1024 },
     async (req) => {
       const { token } = req.params as { token: string };
-      const { files } = uploadSchema.parse(req.body);
-      return uploadDeliverable(token, files);
+      return uploadDeliverable(token, uploadSchema.parse(req.body));
     }
   );
 

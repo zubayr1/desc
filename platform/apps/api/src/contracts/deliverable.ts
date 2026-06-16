@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { PublicKey } from "@solana/web3.js";
-import type { Contract, DeliverableUpload, InputFile, UploadFile } from "@repo/shared";
-import { buildBundle } from "@repo/shared";
+import type { Contract, DeliverableUploadRequest } from "@repo/shared";
 import { db } from "../db/client";
 import { contracts } from "../db/schema";
 import { readEscrow, type OnChainEscrow } from "../solana/program";
@@ -26,65 +25,36 @@ async function activeGuard(escrowAddress: string): Promise<OnChainEscrow> {
 }
 
 /**
- * Validate + bundle the uploaded files (the API is the verification authority),
- * store the content-addressed blob, and stash the hash/manifest. No chain write
- * here — that's `prepare`/`submit`. Storing first means the on-chain hash always
- * points at a retrievable bundle.
+ * Store the committer's **encrypted** deliverable bundle. The server is BLIND —
+ * the ciphertext is sealed to the moderators, so we never validate or read it
+ * here (the moderator does that at verify time, after decrypting). We store the
+ * ciphertext by its hash and record the on-chain anchors. No chain write yet.
  */
 export async function uploadDeliverable(
   token: string,
-  files: UploadFile[]
-): Promise<DeliverableUpload> {
+  req: DeliverableUploadRequest
+): Promise<{ ok: true; deliverableHash: string }> {
   const row = await getRowByLink(token);
   await activeGuard(row.escrowAddress);
 
-  const inputs: InputFile[] = files.map((f) => ({
-    path: f.path,
-    content: new Uint8Array(Buffer.from(f.contentBase64, "base64")),
-  }));
-  const bundle = buildBundle(inputs);
-
-  if (!bundle.ok || !bundle.manifest || !bundle.deliverableHash) {
-    return {
-      ok: false,
-      deliverableHash: null,
-      root: null,
-      fileCount: 0,
-      totalSize: bundle.totalSize,
-      files: [],
-      rejected: bundle.rejected,
-    };
-  }
-
-  // Store the bundle (manifest + file contents) keyed by the deliverable hash.
-  const storageKey = `${bundle.deliverableHash}.json`;
-  const blob = JSON.stringify({ manifest: bundle.manifest, files });
-  await storage.put(storageKey, new TextEncoder().encode(blob));
+  const storageKey = `${req.deliverableHash}.age`;
+  await storage.put(storageKey, new Uint8Array(Buffer.from(req.ciphertext, "base64")));
 
   await db
     .update(contracts)
     .set({
-      deliverableHash: bundle.deliverableHash,
-      deliverableRoot: bundle.root,
+      deliverableHash: req.deliverableHash,
+      deliverableRoot: req.root,
       deliverableStorageKey: storageKey,
-      deliverableManifest: bundle.manifest,
       updatedAt: new Date(),
     })
     .where(eq(contracts.id, row.id));
 
-  return {
-    ok: true,
-    deliverableHash: bundle.deliverableHash,
-    root: bundle.root,
-    fileCount: bundle.accepted.length,
-    totalSize: bundle.totalSize,
-    files: bundle.accepted.map((f) => ({ path: f.path, size: f.size })),
-    rejected: bundle.rejected,
-  };
+  return { ok: true, deliverableHash: req.deliverableHash };
 }
 
-/** Build the unsigned `submit` tx from the already-uploaded bundle's hash.
- *  Refuses if nothing's been uploaded/stored — no orphan hashes on-chain. */
+/** Build the unsigned `submit` tx from the uploaded bundle's hash. Refuses if
+ *  nothing's been uploaded/stored — no orphan hashes on-chain. */
 export async function prepareDeliverable(
   token: string
 ): Promise<{ id: string; unsignedTx: string }> {

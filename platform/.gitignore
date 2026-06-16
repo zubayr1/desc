@@ -2,3 +2,6 @@
 # local deliverable storage (dev)
 storage/
 apps/api/storage/
+
+# decrypt CLI plaintext output (dev only)
+decrypted/

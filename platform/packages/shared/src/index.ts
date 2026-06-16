@@ -81,39 +81,26 @@ export interface AcceptanceCriterion {
   description: string;
 }
 
-/** A file inside the delivered bundle (content lives in storage, not here). */
-export interface DeliverableFile {
-  path: string;
-  size: number;
-}
-
-/** What the committer delivered — a content-addressed bundle of files. */
+/**
+ * What the committer delivered — a content-addressed bundle, **sealed**
+ * (encrypted to the moderators). The server stores only the ciphertext + these
+ * anchors; the file list is inside the ciphertext, visible only after a moderator
+ * decrypts (or the initiator on PASS).
+ */
 export interface Deliverable {
   /** sha256(manifest) recorded on-chain at submit, hex-encoded. */
   deliverableHash: string;
   /** Merkle root over the files (R_plain), hex-encoded. */
   root: string;
-  fileCount: number;
-  totalSize: number;
-  files: DeliverableFile[];
   submittedAt: Timestamp;
 }
 
-/** One file in an upload request (content base64-encoded). */
-export interface UploadFile {
-  path: string;
-  contentBase64: string;
-}
-
-/** Result of uploading + bundling a deliverable (server-validated, pre-submit). */
-export interface DeliverableUpload {
-  ok: boolean;
-  deliverableHash: string | null;
-  root: string | null;
-  fileCount: number;
-  totalSize: number;
-  files: DeliverableFile[];
-  rejected: { path: string; reason: string }[];
+/** Committer uploads the encrypted bundle (server stores it blind). */
+export interface DeliverableUploadRequest {
+  deliverableHash: string;
+  root: string;
+  /** age ciphertext of the canonical bundle blob, base64-encoded. */
+  ciphertext: string;
 }
 
 /**

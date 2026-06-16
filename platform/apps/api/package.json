@@ -22,6 +22,7 @@
     "test:bundle": "tsx scripts/test-bundle.ts",
     "test:crypto": "tsx scripts/test-crypto.ts",
     "moderator-register": "tsx scripts/moderator-register.ts",
+    "deliverable-decrypt": "tsx scripts/deliverable-decrypt.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

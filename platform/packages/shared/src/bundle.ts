@@ -58,6 +58,15 @@ export interface BundleResult {
   accepted: ManifestFile[];
   rejected: RejectedFile[];
   totalSize: number;
+  /** Canonical plaintext bundle to encrypt: JSON `{manifest, files:[{path,contentBase64}]}`.
+   *  Only produced when `withBlob` is set (the committer's browser needs it). */
+  blob: Uint8Array | null;
+}
+
+/** Parsed shape of the plaintext blob (after a moderator decrypts it). */
+export interface BundleBlob {
+  manifest: Manifest;
+  files: { path: string; contentBase64: string }[];
 }
 
 const enc = new TextEncoder();
@@ -106,6 +115,16 @@ function cmpBytes(a: Uint8Array, b: Uint8Array): number {
   return a.length - b.length;
 }
 
+/** Chunked base64 (isomorphic: btoa exists in browsers and Node ≥16). */
+function b64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
 function leafHash(pathBytes: Uint8Array, content: Uint8Array): Uint8Array {
   return sha256(
     concatBytes(LEAF, u64be(pathBytes.length), pathBytes, u64be(content.length), content)
@@ -136,7 +155,10 @@ function canonicalManifest(m: Manifest): string {
  * manifest. Returns accepted/rejected for display; `ok` is false (root/manifest
  * null) if there are no acceptable files or a global cap is exceeded.
  */
-export function buildBundle(files: InputFile[], opts?: { salt?: Uint8Array }): BundleResult {
+export function buildBundle(
+  files: InputFile[],
+  opts?: { salt?: Uint8Array; withBlob?: boolean }
+): BundleResult {
   const kept: { path: string; pathBytes: Uint8Array; content: Uint8Array }[] = [];
   const rejected: RejectedFile[] = [];
   const seen = new Set<string>();
@@ -171,6 +193,7 @@ export function buildBundle(files: InputFile[], opts?: { salt?: Uint8Array }): B
     accepted: kept.map((k) => ({ path: k.path, size: k.content.length, hash: "" })),
     rejected: [...rejected, { path: "(bundle)", reason: extra }],
     totalSize,
+    blob: null,
   });
 
   if (kept.length === 0) return fail("no acceptable files");
@@ -189,5 +212,14 @@ export function buildBundle(files: InputFile[], opts?: { salt?: Uint8Array }): B
   const manifest: Manifest = { v: 1, algo: "sha256", root, files: accepted, salt: bytesToHex(salt) };
   const deliverableHash = bytesToHex(sha256(enc.encode(canonicalManifest(manifest))));
 
-  return { ok: true, root, deliverableHash, manifest, accepted, rejected, totalSize };
+  const blob = opts?.withBlob
+    ? enc.encode(
+        JSON.stringify({
+          manifest,
+          files: kept.map((k) => ({ path: k.path, contentBase64: b64(k.content) })),
+        })
+      )
+    : null;
+
+  return { ok: true, root, deliverableHash, manifest, accepted, rejected, totalSize, blob };
 }

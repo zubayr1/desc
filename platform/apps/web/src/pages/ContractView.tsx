@@ -15,8 +15,10 @@ import {
   FileX2,
   FolderUp,
   Loader2,
+  Lock,
 } from "lucide-react";
-import type { Contract, DeliverableUpload, UploadFile } from "@repo/shared";
+import type { Contract, BundleResult } from "@repo/shared";
+import { buildBundle, encryptToRecipients } from "@repo/shared";
 import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
 import { Card } from "@/components/ui/Card";
@@ -80,53 +82,66 @@ function Passive({ ok, children }: { ok?: boolean; children: React.ReactNode }) 
   );
 }
 
-/** Committer's deliverable submission: pick a folder → upload (server validates +
- *  hashes + stores) → submit the hash on-chain. */
+/** Committer's deliverable submission: pick a folder → bundle + validate locally →
+ *  ENCRYPT to the moderators in-browser → upload ciphertext → submit hash on-chain. */
 function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
   const { signTransaction } = useWallet();
-  const [uploaded, setUploaded] = useState<DeliverableUpload | null>(null);
+  const [bundle, setBundle] = useState<BundleResult | null>(null);
 
-  const uploadMut = useMutation({
+  const pick = useMutation({
     mutationFn: async (fileList: FileList) => {
-      const files: UploadFile[] = [];
+      const inputs: { path: string; content: Uint8Array }[] = [];
       for (const file of Array.from(fileList)) {
-        if (file.size > 10 * 1024 * 1024) continue; // skip over-cap (server re-validates)
+        if (file.size > 10 * 1024 * 1024) continue; // skip over-cap
         const rel = file.webkitRelativePath || file.name;
         const path = rel.includes("/") ? rel.split("/").slice(1).join("/") : rel;
-        files.push({
-          path,
-          contentBase64: toBase64(new Uint8Array(await file.arrayBuffer())),
-        });
+        inputs.push({ path, content: new Uint8Array(await file.arrayBuffer()) });
       }
-      return uploadDeliverable(c.linkToken!, files);
+      return buildBundle(inputs, { withBlob: true });
     },
-    onSuccess: (r) => setUploaded(r),
+    onSuccess: (r) => setBundle(r),
   });
 
-  const submitMut = useMutation({
-    mutationFn: () =>
-      prepareSignSubmit(
+  const submit = useMutation({
+    mutationFn: async () => {
+      if (!bundle?.ok || !bundle.blob || !bundle.deliverableHash || !bundle.root) {
+        throw new Error("pick a valid folder first");
+      }
+      const { recipients } = await api.get<{ recipients: string[] }>("/config/moderators");
+      if (!recipients.length) {
+        throw new Error("no moderators configured — run moderator-register on the api");
+      }
+      const ciphertext = await encryptToRecipients(bundle.blob, recipients);
+      await uploadDeliverable(c.linkToken!, {
+        deliverableHash: bundle.deliverableHash,
+        root: bundle.root,
+        ciphertext: toBase64(ciphertext),
+      });
+      return prepareSignSubmit(
         `/links/${c.linkToken}/deliverable/prepare`,
         `/links/${c.linkToken}/deliverable/submit`,
         {},
         signTransaction!
-      ),
+      );
+    },
     onSuccess: onDone,
   });
 
-  const err = (uploadMut.error || submitMut.error) as Error | undefined;
+  const err = (pick.error || submit.error) as Error | undefined;
   const spin = <Loader2 className="size-4 animate-spin" />;
 
   return (
     <div>
       <div className="mb-3 text-sm text-zinc-400">
-        Submit your deliverable — pick the project folder. It&apos;s validated and
-        content-hashed; the hash is what goes on-chain.
+        Submit your deliverable — pick the project folder. It&apos;s validated,
+        content-hashed, and{" "}
+        <span className="text-zinc-200">encrypted to the moderators</span> in your
+        browser; only the ciphertext is uploaded.
       </div>
 
       <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5">
         <FolderUp className="size-4" />
-        {uploaded ? "Choose a different folder" : "Choose folder"}
+        {bundle ? "Choose a different folder" : "Choose folder"}
         <input
           ref={(el) => {
             if (el) {
@@ -137,26 +152,24 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
           type="file"
           multiple
           className="hidden"
-          onChange={(e) => e.target.files && uploadMut.mutate(e.target.files)}
+          onChange={(e) => e.target.files && pick.mutate(e.target.files)}
         />
       </label>
 
-      {uploadMut.isPending && (
-        <div className="mt-3 flex items-center gap-2 text-sm text-zinc-400">
-          {spin} uploading…
-        </div>
+      {pick.isPending && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-zinc-400">{spin} reading…</div>
       )}
 
-      {uploaded && (
+      {bundle && (
         <div className="mt-4">
-          {uploaded.ok ? (
+          {bundle.ok ? (
             <>
               <div className="mb-1 flex items-center gap-2 text-sm text-st-settled">
-                <FileCheck2 className="size-4" /> {uploaded.fileCount} files ·{" "}
-                {fmtSize(uploaded.totalSize)}
+                <FileCheck2 className="size-4" /> {bundle.accepted.length} files ·{" "}
+                {fmtSize(bundle.totalSize)}
               </div>
               <div className="mb-3 break-all font-mono text-xs text-zinc-500">
-                root {short(uploaded.root ?? "")}
+                root {short(bundle.root ?? "")}
               </div>
             </>
           ) : (
@@ -165,9 +178,9 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
             </div>
           )}
 
-          {uploaded.rejected.length > 0 && (
+          {bundle.rejected.length > 0 && (
             <ul className="mb-3 space-y-1 font-mono text-xs text-zinc-500">
-              {uploaded.rejected.map((r, i) => (
+              {bundle.rejected.map((r, i) => (
                 <li key={i} className="flex items-center gap-2">
                   <FileX2 className="size-3.5 shrink-0 text-red-400/80" />
                   <span className="truncate">{r.path}</span>
@@ -177,14 +190,14 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
             </ul>
           )}
 
-          {uploaded.ok && (
+          {bundle.ok && (
             <Button
               variant="accent"
               className="w-full"
-              disabled={submitMut.isPending}
-              onClick={() => submitMut.mutate()}
+              disabled={submit.isPending}
+              onClick={() => submit.mutate()}
             >
-              {submitMut.isPending ? spin : "Submit on-chain"}
+              {submit.isPending ? spin : "Encrypt & submit"}
             </Button>
           )}
         </div>
@@ -503,21 +516,13 @@ export function ContractView() {
 
         {contract.deliverable && (
           <div className="mt-6">
-            <div className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-              Deliverable — {contract.deliverable.fileCount} files ·{" "}
-              {fmtSize(contract.deliverable.totalSize)}
+            <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-500">
+              <Lock className="size-3.5" /> Deliverable — sealed to the moderators
             </div>
-            <div className="mb-2 break-all font-mono text-xs text-zinc-500">
-              root {short(contract.deliverable.root)}
+            <div className="break-all font-mono text-xs text-zinc-500">
+              hash {short(contract.deliverable.deliverableHash)} · root{" "}
+              {short(contract.deliverable.root)}
             </div>
-            <ul className="space-y-1 font-mono text-xs text-zinc-300">
-              {contract.deliverable.files.map((file) => (
-                <li key={file.path} className="flex items-center gap-2">
-                  <span className="truncate">{file.path}</span>
-                  <span className="ml-auto shrink-0 text-zinc-600">{fmtSize(file.size)}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         )}
 

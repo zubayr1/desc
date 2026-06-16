@@ -191,6 +191,48 @@ The api signs + submits the verdict; refresh the contract page to see the new ac
 
 ---
 
+## Moderator registry (deliverable encryption)
+
+Deliverables are sealed to the moderators' public keys (multi-recipient `age`
+envelope), so the registry holds **who** they're encrypted to. The registry is the
+`moderators` table in Postgres (created by `pnpm db:push`).
+
+### Register a moderator
+```bash
+pnpm --filter api moderator-register "Mod A"
+```
+This generates an `age` keypair, stores the **public** recipient (`age1…`) in the
+`moderators` table, and prints the **secret** identity (`AGE-SECRET-KEY-1…`).
+
+- **Save the secret** — it goes to *that moderator's own service* (its
+  `MODERATION_IDENTITY_PATH` file); never commit it. Only the public recipient lives
+  in the DB.
+- **Scalable by design:** run it once per moderator. Deliverables encrypt to **all
+  active** recipients, and any one moderator can decrypt. Adding a moderator = one
+  more `moderator-register` (no redeploy).
+
+### Inspect / manage
+```bash
+# what the browser fetches (active recipients):
+curl -s localhost:3000/config/moderators | jq .
+
+# full registry:
+docker exec platform-postgres-1 psql -U desc -d desc \
+  -c "select id,label,recipient,active from moderators;"
+
+# deactivate (stop encrypting to it) / remove:
+docker exec platform-postgres-1 psql -U desc -d desc \
+  -c "update moderators set active=false where label='Mod B';"
+docker exec platform-postgres-1 psql -U desc -d desc \
+  -c "delete from moderators where label='Mod B';"
+```
+
+> You need **at least one active moderator** registered before a committer can
+> encrypt a deliverable. (Encryption wiring is being added step by step; the registry
+> + crypto core are in place.)
+
+---
+
 ## Full lifecycle walkthrough (UI + one curl)
 
 1. **Create** (wallet A, funded with SOL + USDC) → contract is `funded`, shows a link.

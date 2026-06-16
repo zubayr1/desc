@@ -10,6 +10,6 @@ export { prepareRelease, submitRelease } from "./release";
 export { prepareRefund, submitRefund } from "./refund";
 export { prepareMutualCancel, submitMutualCancel } from "./mutualCancel";
 export { prepareAccept, submitAccept } from "./accept";
-export { prepareDeliverable, submitDeliverable } from "./deliverable";
+export { uploadDeliverable, prepareDeliverable, submitDeliverable } from "./deliverable";
 export { recordVerdict } from "./verdict";
 export { getContract, getContractByLink, listContracts } from "./read";

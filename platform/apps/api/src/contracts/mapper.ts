@@ -36,13 +36,19 @@ export function toContract(row: ContractRow, state: EscrowState): Contract {
     vaultAddress: row.vaultAddress,
     linkToken: row.linkToken,
     outcome: state.outcome,
-    deliverable: row.deliverableSubmittedAt
-      ? {
-          payload: row.deliverablePayload ?? "",
-          deliverableHash: row.deliverableHash ?? "",
-          submittedAt: row.deliverableSubmittedAt.toISOString(),
-        }
-      : null,
+    deliverable:
+      row.deliverableSubmittedAt && row.deliverableHash
+        ? {
+            deliverableHash: row.deliverableHash,
+            root: row.deliverableRoot ?? "",
+            fileCount: row.deliverableManifest?.files.length ?? 0,
+            totalSize:
+              row.deliverableManifest?.files.reduce((s, f) => s + f.size, 0) ?? 0,
+            files:
+              row.deliverableManifest?.files.map((f) => ({ path: f.path, size: f.size })) ?? [],
+            submittedAt: row.deliverableSubmittedAt.toISOString(),
+          }
+        : null,
     deadline: row.deadline.toISOString(),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

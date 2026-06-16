@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, LogOut, RefreshCw, X } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, LogOut, RefreshCw } from "lucide-react";
 import type { Contract } from "@repo/shared";
 import { api, clearToken, getToken, setToken } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
@@ -40,19 +40,8 @@ function Meta({
   );
 }
 
-/** A submitted contract awaiting a verdict — the actionable unit. */
-function VerdictCard({ c, onDone }: { c: Contract; onDone: () => void }) {
-  const [note, setNote] = useState("");
-  const verdict = useMutation({
-    mutationFn: (outcome: "pass" | "fail") =>
-      api.post(`/admin/contracts/${c.id}/verdict`, {
-        outcome,
-        note: note.trim() || undefined,
-      }),
-    onSuccess: onDone,
-  });
-  const pending = verdict.isPending;
-
+/** A submitted contract awaiting a moderator verdict — read-only oversight. */
+function SubmittedCard({ c }: { c: Contract }) {
   return (
     <div className="glass p-6">
       <div className="flex items-start justify-between gap-4">
@@ -88,7 +77,7 @@ function VerdictCard({ c, onDone }: { c: Contract; onDone: () => void }) {
         <Label>Deliverable</Label>
         {c.deliverable ? (
           <div className="mt-1 text-sm text-zinc-400">
-            🔒 sealed — decrypt with your moderator key to view.
+            🔒 sealed — only the moderator agents can decrypt + judge it.
             <div className="mt-1 break-all font-mono text-xs text-zinc-500">
               hash {short(c.deliverable.deliverableHash)} · root {short(c.deliverable.root)}
             </div>
@@ -98,46 +87,9 @@ function VerdictCard({ c, onDone }: { c: Contract; onDone: () => void }) {
         )}
       </div>
 
-      <input
-        className="inp mt-5"
-        placeholder="Verdict note (optional)"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-      />
-
-      {verdict.error && (
-        <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
-          {(verdict.error as Error).message}
-        </div>
-      )}
-
-      <div className="mt-4 flex gap-3">
-        <Button
-          variant="accent"
-          className="flex-1"
-          disabled={pending}
-          onClick={() => verdict.mutate("pass")}
-        >
-          {pending && verdict.variables === "pass" ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Check className="size-4" />
-          )}
-          Pass
-        </Button>
-        <Button
-          variant="danger"
-          className="flex-1"
-          disabled={pending}
-          onClick={() => verdict.mutate("fail")}
-        >
-          {pending && verdict.variables === "fail" ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <X className="size-4" />
-          )}
-          Fail
-        </Button>
+      <div className="mt-5 flex items-center gap-2 text-sm text-st-submitted">
+        <span className="size-2 animate-pulse rounded-full bg-st-submitted" />
+        Awaiting moderator verdict
       </div>
     </div>
   );
@@ -186,11 +138,11 @@ function Console({ onSignOut }: { onSignOut: () => void }) {
       <header className="mb-8 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            <span className="text-gradient">desc</span> · moderator console
+            <span className="text-gradient">desc</span> · platform oversight
           </h1>
           <p className="mt-1 text-sm text-zinc-500">
-            Record verdicts on submitted deliverables — signed server-side by the
-            settlement authority.
+            Read-only view of all contracts. Verdicts are produced by the moderator
+            agents — the platform doesn&apos;t judge or decrypt.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -230,7 +182,7 @@ function Console({ onSignOut }: { onSignOut: () => void }) {
             ) : (
               <div className="space-y-4">
                 {queue.map((c) => (
-                  <VerdictCard key={c.id} c={c} onDone={refresh} />
+                  <SubmittedCard key={c.id} c={c} />
                 ))}
               </div>
             )}
@@ -260,10 +212,10 @@ function Login({ onAuth }: { onAuth: (t: string) => void }) {
     <div className="mx-auto max-w-sm px-5 py-24">
       <div className="glass p-6">
         <h1 className="text-lg font-semibold">
-          <span className="text-gradient">desc</span> · moderator
+          <span className="text-gradient">desc</span> · platform
         </h1>
         <p className="mb-4 mt-1 text-sm text-zinc-500">
-          Enter the admin token to continue.
+          Enter the platform token to continue.
         </p>
         <form
           onSubmit={(e) => {
@@ -274,7 +226,7 @@ function Login({ onAuth }: { onAuth: (t: string) => void }) {
           <input
             className="inp"
             type="password"
-            placeholder="Admin token"
+            placeholder="Platform token"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             autoFocus

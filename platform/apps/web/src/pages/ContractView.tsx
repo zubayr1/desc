@@ -11,11 +11,13 @@ import {
   ArrowLeft,
   Check,
   Copy,
-  ExternalLink,
+  FileCheck2,
+  FileX2,
+  FolderUp,
   Loader2,
 } from "lucide-react";
-import type { Contract } from "@repo/shared";
-import { api, prepareSignSubmit } from "@/lib/api";
+import type { Contract, DeliverableUpload, UploadFile } from "@repo/shared";
+import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -28,10 +30,22 @@ const TYPE_LABEL: Record<string, string> = {
   technical_report: "Technical report",
 };
 
-/** The deliverable is an independent external URL — force an absolute href so it
- *  never resolves as a path inside the app. */
-const externalHref = (url: string) =>
-  /^https?:\/\//i.test(url) ? url : `https://${url}`;
+const fmtSize = (n: number) =>
+  n < 1024
+    ? `${n} B`
+    : n < 1024 * 1024
+      ? `${(n / 1024).toFixed(1)} KB`
+      : `${(n / 1024 / 1024).toFixed(2)} MB`;
+
+/** Base64-encode bytes in chunks (avoids the spread call-stack limit). */
+function toBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
 
 function Field({
   label,
@@ -66,6 +80,125 @@ function Passive({ ok, children }: { ok?: boolean; children: React.ReactNode }) 
   );
 }
 
+/** Committer's deliverable submission: pick a folder → upload (server validates +
+ *  hashes + stores) → submit the hash on-chain. */
+function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
+  const { signTransaction } = useWallet();
+  const [uploaded, setUploaded] = useState<DeliverableUpload | null>(null);
+
+  const uploadMut = useMutation({
+    mutationFn: async (fileList: FileList) => {
+      const files: UploadFile[] = [];
+      for (const file of Array.from(fileList)) {
+        if (file.size > 10 * 1024 * 1024) continue; // skip over-cap (server re-validates)
+        const rel = file.webkitRelativePath || file.name;
+        const path = rel.includes("/") ? rel.split("/").slice(1).join("/") : rel;
+        files.push({
+          path,
+          contentBase64: toBase64(new Uint8Array(await file.arrayBuffer())),
+        });
+      }
+      return uploadDeliverable(c.linkToken!, files);
+    },
+    onSuccess: (r) => setUploaded(r),
+  });
+
+  const submitMut = useMutation({
+    mutationFn: () =>
+      prepareSignSubmit(
+        `/links/${c.linkToken}/deliverable/prepare`,
+        `/links/${c.linkToken}/deliverable/submit`,
+        {},
+        signTransaction!
+      ),
+    onSuccess: onDone,
+  });
+
+  const err = (uploadMut.error || submitMut.error) as Error | undefined;
+  const spin = <Loader2 className="size-4 animate-spin" />;
+
+  return (
+    <div>
+      <div className="mb-3 text-sm text-zinc-400">
+        Submit your deliverable — pick the project folder. It&apos;s validated and
+        content-hashed; the hash is what goes on-chain.
+      </div>
+
+      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/5">
+        <FolderUp className="size-4" />
+        {uploaded ? "Choose a different folder" : "Choose folder"}
+        <input
+          ref={(el) => {
+            if (el) {
+              el.setAttribute("webkitdirectory", "");
+              el.setAttribute("directory", "");
+            }
+          }}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => e.target.files && uploadMut.mutate(e.target.files)}
+        />
+      </label>
+
+      {uploadMut.isPending && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-zinc-400">
+          {spin} uploading…
+        </div>
+      )}
+
+      {uploaded && (
+        <div className="mt-4">
+          {uploaded.ok ? (
+            <>
+              <div className="mb-1 flex items-center gap-2 text-sm text-st-settled">
+                <FileCheck2 className="size-4" /> {uploaded.fileCount} files ·{" "}
+                {fmtSize(uploaded.totalSize)}
+              </div>
+              <div className="mb-3 break-all font-mono text-xs text-zinc-500">
+                root {short(uploaded.root ?? "")}
+              </div>
+            </>
+          ) : (
+            <div className="mb-2 text-sm text-red-300">
+              No acceptable files — fix the rejections below and re-pick.
+            </div>
+          )}
+
+          {uploaded.rejected.length > 0 && (
+            <ul className="mb-3 space-y-1 font-mono text-xs text-zinc-500">
+              {uploaded.rejected.map((r, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <FileX2 className="size-3.5 shrink-0 text-red-400/80" />
+                  <span className="truncate">{r.path}</span>
+                  <span className="ml-auto text-red-300/70">{r.reason}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {uploaded.ok && (
+            <Button
+              variant="accent"
+              className="w-full"
+              disabled={submitMut.isPending}
+              onClick={() => submitMut.mutate()}
+            >
+              {submitMut.isPending ? spin : "Submit on-chain"}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {err && (
+        <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+          {err.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The contextual action — depends on (status × role). */
 function Actions({
   contract: c,
@@ -76,7 +209,6 @@ function Actions({
 }) {
   const { publicKey, connected, signTransaction } = useWallet();
   const { setVisible } = useWalletModal();
-  const [payload, setPayload] = useState("");
 
   const me = publicKey?.toBase58();
   const isInitiator = me === c.initiator;
@@ -89,16 +221,6 @@ function Actions({
         `/links/${c.linkToken}/accept/prepare`,
         `/links/${c.linkToken}/accept/submit`,
         { committer: me },
-        signTransaction!
-      ),
-    onSuccess: onDone,
-  });
-  const submit = useMutation({
-    mutationFn: () =>
-      prepareSignSubmit(
-        `/links/${c.linkToken}/deliverable/prepare`,
-        `/links/${c.linkToken}/deliverable/submit`,
-        { payload: payload.trim() },
         signTransaction!
       ),
     onSuccess: onDone,
@@ -142,14 +264,10 @@ function Actions({
     );
   }
 
-  const err = [accept, submit, release, cancel, refund].find((m) => m.error)
+  const err = [accept, release, cancel, refund].find((m) => m.error)
     ?.error as Error | undefined;
   const busy =
-    accept.isPending ||
-    submit.isPending ||
-    release.isPending ||
-    cancel.isPending ||
-    refund.isPending;
+    accept.isPending || release.isPending || cancel.isPending || refund.isPending;
 
   const errorBox = err && (
     <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
@@ -205,27 +323,7 @@ function Actions({
 
       case "active":
         if (isCommitter) {
-          return (
-            <div>
-              <div className="mb-3 text-sm text-zinc-400">
-                Submit your deliverable when it&apos;s ready.
-              </div>
-              <input
-                className="inp mb-3 font-mono"
-                placeholder="https://github.com/…/pull/42"
-                value={payload}
-                onChange={(e) => setPayload(e.target.value)}
-              />
-              <Button
-                variant="accent"
-                className="w-full"
-                disabled={busy || !payload.trim()}
-                onClick={() => submit.mutate()}
-              >
-                {submit.isPending ? spin : "Submit deliverable"}
-              </Button>
-            </div>
-          );
+          return <CommitterSubmit c={c} onDone={onDone} />;
         }
         if (isInitiator && pastDeadline) {
           return (
@@ -406,16 +504,20 @@ export function ContractView() {
         {contract.deliverable && (
           <div className="mt-6">
             <div className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
-              Deliverable
+              Deliverable — {contract.deliverable.fileCount} files ·{" "}
+              {fmtSize(contract.deliverable.totalSize)}
             </div>
-            <a
-              href={externalHref(contract.deliverable.payload)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 break-all font-mono text-sm text-accent-2 hover:underline"
-            >
-              {contract.deliverable.payload} <ExternalLink className="size-3.5 shrink-0" />
-            </a>
+            <div className="mb-2 break-all font-mono text-xs text-zinc-500">
+              root {short(contract.deliverable.root)}
+            </div>
+            <ul className="space-y-1 font-mono text-xs text-zinc-300">
+              {contract.deliverable.files.map((file) => (
+                <li key={file.path} className="flex items-center gap-2">
+                  <span className="truncate">{file.path}</span>
+                  <span className="ml-auto shrink-0 text-zinc-600">{fmtSize(file.size)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

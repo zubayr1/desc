@@ -11,6 +11,10 @@
 // now; the `api` will reuse it as the verification authority later.
 export * from "./bundle";
 
+// Deliverable encryption — multi-recipient envelope (age). Browser encrypts to
+// the moderators; a moderator service decrypts.
+export * from "./crypto";
+
 // ---------------------------------------------------------------------------
 // Primitives / constants
 // ---------------------------------------------------------------------------

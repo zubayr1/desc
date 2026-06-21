@@ -14,8 +14,9 @@ cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build"]
+idl-build = ["anchor-lang/idl-build", "desc_escrow/idl-build"]
 
 
 [dependencies]
 anchor-lang = "0.31.1"
+desc_escrow = { path = "../../../desc_escrow/programs/desc_escrow", features = ["cpi"] }

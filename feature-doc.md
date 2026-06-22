@@ -40,7 +40,7 @@ This identity is preserved through V1, V2, and V3. Marketplace dynamics, yield p
 
 2. ✅ **On-chain escrow on Solana** — funds held by the protocol, not by either party.
 
-3. ✅ **Decentralized AI moderator agents verify delivery** — multiple independent AI agents reach consensus on whether acceptance criteria were met.
+3. ✅ **AI moderator agents verify delivery** — a registered AI mod decrypts the deliverable and judges it against the criteria; **V1 settles on a single mod's verdict**, while multiple independent agents reaching **consensus is V2**.
 
 4. ✅ **Helper AI for the initiator** — assists in writing the project brief and drafting checkable acceptance criteria. Non-negotiable for v1.
 
@@ -48,15 +48,15 @@ This identity is preserved through V1, V2, and V3. Marketplace dynamics, yield p
 
 6. ✅ **Positioning vs. Web2 incumbents**: faster settlement, lower fees, less regulatory overhead, more automated dispute resolution.
 
-7. ✅ **Random moderator assignment by protocol** — initiators do not pick their own moderators. Random selection from the eligible pool prevents collusion and Sybil bias.
+7. 🔮 **Random moderator assignment by protocol (V2)** — initiators never pick their own moderators; random selection from the staked pool prevents collusion and Sybil bias. **V1 has no selection** — each registered internal mod may judge.
 
 8. ✅ **USDC as the settlement currency at launch** — no native token at v1.
 
-9. ✅ **Pricing model**: 2% base protocol fee on each contract + per-moderator surcharge that flows to moderator operators. Number of moderators set by the protocol based on contract value.
+9. ✅ **Pricing model**: 2% base protocol fee on each contract + a per-moderator surcharge that flows to the moderator(s). **V1: the surcharge is 1% of the contract, paid to the judging mod on a successful verdict;** V2 grows it to fee + desc-token and scales the % by moderator reputation. Number of moderators set by the protocol based on contract value.
 
 10. ✅ **Standalone platform at launch** — direct user-facing product. SDK is a later phase.
 
-11. ✅ **Federated moderator pool at launch** — platform runs multiple moderator agent instances with different prompts/models. Third-party pluggable moderators come in a later phase.
+11. ✅ **Platform-run internal moderators at launch** — the platform registers its own mod(s) on-chain (`desc_moderation`), each an automated AI service; a diverse federated pool + **third-party** pluggable mods come in **V2**.
 
 12. ✅ **Formalization flow is the only flow at v1** — no marketplace, no listings, no discovery. The entry point is "I have a deal, let's formalize it."
 
@@ -83,14 +83,15 @@ How the committer hands over work so it's **tamper-evident, AI-verifiable, confi
 
 ## Moderator Architecture (V1 → V2 → V3)
 
-✅ **The moderator is an automated AI *service*, not a person clicking a UI.** It runs after the committer submits: **decrypt → check against the criteria → sign the verdict** — fully automatic. There is **no moderator UI**; the admin UI is **platform-only oversight**. The program already carries the seam: `settlement_authority` is documented to become a `desc_moderation` PDA in V2.
+✅ **The moderator is an automated AI *service*, not a person clicking a UI.** It runs after the committer submits — **decrypt → check against the criteria → sign the verdict** — fully automatic. There is **no moderator UI**; the admin UI is **platform-only, read-only oversight**. **V1 puts mods on-chain**: they sign verdicts with their *own* wallets via the `desc_moderation` program, so there is **no central `settlement_authority` keypair**.
 
-- 🛠 **V1 — federated, platform-run pool.** N platform-run automated mods (different prompts/models), **randomly assigned** per contract, reach **off-chain consensus**, and the **settlement authority** records the agreed verdict on-chain. **Zero program change**; the platform holds these mods' keys. *Currently a single CI/manual stand-in until the AI agents land* (AI-last) — so there's no rogue-mod problem yet.
-- 🛠 **Seams built in V1:** an off-chain **moderator registry** (public recipients), the **multi-recipient envelope** (deliverables already seal to N mods), and an automated **decrypt → verify** path — the foundation the federated pool and external mods build on.
-- 🔮 **V2 — `desc_moderation` program: external, non-custodial mods.** Open the pool to outside operators who register on-chain with their own **non-custodial wallets**, **stake** (slashed for dishonesty), and settle by **on-chain consensus (k-of-n)** via the PDA — earning the **signing fee + desc-token reward** from the surcharge. Random assignment now spans the external staked pool. This is where "anyone brings their AI mod" becomes real.
+- ✅ **V1 — the `desc_moderation` Anchor program.** Each mod is an on-chain account (PDA) with its own **non-custodial wallet** + age key; the program checks the signer is a registered mod and **CPIs the verdict into the escrow** (authority = the program's PDA). V1 mods are **platform-run internal** (registered by the admin); **no random selection yet** — each registered mod may judge.
+- ✅ **V1 reward** — a mod earns **1% of the contract** (the `moderator_surcharge`) on a successful moderation, paid from the escrow on `release`.
+- 🛠 **Already built (the seams):** the moderator registry, the **multi-recipient envelope** (deliverables seal to N mods), and an automated **decrypt → verify** path. The "AI" is a **CI/manual stand-in** until the agents land (AI-last).
+- 🔮 **V2 — open + decentralize.** External operators bring their own AI mods, **stake** (slashed for dishonesty), are **randomly assigned** per contract, and settle by **on-chain consensus (k-of-n)**; rewards grow to **fee + desc-token**, with the **fee % scaling by reputation**.
 - 🔮 **V3 — attested verdicts (TEE / zkML).** The verdict carries proof the agreed AI actually ran on the actual deliverable — the only mechanism that *prevents* (not just penalizes) a mod signing without checking. Receipt anchored on-chain.
 
-> **Honest limit:** *"a mod can only pass/fail after the AI ran"* can't be **enforced** cryptographically until V3. V1 relies on one trusted internal automated mod; V2 adds economic enforcement (stake/slash + consensus); V3 adds proof.
+> **Honest limit:** *"a mod can only pass/fail after the AI ran"* can't be **enforced** cryptographically until V3. V1 relies on trusted internal mods; V2 adds economic enforcement (stake/slash + consensus); V3 adds proof.
 
 ---
 
@@ -129,9 +130,9 @@ When expanding to dev-for-contracts work in V2, projects become naturally multi-
 
 **Plan**: Open the moderator pool to external operators who stake tokens and run their own AI agents. Verdicts that match consensus earn fees + reputation; disagreement burns stake. Requires designing staking economics, Sybil resistance for moderators, and verdict commit-reveal to prevent copying.
 
-### 🔮 V2 — On-chain moderation: the `desc_moderation` program
+### 🔮 V2 — Decentralized moderation (on top of the V1 `desc_moderation` program)
 
-**Plan**: Swap `settlement_authority` (the single V1 signer) for a PDA of a `desc_moderation` program (the seam is already documented in the escrow `Config`). Moderators register on-chain with their own **non-custodial wallets**, **stake** (slashed for dishonest verdicts), are **randomly assigned** per contract, and settle by **consensus (k-of-n)** via CPI — earning the per-mod **signing fee + desc-token reward** from the contract surcharge. This is the substrate the pluggable third-party market runs on. The V1 seams (registry, multi-recipient envelope, automated decrypt→verify runner) feed directly into it.
+**Plan**: The `desc_moderation` program itself ships in **V1** — mods are on-chain PDAs with **non-custodial wallets** that sign verdicts via CPI (no central `settlement_authority`), earning a 1% fee. V2 layers decentralization on top: open registration to **third-party** operators, **staking + slashing**, **random per-contract assignment**, **k-of-n consensus** (a per-contract verdict-record account), and richer rewards (**desc-token + reputation-scaled fee %**), plus Sybil resistance and verdict commit-reveal.
 
 ### 🔮 V3 — Verifiable verdicts (TEE / zkML)
 
@@ -200,7 +201,7 @@ The product reduces to roughly these components (with current build status):
 1. 🛠 **Solana escrow program (Anchor)** — deposit, lock, release on verdict, refund on timeout. *Built: 10 instructions, full test suite, deployed to localnet.*
 2. **Helper AI service** — brief + bounty type → proposed acceptance criteria; initiator edits before commit. *Not started (AI-last).*
 3. **Moderator agent service** — N platform-run instances verifying with different prompts/models → verdict + confidence. *Stand-in built (decrypt → CI/manual check → sign); real AI agents not started.*
-4. **Verdict aggregator** — off-chain consensus across the platform pool → settle; no consensus → flag for manual review. *Not started — lands with the AI agents; the settlement authority records the agreed verdict. (On-chain consensus is the `desc_moderation` step, V2.)*
+4. **Verdict aggregator** — V1 settles on a single registered mod's verdict (no consensus yet); k-of-n consensus across the pool is V2. *Not started — lands with the AI agents.*
 5. 🛠 **Frontend** — draft contract, review-and-accept (shareable link), submit deliverable (folder → sealed/encrypted), view verdict + settlement, plus a dashboard. *Built.*
 6. 🛠 **Platform admin / dispute tool** — oversight console (contracts, queue, manual verdict stand-in). *Built; matures into the platform-only oversight view.*
 7. 🛠 **Deliverable pipeline + moderator registry** — folder → validate → Merkle → encrypt-to-mods → blind storage → decrypt + verify; off-chain registry of moderator recipients. *Built (this milestone).*

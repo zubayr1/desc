@@ -19,6 +19,10 @@ build/
 settlement-keypair.json
 **/settlement-keypair.json
 
+# Secrets — moderator wallets + age identities (provisioned by moderator-register)
+**/moderators/
+*.key
+
 # Rust / Anchor
 target/
 .anchor/

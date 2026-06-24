@@ -15,7 +15,7 @@ services/
 
 On-chain programs live outside this monorepo under `../programs`:
 - `desc_escrow` — USDC escrow + lifecycle (Config, create / accept / submit / record_verdict / release / refund).
-- `desc_moderation` — moderator registry + verdict authority: mods are PDAs with their own non-custodial wallets that sign verdicts via CPI into `desc_escrow` — **no settlement keypair**. **Built (states + 4 instructions + IDL); not yet deployed or wired** — see "Moderation program" below. Until it's wired, verdicts use the interim settlement-key path.
+- `desc_moderation` — moderator registry + verdict authority: mods are PDAs with their own non-custodial wallets that sign verdicts via CPI into `desc_escrow` — **no settlement keypair** (the api holds no signing key). The escrow's `settlement_authority` is this program's verdict PDA. See "Moderation program" below.
 
 ---
 
@@ -55,11 +55,11 @@ Copy the printed values into **`apps/api/.env`**, then **restart the api** (`.en
 read once at startup):
 ```
 CONFIG_AUTHORITY=...
-SETTLEMENT_KEYPAIR_PATH=./settlement-keypair.json
 USDC_MINT=...
 ```
-Re-running `pnpm bootstrap` on an existing Config just reprints these (incl. the
-current `USDC_MINT`) and tops up the keys.
+`bootstrap` sets the escrow's `settlement_authority` to the **`desc_moderation` verdict
+PDA** (no hot key — the api holds no signing key). Re-running on an existing Config just
+reprints these (incl. the current `USDC_MINT`).
 
 ### 4. Apply the DB schema
 ```bash
@@ -171,17 +171,18 @@ solana program deploy target/deploy/desc_moderation.so \
   --program-id target/deploy/desc_moderation-keypair.json --use-rpc -u localhost
 ```
 
-**B) initialize + onboard + repoint — in the API package `platform/apps/api`** (these
-are `apps/api` pnpm scripts; they do **not** exist in the program workspace):
+**B) initialize + onboard — in the API package `platform/apps/api`** (these are `apps/api`
+pnpm scripts; they do **not** exist in the program workspace):
 ```bash
 cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
-pnpm moderation-init                                      # ModerationConfig + prints the verdict-authority PDA
-pnpm moderator-register "Mod A"                           # provision + fund + register on-chain
-pnpm update-config --settlement <VERDICT_AUTHORITY_PDA>   # 3b — repoint the escrow to the PDA
+pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
+                                      # set as settlement_authority can now sign)
+pnpm moderator-register "Mod A"       # provision + fund + register on-chain
 ```
 
-After the repoint, verdicts flow **only** through the mod — recorded with `mod-run` (next
-section). Revert with `update-config --settlement <old key>`.
+No repoint step — `bootstrap` already set the escrow's `settlement_authority` to this
+program's verdict PDA. Verdicts flow **only** through the mod, recorded with `mod-run`
+(next section). To rotate the authority manually: `update-config --settlement <PDA>`.
 
 ---
 
@@ -211,9 +212,9 @@ Paste the `ADMIN_TOKEN` (set it in `apps/api/.env` via `openssl rand -hex 32`, t
 the api — the `/admin/*` read routes are fail-closed) to view all contracts + statuses. It
 **does not judge** — the platform doesn't decide verdicts; the mods do.
 
-> **Retired:** the old `POST /admin/contracts/:id/verdict` curl (api-signed with the hot
-> settlement key) **stops working after the repoint** — the escrow now trusts only the
-> verdict PDA. It's deleted in step 8.
+> **Removed:** the old `POST /admin/contracts/:id/verdict` curl (api-signed with a hot
+> settlement key) is **deleted** — the api holds no signing key, and the escrow trusts only
+> the verdict PDA. Verdicts come from `mod-run` alone.
 
 ---
 

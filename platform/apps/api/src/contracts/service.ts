@@ -11,5 +11,4 @@ export { prepareRefund, submitRefund } from "./refund";
 export { prepareMutualCancel, submitMutualCancel } from "./mutualCancel";
 export { prepareAccept, submitAccept } from "./accept";
 export { uploadDeliverable, prepareDeliverable, submitDeliverable } from "./deliverable";
-export { recordVerdict } from "./verdict";
 export { getContract, getContractByLink, listContracts } from "./read";

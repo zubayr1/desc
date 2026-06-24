@@ -89,13 +89,13 @@ async function main() {
 
   console.log("  admin (cold)      :", authority.publicKey.toBase58());
   console.log("  moderationConfig  :", config.toBase58());
-  console.log("  verdict authority :", verdictAuthority.toBase58());
+  console.log(
+    "  verdict authority :",
+    verdictAuthority.toBase58(),
+    "(escrow settlement_authority — already set by bootstrap)"
+  );
   console.log("  escrow_program    :", escrowProgram.toBase58());
   console.log("  min_verdicts      :", MIN_VERDICTS);
-  console.log(
-    "\nLATER (after a mod can submit_verdict) — repoint the escrow to this PDA:"
-  );
-  console.log("  pnpm update-config --settlement " + verdictAuthority.toBase58());
 }
 
 main()

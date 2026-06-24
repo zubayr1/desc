@@ -1,18 +1,16 @@
-import { AnchorProvider, Program } from "@coral-xyz/anchor";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { CONTRACT_STATUSES, OUTCOMES, type ContractStatus, type Outcome } from "@repo/shared";
 import type { DescEscrow } from "./idl/desc_escrow";
 import idl from "./idl/desc_escrow.json";
 import { env } from "../config/env";
-import { settlementWallet } from "./signer";
-
-export { settlementPublicKey } from "./signer";
 
 export const connection = new Connection(env.RPC_URL, "confirmed");
 
-/** Provider signs with the hot settlement key — used ONLY for `record_verdict`.
- *  User txns are built unsigned and never touch this wallet. */
-export const provider = new AnchorProvider(connection, settlementWallet, {
+/** Read-only provider. The api holds NO signing key — it only reads accounts and
+ *  builds UNSIGNED user txns (the user's wallet signs; verdicts are signed by the
+ *  moderators via `desc_moderation`). The throwaway wallet never signs. */
+export const provider = new AnchorProvider(connection, new Wallet(Keypair.generate()), {
   commitment: "confirmed",
 });
 export const program = new Program<DescEscrow>(idl as DescEscrow, provider);

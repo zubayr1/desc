@@ -4,16 +4,18 @@ Monorepo for the off-chain side of desc.
 
 ```
 apps/
-  api/      backend (Fastify) — owns the DB, builds/submits txns, signs verdicts
+  api/      backend (Fastify) — owns the DB, builds/submits txns; blind (stores sealed deliverables, can't decrypt)
   web/      user frontend (Vite + React) — create / dashboard / contract detail
-  admin/    dispute-review tool (later)
+  admin/    platform oversight (read-only) — all contracts + statuses; does NOT judge
 packages/
   shared/   shared TS domain + API types
 services/
-  ai/       Helper AI + moderator agents (later)
+  ai/       Helper AI + moderator runner (later)
 ```
 
-The on-chain program lives outside this monorepo at `../programs/desc_escrow`.
+On-chain programs live outside this monorepo under `../programs`:
+- `desc_escrow` — USDC escrow + lifecycle (Config, create / accept / submit / record_verdict / release / refund).
+- `desc_moderation` — moderator registry + verdict authority: mods are PDAs with their own non-custodial wallets that sign verdicts via CPI into `desc_escrow` — **no settlement keypair** (the api holds no signing key). The escrow's `settlement_authority` is this program's verdict PDA. See "Moderation program" below.
 
 ---
 
@@ -53,11 +55,11 @@ Copy the printed values into **`apps/api/.env`**, then **restart the api** (`.en
 read once at startup):
 ```
 CONFIG_AUTHORITY=...
-SETTLEMENT_KEYPAIR_PATH=./settlement-keypair.json
 USDC_MINT=...
 ```
-Re-running `pnpm bootstrap` on an existing Config just reprints these (incl. the
-current `USDC_MINT`) and tops up the keys.
+`bootstrap` sets the escrow's `settlement_authority` to the **`desc_moderation` verdict
+PDA** (no hot key — the api holds no signing key). Re-running on an existing Config just
+reprints these (incl. the current `USDC_MINT`).
 
 ### 4. Apply the DB schema
 ```bash
@@ -147,85 +149,106 @@ spl-token mint <USDC_MINT> 1000000 --recipient-owner <WALLET> \
 
 ---
 
-## Record a verdict (settlement authority)
+## Moderation program (`desc_moderation`) — one-time setup
 
-`record_verdict` is **signed by the api** (the settlement key in
-`settlement-keypair.json`), not by a wallet. The contract must be in **`submitted`**
-state first.
+The on-chain moderator program at `../programs/desc_moderation`. Mods sign verdicts
+with their **own non-custodial wallets**; there is **no settlement keypair**. Do this
+**before** recording any verdict (the next section).
 
-### Admin auth (required)
-The `/admin/*` routes are gated by a bearer token and are **fail-closed** — if
-`ADMIN_TOKEN` isn't set, every admin request is rejected. Set one in
-`apps/api/.env` and restart the api:
+- **States:** `ModerationConfig [b"config", admin]`, `Moderator [b"moderator", authority]`
+  (the mod's wallet + its `age` recipient, stored on-chain).
+- **Instructions:** `initialize`, `register_moderator` (admin), `set_moderator_active`
+  (the mod itself), `submit_verdict` (mod → CPI `desc_escrow::record_verdict`, signed by
+  the `[b"authority", config]` PDA, which is the escrow's `settlement_authority`).
+
+**A) build + deploy — in the program workspace `programs/desc_moderation`:**
 ```bash
-# generate a token
-openssl rand -hex 32
-# → put it in apps/api/.env as:  ADMIN_TOKEN=<that value>   (then restart the api)
+cd programs/desc_moderation
+anchor build
+# deploy onto the running localnet — use --use-rpc; the default TPU/websocket path
+# fails against the local test-validator with a "Failed to get slot leaders" panic
+solana program deploy target/deploy/desc_moderation.so \
+  --program-id target/deploy/desc_moderation-keypair.json --use-rpc -u localhost
 ```
 
-### Via the moderator console (preferred)
+**B) initialize + onboard — in the API package `platform/apps/api`** (these are `apps/api`
+pnpm scripts; they do **not** exist in the program workspace):
+```bash
+cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
+pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
+                                      # set as settlement_authority can now sign)
+pnpm moderator-register "Mod A"       # provision + fund + register on-chain
+```
+
+No repoint step — `bootstrap` already set the escrow's `settlement_authority` to this
+program's verdict PDA. Verdicts flow **only** through the mod, recorded with `mod-run`
+(next section). To rotate the authority manually: `update-config --settlement <PDA>`.
+
+---
+
+## Record a verdict (the mod)
+
+With the program set up (above) and a contract in **`submitted`** state, verdicts go through
+the **mod**, not the api — the mod's own wallet signs `desc_moderation::submit_verdict`,
+which CPIs `record_verdict`. No settlement key.
+
+```bash
+cd platform/apps/api
+pnpm mod-run <contractId|linkToken> pass        # or:  fail --note "criteria X not met"
+```
+Full pipeline: open+verify the sealed bundle (decrypt with the mod's identity → rebuild →
+hash-match vs chain) → `runCheck` (V1 stub = your `pass`/`fail`) → `submit_verdict` signed
+by the mod's wallet. **PASS** unlocks *Release*; **FAIL** unlocks *Reclaim deposit*. `<ref>`
+is the `/contracts/<uuid>` uuid or the `/c/<token>` link token.
+
+> Uses `./moderators/<slug>-{wallet.json,identity.key}` from `moderator-register`. One mod
+> provisioned → auto-selected; multiple → pass `--mod <slug>`.
+
+### Admin console — read-only oversight
 ```bash
 cd platform/apps/admin && pnpm dev   # → http://localhost:5174
 ```
-Open it, paste the `ADMIN_TOKEN` at the login, and Pass/Fail each submitted
-contract. (Token is stored in the browser; a 401 signs you back out.)
+Paste the `ADMIN_TOKEN` (set it in `apps/api/.env` via `openssl rand -hex 32`, then restart
+the api — the `/admin/*` read routes are fail-closed) to view all contracts + statuses. It
+**does not judge** — the platform doesn't decide verdicts; the mods do.
 
-### Via curl (alternative)
-```bash
-# PASS → unlocks "Release" on the contract page
-curl -X POST localhost:3000/admin/contracts/<CONTRACT_ID>/verdict \
-  -H "authorization: Bearer $ADMIN_TOKEN" \
-  -H 'content-type: application/json' -d '{"outcome":"pass"}'
-
-# FAIL → unlocks "Reclaim deposit" for the initiator
-curl -X POST localhost:3000/admin/contracts/<CONTRACT_ID>/verdict \
-  -H "authorization: Bearer $ADMIN_TOKEN" \
-  -H 'content-type: application/json' -d '{"outcome":"fail","note":"criteria not met"}'
-```
-`<CONTRACT_ID>` is the contract **uuid** — from the `/contracts/<uuid>` URL or the
-dashboard. It is **not** the `/c/<token>` link token. To get the uuid from a link token:
-```bash
-curl -s localhost:3000/links/<token> | jq -r .id
-```
-The api signs + submits the verdict; refresh the contract page to see the new action.
+> **Removed:** the old `POST /admin/contracts/:id/verdict` curl (api-signed with a hot
+> settlement key) is **deleted** — the api holds no signing key, and the escrow trusts only
+> the verdict PDA. Verdicts come from `mod-run` alone.
 
 ---
 
 ## Moderator registry (deliverable encryption)
 
 Deliverables are sealed to the moderators' public keys (multi-recipient `age`
-envelope), so the registry holds **who** they're encrypted to. The registry is the
-`moderators` table in Postgres (created by `pnpm db:push`).
+envelope), so the registry holds **who** they're encrypted to. The registry is now
+**on-chain** — the `Moderator` accounts in the `desc_moderation` program (the chain is
+the source of truth). `GET /config/moderators` reads them live. *(The old Postgres
+`moderators` table is vestigial.)*
 
 ### Register a moderator
 ```bash
 pnpm --filter api moderator-register "Mod A"
 ```
-This generates an `age` keypair, stores the **public** recipient (`age1…`) in the
-`moderators` table, and prints the **secret** identity (`AGE-SECRET-KEY-1…`).
+This provisions the mod's **wallet** keypair + **age identity** (saved under
+`./moderators/`, gitignored), **funds** the wallet (SOL for gas + a USDC account for
+the 1% reward), and calls **`register_moderator`** on-chain (admin-signed) — writing the
+recipient into the `Moderator` account.
 
-- **Save the secret** — it goes to *that moderator's own service* (its
-  `MODERATION_IDENTITY_PATH` file); never commit it. Only the public recipient lives
-  in the DB.
-- **Scalable by design:** run it once per moderator. Deliverables encrypt to **all
-  active** recipients, and any one moderator can decrypt. Adding a moderator = one
-  more `moderator-register` (no redeploy).
+- **Prereq:** validator up, both programs deployed, `pnpm moderation-init` done, and
+  `USDC_MINT` set (`pnpm bootstrap`).
+- **Hand the two files to that mod's runner:** `*-wallet.json` signs `submit_verdict`,
+  `*-identity.key` decrypts deliverables. Never commit them.
+- **Scalable by design:** run it once per moderator (admin-gated in V1; permissionless +
+  stake in V2). Deliverables encrypt to **all active** recipients; any one mod can decrypt.
 
 ### Inspect / manage
 ```bash
-# what the browser fetches (active recipients):
+# what the browser fetches (active recipients, read from chain):
 curl -s localhost:3000/config/moderators | jq .
-
-# full registry:
-docker exec platform-postgres-1 psql -U desc -d desc \
-  -c "select id,label,recipient,active from moderators;"
-
-# deactivate (stop encrypting to it) / remove:
-docker exec platform-postgres-1 psql -U desc -d desc \
-  -c "update moderators set active=false where label='Mod B';"
-docker exec platform-postgres-1 psql -U desc -d desc \
-  -c "delete from moderators where label='Mod B';"
 ```
+A mod toggles its **own** `active` flag via `set_moderator_active` (signed by its own
+wallet) — the admin can't. (A CLI for that lands with the mod runner.)
 
 > You need **at least one active moderator** registered before a committer can
 > encrypt a deliverable. (Encryption wiring is being added step by step; the registry
@@ -233,12 +256,12 @@ docker exec platform-postgres-1 psql -U desc -d desc \
 
 ---
 
-## Full lifecycle walkthrough (UI + one curl)
+## Full lifecycle walkthrough (UI + one `mod-run`)
 
 1. **Create** (wallet A, funded with SOL + USDC) → contract is `funded`, shows a link.
 2. Open the **link** (`/c/<token>`) with **wallet B** (funded with SOL, ≠ A) → **Accept** → `active`.
-3. As wallet B → **Submit deliverable** (paste a URL) → `submitted`.
-4. **Record verdict** via the curl above (`pass`).
+3. As wallet B → **Submit deliverable** (pick a folder → sealed + encrypted to the mods) → `submitted`.
+4. **Record verdict**: `pnpm --filter api mod-run <contractId|linkToken> pass`.
 5. Refresh → **Release** → `settled`. ✅
 
 ---

@@ -9,9 +9,6 @@ const schema = z.object({
   /** Cold admin authority PUBKEY — seeds the Config PDA. No secret needed here;
    *  the api never signs admin (update_config) actions. */
   CONFIG_AUTHORITY: z.string().min(1),
-  /** Path to the HOT settlement keypair — the only key the api signs with
-   *  (used solely for `record_verdict`). */
-  SETTLEMENT_KEYPAIR_PATH: z.string().min(1),
   /** USDC mint the platform settles in (created by the bootstrap script on localnet). */
   USDC_MINT: z.string().min(1),
   /** Bearer token gating the /admin/* routes. If unset, admin is fail-closed

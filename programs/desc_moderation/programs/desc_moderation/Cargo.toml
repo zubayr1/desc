@@ -1,0 +1,22 @@
+[package]
+name = "desc_moderation"
+version = "0.1.0"
+description = "Created with Anchor"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "desc_moderation"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "desc_escrow/idl-build"]
+
+
+[dependencies]
+anchor-lang = "0.31.1"
+desc_escrow = { path = "../../../desc_escrow/programs/desc_escrow", features = ["cpi"] }

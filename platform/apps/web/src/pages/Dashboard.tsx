@@ -4,7 +4,11 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Plus } from "lucide-react";
-import type { Contract, ContractStatus } from "@repo/shared";
+import {
+  DELIVERABLE_TYPE_LABELS as TYPE_LABEL,
+  type Contract,
+  type ContractStatus,
+} from "@repo/shared";
 import { api } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/Button";
@@ -17,13 +21,6 @@ const FILTERS: Array<"all" | ContractStatus> = [
   "submitted",
   "settled",
 ];
-
-const TYPE_LABEL: Record<string, string> = {
-  merged_pr: "Merged PR",
-  deployed_contract: "Deployed contract",
-  test_suite_pass: "Passing test suite",
-  technical_report: "Technical report",
-};
 
 export function Dashboard() {
   const { publicKey, connected } = useWallet();

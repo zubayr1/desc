@@ -6,6 +6,8 @@ import { useMutation } from "@tanstack/react-query";
 import { ArrowRight, Check, Copy, Loader2, Plus, X } from "lucide-react";
 import {
   DELIVERABLE_TYPES,
+  DELIVERABLE_TYPE_LABELS as TYPE_LABELS,
+  DELIVERABLE_TYPE_HINTS as TYPE_HINTS,
   type Contract,
   type CreateContractRequest,
   type DeliverableType,
@@ -13,13 +15,6 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { createAndFund } from "@/lib/api";
-
-const TYPE_LABELS: Record<DeliverableType, string> = {
-  merged_pr: "Merged PR",
-  deployed_contract: "Deployed contract",
-  test_suite_pass: "Passing test suite",
-  technical_report: "Technical report",
-};
 
 // No AI moderators in the MVP (manual verdict), so no per-moderator surcharge
 // yet. The V1 pricing (2% fee + per-moderator surcharge) returns with the AI.
@@ -42,7 +37,7 @@ export function NewContract() {
 
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState("");
-  const [type, setType] = useState<DeliverableType>("merged_pr");
+  const [type, setType] = useState<DeliverableType>("mergeable");
   const [criteria, setCriteria] = useState<string[]>([""]);
   const [amount, setAmount] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -152,6 +147,10 @@ export function NewContract() {
               </option>
             ))}
           </select>
+          <p className="mt-1.5 text-xs text-zinc-500">
+            {TYPE_HINTS[type]} The moderator only sees the files you submit — pick a
+            type checkable from the bundle alone.
+          </p>
         </FormField>
 
         <FormField label="Acceptance criteria">

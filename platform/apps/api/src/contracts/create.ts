@@ -39,6 +39,11 @@ export async function createContract(
     10_000n
   ).toString();
 
+  // V1: the moderator earns a 1% surcharge, computed server-side (not trusted
+  // from the client). One moderator per contract in V1.
+  const moderatorSurcharge = ((BigInt(req.amount) * 100n) / 10_000n).toString();
+  const moderatorCount = 1;
+
   const criteria = req.acceptanceCriteria.map((c, i) => ({
     id: `c${i + 1}`,
     description: c.description,
@@ -51,8 +56,8 @@ export async function createContract(
     escrow,
     vault,
     amount: req.amount,
-    moderatorCount: req.moderatorCount,
-    moderatorSurcharge: req.moderatorSurcharge,
+    moderatorCount,
+    moderatorSurcharge,
     deadlineUnix: Math.floor(deadline.getTime() / 1000),
   });
 
@@ -70,8 +75,8 @@ export async function createContract(
       mint: usdcMint.toBase58(),
       amount: req.amount,
       protocolFee,
-      moderatorSurcharge: req.moderatorSurcharge,
-      moderatorCount: req.moderatorCount,
+      moderatorSurcharge,
+      moderatorCount,
       deadline,
       linkToken: null,
     })

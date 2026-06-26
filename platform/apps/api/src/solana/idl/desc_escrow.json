@@ -474,6 +474,10 @@
               32
             ]
           }
+        },
+        {
+          "name": "moderator",
+          "type": "pubkey"
         }
       ]
     },
@@ -539,6 +543,15 @@
             "Refund destination — the initiator's USDC account."
           ],
           "writable": true
+        },
+        {
+          "name": "moderator_token_account",
+          "docs": [
+            "On a Fail verdict, the judging moderator's USDC account — receives the",
+            "surcharge. Omit on a ghost-timeout (no verdict, no moderator paid)."
+          ],
+          "writable": true,
+          "optional": true
         },
         {
           "name": "token_program",
@@ -616,12 +629,20 @@
         {
           "name": "treasury",
           "docs": [
-            "Protocol treasury token account — receives fee + surcharge."
+            "Protocol treasury token account — receives the protocol fee."
           ],
           "writable": true,
           "relations": [
             "config"
           ]
+        },
+        {
+          "name": "moderator_token_account",
+          "docs": [
+            "The judging moderator's USDC account — receives the surcharge (its reward).",
+            "Bound to the moderator that `record_verdict` stored."
+          ],
+          "writable": true
         },
         {
           "name": "initiator",
@@ -1115,6 +1136,15 @@
             "type": "u8"
           },
           {
+            "name": "moderator",
+            "docs": [
+              "The moderator that recorded the verdict (set by `record_verdict`; zeroed",
+              "until then). Receives the `moderator_surcharge` (its reward) on settle —",
+              "on `release` (Pass) or `refund` (Fail). Carved from `reserved`."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
@@ -1124,7 +1154,7 @@
             "type": {
               "array": [
                 "u8",
-                128
+                96
               ]
             }
           }

@@ -8,9 +8,10 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome};
 /// the payout never depends on any one party — or the settlement authority —
 /// being online once the verdict is recorded (the liveness guarantee).
 ///
-/// Requires `Submitted` + `outcome == Pass`. Pays `amount` to the committer and
-/// `protocol_fee + moderator_surcharge` to the treasury (read live from Config),
-/// closes the vault (rent -> initiator), and marks the escrow `Settled`.
+/// Requires `Submitted` + `outcome == Pass`. Pays `amount` to the committer,
+/// `protocol_fee` to the treasury, and the `moderator_surcharge` (the 1% reward)
+/// to the moderator that judged it, then closes the vault (rent -> initiator) and
+/// marks the escrow `Settled`.
 #[derive(Accounts)]
 pub struct Release<'info> {
     pub signer: Signer<'info>,
@@ -38,12 +39,21 @@ pub struct Release<'info> {
     )]
     pub committer_token_account: Box<Account<'info, TokenAccount>>,
 
-    /// Protocol treasury token account — receives fee + surcharge.
+    /// Protocol treasury token account — receives the protocol fee.
     #[account(
         mut,
         constraint = treasury.mint == escrow.mint @ EscrowError::Unauthorized,
     )]
     pub treasury: Box<Account<'info, TokenAccount>>,
+
+    /// The judging moderator's USDC account — receives the surcharge (its reward).
+    /// Bound to the moderator that `record_verdict` stored.
+    #[account(
+        mut,
+        constraint = moderator_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
+        constraint = moderator_token_account.owner == escrow.moderator @ EscrowError::Unauthorized,
+    )]
+    pub moderator_token_account: Box<Account<'info, TokenAccount>>,
 
     /// Initiator — receives the vault's rent on close.
     #[account(mut)]
@@ -100,13 +110,8 @@ impl<'info> Release<'info> {
             self.escrow.amount,
         )?;
 
-        // Fee + surcharge to the treasury.
-        let fees = self
-            .escrow
-            .protocol_fee
-            .checked_add(self.escrow.moderator_surcharge)
-            .ok_or(EscrowError::MathOverflow)?;
-        if fees > 0 {
+        // Protocol fee to the treasury.
+        if self.escrow.protocol_fee > 0 {
             transfer(
                 CpiContext::new_with_signer(
                     self.token_program.to_account_info(),
@@ -117,7 +122,23 @@ impl<'info> Release<'info> {
                     },
                     signer_seeds,
                 ),
-                fees,
+                self.escrow.protocol_fee,
+            )?;
+        }
+
+        // Moderator surcharge (the 1% reward) to the judging moderator.
+        if self.escrow.moderator_surcharge > 0 {
+            transfer(
+                CpiContext::new_with_signer(
+                    self.token_program.to_account_info(),
+                    Transfer {
+                        from: self.vault.to_account_info(),
+                        to: self.moderator_token_account.to_account_info(),
+                        authority: self.escrow.to_account_info(),
+                    },
+                    signer_seeds,
+                ),
+                self.escrow.moderator_surcharge,
             )?;
         }
 

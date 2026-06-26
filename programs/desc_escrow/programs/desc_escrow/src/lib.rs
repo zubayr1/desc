@@ -68,8 +68,9 @@ pub mod desc_escrow {
         ctx: Context<RecordVerdict>,
         outcome: Outcome,
         verdict_hash: [u8; 32],
+        moderator: Pubkey,
     ) -> Result<()> {
-        ctx.accounts.record_verdict(outcome, verdict_hash)
+        ctx.accounts.record_verdict(outcome, verdict_hash, moderator)
     }
 
     pub fn release(ctx: Context<Release>) -> Result<()> {

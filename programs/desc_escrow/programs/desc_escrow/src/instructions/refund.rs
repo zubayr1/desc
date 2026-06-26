@@ -8,8 +8,12 @@ use crate::states::{Escrow, EscrowStatus, Outcome};
 ///   1. `Active` & past deadline with no submission  -> committer ghosted, or
 ///   2. `Submitted` & `outcome == Fail`              -> work rejected.
 ///
-/// V1 policy: the ENTIRE vault (amount + fee + surcharge) returns to the
-/// initiator — a deal that produced nothing accepted shouldn't cost them fees.
+/// Payout policy:
+/// - Ghost-timeout (no verdict): the ENTIRE vault returns to the initiator — a
+///   deal where no moderator did any work shouldn't cost them anything.
+/// - Fail verdict (a moderator judged): the moderator earns its `surcharge`
+///   (pay-on-any-verdict); the rest (amount + protocol fee) returns to the
+///   initiator. The protocol fee is waived back to the initiator on a failed deal.
 /// Vault is closed; escrow kept as a `Refunded` record.
 #[derive(Accounts)]
 pub struct Refund<'info> {
@@ -36,6 +40,14 @@ pub struct Refund<'info> {
     )]
     pub initiator_token_account: Account<'info, TokenAccount>,
 
+    /// On a Fail verdict, the judging moderator's USDC account — receives the
+    /// surcharge. Omit on a ghost-timeout (no verdict, no moderator paid).
+    #[account(
+        mut,
+        constraint = moderator_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
+    )]
+    pub moderator_token_account: Option<Account<'info, TokenAccount>>,
+
     pub token_program: Program<'info, Token>,
 }
 
@@ -60,7 +72,40 @@ impl<'info> Refund<'info> {
             &[bump],
         ]];
 
-        // Return the full deposit.
+        let total = self.vault.amount;
+
+        // On a Fail verdict, the moderator that judged earns its surcharge; the
+        // rest goes back to the initiator. On a ghost-timeout the full vault does.
+        let to_initiator = if failed {
+            let surcharge = self.escrow.moderator_surcharge;
+            if surcharge > 0 {
+                let mod_token = self
+                    .moderator_token_account
+                    .as_ref()
+                    .ok_or(EscrowError::Unauthorized)?;
+                require!(
+                    mod_token.owner == self.escrow.moderator,
+                    EscrowError::Unauthorized
+                );
+                transfer(
+                    CpiContext::new_with_signer(
+                        self.token_program.to_account_info(),
+                        Transfer {
+                            from: self.vault.to_account_info(),
+                            to: mod_token.to_account_info(),
+                            authority: self.escrow.to_account_info(),
+                        },
+                        signer_seeds,
+                    ),
+                    surcharge,
+                )?;
+            }
+            total.checked_sub(surcharge).ok_or(EscrowError::MathOverflow)?
+        } else {
+            total
+        };
+
+        // Return the remaining deposit to the initiator.
         transfer(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
@@ -71,7 +116,7 @@ impl<'info> Refund<'info> {
                 },
                 signer_seeds,
             ),
-            self.vault.amount,
+            to_initiator,
         )?;
 
         // Close the now-empty vault, rent back to the initiator.

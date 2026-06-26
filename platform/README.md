@@ -204,6 +204,31 @@ is the `/contracts/<uuid>` uuid or the `/c/<token>` link token.
 > Uses `./moderators/<slug>-{wallet.json,identity.key}` from `moderator-register`. One mod
 > provisioned → auto-selected; multiple → pass `--mod <slug>`.
 
+### Check the moderator's 1% reward
+
+The mod earns a **1% surcharge** (in USDC) on **any verdict** — paid when the deal **settles**,
+not at verdict time: on `release` (PASS) or `refund` (FAIL). A ghost-timeout (no verdict) pays
+nothing. Verify it entirely on-chain — no UI:
+
+```bash
+cd platform/apps/api        # the ./moderators/ files live here (moderator-register's cwd)
+
+# the mod's wallet pubkey (from its keypair file)
+MOD=$(solana-keygen pubkey ./moderators/mod-a-wallet.json)
+
+# before settling — should be 0 (or empty)
+spl-token balance <USDC_MINT> --owner $MOD --url localhost
+
+# create → accept → submit → pnpm mod-run <ref> pass → Release (in the UI or via the contract page)
+# then check again — it jumps by 1% of the contract amount:
+spl-token balance <USDC_MINT> --owner $MOD --url localhost
+```
+
+- `<USDC_MINT>` is the value from `pnpm bootstrap` (also `apps/api/.env`).
+- The reward lands on **Release/Reclaim**, so run that step first, then re-check the balance.
+- The initiator funds **amount + 3%** at create (2% protocol fee + 1% moderator surcharge);
+  `./fund-wallets.sh <USDC_MINT>` mints plenty.
+
 ### Admin console — read-only oversight
 ```bash
 cd platform/apps/admin && pnpm dev   # → http://localhost:5174

@@ -102,10 +102,15 @@ pub struct Escrow {
     pub bump: u8,
     pub vault_bump: u8,
 
+    /// The moderator that recorded the verdict (set by `record_verdict`; zeroed
+    /// until then). Receives the `moderator_surcharge` (its reward) on settle —
+    /// on `release` (Pass) or `refund` (Fail). Carved from `reserved`.
+    pub moderator: Pubkey,
+
     /// Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,
     /// `dispute_account`) can be added without a risky `realloc`. Carve new
     /// fields from here; keep this the LAST field.
-    pub reserved: [u8; 128],
+    pub reserved: [u8; 96],
 }
 
 impl Escrow {

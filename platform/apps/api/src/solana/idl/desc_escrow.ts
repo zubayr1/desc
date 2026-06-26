@@ -480,6 +480,10 @@ export type DescEscrow = {
               32
             ]
           }
+        },
+        {
+          "name": "moderator",
+          "type": "pubkey"
         }
       ]
     },
@@ -545,6 +549,15 @@ export type DescEscrow = {
             "Refund destination — the initiator's USDC account."
           ],
           "writable": true
+        },
+        {
+          "name": "moderatorTokenAccount",
+          "docs": [
+            "On a Fail verdict, the judging moderator's USDC account — receives the",
+            "surcharge. Omit on a ghost-timeout (no verdict, no moderator paid)."
+          ],
+          "writable": true,
+          "optional": true
         },
         {
           "name": "tokenProgram",
@@ -622,12 +635,20 @@ export type DescEscrow = {
         {
           "name": "treasury",
           "docs": [
-            "Protocol treasury token account — receives fee + surcharge."
+            "Protocol treasury token account — receives the protocol fee."
           ],
           "writable": true,
           "relations": [
             "config"
           ]
+        },
+        {
+          "name": "moderatorTokenAccount",
+          "docs": [
+            "The judging moderator's USDC account — receives the surcharge (its reward).",
+            "Bound to the moderator that `record_verdict` stored."
+          ],
+          "writable": true
         },
         {
           "name": "initiator",
@@ -1121,6 +1142,15 @@ export type DescEscrow = {
             "type": "u8"
           },
           {
+            "name": "moderator",
+            "docs": [
+              "The moderator that recorded the verdict (set by `record_verdict`; zeroed",
+              "until then). Receives the `moderator_surcharge` (its reward) on settle —",
+              "on `release` (Pass) or `refund` (Fail). Carved from `reserved`."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
@@ -1130,7 +1160,7 @@ export type DescEscrow = {
             "type": {
               "array": [
                 "u8",
-                128
+                96
               ]
             }
           }

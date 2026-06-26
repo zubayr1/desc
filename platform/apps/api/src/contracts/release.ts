@@ -33,6 +33,11 @@ export async function prepareRelease(
   if (!oc.committer) {
     throw Object.assign(new Error("no committer bound"), { statusCode: 409 });
   }
+  if (!oc.moderator) {
+    throw Object.assign(new Error("no moderator on record for this verdict"), {
+      statusCode: 409,
+    });
+  }
   if (signer !== row.initiator && signer !== oc.committer) {
     throw Object.assign(
       new Error("signer must be the initiator or committer"),
@@ -44,6 +49,7 @@ export async function prepareRelease(
   const unsignedTx = await buildRelease({
     signer: new PublicKey(signer),
     committer: new PublicKey(oc.committer),
+    moderator: new PublicKey(oc.moderator),
     escrow: new PublicKey(row.escrowAddress),
     vault: new PublicKey(row.vaultAddress),
     treasury: cfg.treasury,

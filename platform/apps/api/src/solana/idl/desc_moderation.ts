@@ -718,6 +718,15 @@ export type DescModeration = {
             "type": "u8"
           },
           {
+            "name": "moderator",
+            "docs": [
+              "The moderator that recorded the verdict (set by `record_verdict`; zeroed",
+              "until then). Receives the `moderator_surcharge` (its reward) on settle —",
+              "on `release` (Pass) or `refund` (Fail). Carved from `reserved`."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
@@ -727,7 +736,7 @@ export type DescModeration = {
             "type": {
               "array": [
                 "u8",
-                128
+                96
               ]
             }
           }

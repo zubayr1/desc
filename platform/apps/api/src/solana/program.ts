@@ -69,6 +69,8 @@ export interface OnChainEscrow {
   protocolFee: string;
   moderatorSurcharge: string;
   outcome: Outcome | null;
+  /** The moderator that recorded the verdict (null until a verdict is recorded). */
+  moderator: string | null;
   deadline: number;
 }
 
@@ -82,6 +84,9 @@ export async function readEscrow(escrow: PublicKey): Promise<OnChainEscrow> {
     protocolFee: acc.protocolFee.toString(),
     moderatorSurcharge: acc.moderatorSurcharge.toString(),
     outcome: mapOutcome(acc.outcome as Record<string, unknown> | null),
+    moderator: acc.moderator.equals(PublicKey.default)
+      ? null
+      : acc.moderator.toBase58(),
     deadline: acc.deadline.toNumber(),
   };
 }

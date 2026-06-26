@@ -27,7 +27,12 @@ pub struct RecordVerdict<'info> {
 }
 
 impl<'info> RecordVerdict<'info> {
-    pub fn record_verdict(&mut self, outcome: Outcome, verdict_hash: [u8; 32]) -> Result<()> {
+    pub fn record_verdict(
+        &mut self,
+        outcome: Outcome,
+        verdict_hash: [u8; 32],
+        moderator: Pubkey,
+    ) -> Result<()> {
         require!(
             self.escrow.status == EscrowStatus::Submitted,
             EscrowError::InvalidStatus
@@ -37,6 +42,7 @@ impl<'info> RecordVerdict<'info> {
 
         self.escrow.outcome = Some(outcome);
         self.escrow.verdict_hash = verdict_hash;
+        self.escrow.moderator = moderator;
 
         Ok(())
     }

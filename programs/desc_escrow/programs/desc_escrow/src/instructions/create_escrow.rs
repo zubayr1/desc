@@ -116,7 +116,8 @@ impl<'info> CreateEscrow<'info> {
             contract_id,
             bump: bumps.escrow,
             vault_bump: bumps.vault,
-            reserved: [0; 128],
+            moderator: Pubkey::default(),
+            reserved: [0; 96],
         });
 
         Ok(())

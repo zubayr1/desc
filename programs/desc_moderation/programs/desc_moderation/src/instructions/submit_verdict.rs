@@ -70,6 +70,8 @@ impl<'info> SubmitVerdict<'info> {
             signer_seeds,
         );
 
-        desc_escrow::cpi::record_verdict(cpi_ctx, outcome, verdict_hash)
+        // Pass the signing moderator through so the escrow can pay it the
+        // surcharge on settle (release / refund).
+        desc_escrow::cpi::record_verdict(cpi_ctx, outcome, verdict_hash, self.authority.key())
     }
 }

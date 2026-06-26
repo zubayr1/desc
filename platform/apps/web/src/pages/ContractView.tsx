@@ -18,19 +18,16 @@ import {
   Lock,
 } from "lucide-react";
 import type { Contract, BundleResult } from "@repo/shared";
-import { buildBundle, encryptToRecipients } from "@repo/shared";
+import {
+  buildBundle,
+  encryptToRecipients,
+  DELIVERABLE_TYPE_LABELS as TYPE_LABEL,
+} from "@repo/shared";
 import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { cn, short, usd } from "@/lib/utils";
-
-const TYPE_LABEL: Record<string, string> = {
-  merged_pr: "Merged PR",
-  deployed_contract: "Deployed contract",
-  test_suite_pass: "Passing test suite",
-  technical_report: "Technical report",
-};
 
 const fmtSize = (n: number) =>
   n < 1024

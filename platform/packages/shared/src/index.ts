@@ -43,13 +43,35 @@ export const DEFAULT_PROTOCOL_FEE_BPS = 200; // 2%
 export const ROLES = ["initiator", "committer", "admin"] as const;
 export type Role = (typeof ROLES)[number];
 
+/**
+ * Deliverable types — framed as what a moderator can verify **from the submitted
+ * bundle alone**. A mod sees a sealed folder; it cannot observe external state
+ * ("merged", "deployed", "live"), so every type is bundle-checkable. The Helper
+ * AI must only emit acceptance criteria checkable from the bundle.
+ */
 export const DELIVERABLE_TYPES = [
-  "merged_pr",
-  "deployed_contract",
-  "test_suite_pass",
-  "technical_report",
+  "mergeable",
+  "deployable",
+  "tests_pass",
+  "spec_met",
 ] as const;
 export type DeliverableType = (typeof DELIVERABLE_TYPES)[number];
+
+/** Display labels for the deliverable types — single source for web + admin. */
+export const DELIVERABLE_TYPE_LABELS: Record<DeliverableType, string> = {
+  mergeable: "Mergeable PR",
+  deployable: "Deployable build",
+  tests_pass: "Passing tests",
+  spec_met: "Meets spec",
+};
+
+/** One-line hint per type — what's checkable from the submitted bundle. */
+export const DELIVERABLE_TYPE_HINTS: Record<DeliverableType, string> = {
+  mergeable: "A code change / PR bundle that applies and merges cleanly.",
+  deployable: "A build or contract that compiles and deploys from the files.",
+  tests_pass: "A test suite that passes when run on the submitted files.",
+  spec_met: "Files that satisfy a written spec the moderator can check directly.",
+};
 
 /**
  * Contract lifecycle. Mirrors the program's on-chain `EscrowStatus` 1:1 — the

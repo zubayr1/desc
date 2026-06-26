@@ -1,18 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, LogOut, RefreshCw } from "lucide-react";
-import type { Contract } from "@repo/shared";
+import { DELIVERABLE_TYPE_LABELS as TYPE_LABEL, type Contract } from "@repo/shared";
 import { api, clearToken, getToken, setToken } from "@/lib/api";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { cn, short, usd } from "@/lib/utils";
-
-const TYPE_LABEL: Record<string, string> = {
-  merged_pr: "Merged PR",
-  deployed_contract: "Deployed contract",
-  test_suite_pass: "Passing test suite",
-  technical_report: "Technical report",
-};
 
 
 function Label({ children }: { children: ReactNode }) {

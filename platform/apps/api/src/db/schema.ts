@@ -51,6 +51,11 @@ export const contracts = pgTable(
     // Onboarding
     linkToken: text("link_token").unique(),
 
+    // The initiator's age recipient (derived client-side from a wallet signature).
+    // The committer seals the deliverable to this too, so a Pass delivers the
+    // exact verified bytes. Null if the initiator didn't enrol a key.
+    initiatorRecipient: text("initiator_recipient"),
+
     // Deliverable bundle — sealed (ciphertext in storage). Server keeps only the
     // anchors; the file list lives inside the ciphertext. submittedAt on confirm.
     deliverableHash: text("deliverable_hash"), // sha256(manifest), on-chain anchor

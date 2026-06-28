@@ -160,6 +160,11 @@ export interface Contract {
   // Onboarding — the shareable link the initiator sends the committer
   linkToken: string | null;
 
+  /** The initiator's age recipient (derived from a wallet signature). The
+   *  committer seals the deliverable to this too, so a Pass delivers the exact
+   *  verified bytes. Null if the initiator didn't enrol an encryption key. */
+  initiatorRecipient: string | null;
+
   // Verification (manual in MVP; null until a verdict is recorded)
   outcome: Outcome | null;
   deliverable: Deliverable | null;
@@ -186,6 +191,9 @@ export interface CreateContractRequest {
   moderatorCount: number;
   moderatorSurcharge: TokenAmount;
   deadline: Timestamp;
+  /** The initiator's age recipient, derived client-side from a wallet signature.
+   *  Optional — if absent, the deliverable is sealed to the moderators only. */
+  initiatorRecipient?: string;
 }
 
 /** Response to `POST /contracts` — the unsigned tx for the wallet to sign. */

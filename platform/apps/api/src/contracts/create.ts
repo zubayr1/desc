@@ -79,6 +79,7 @@ export async function createContract(
       moderatorCount,
       deadline,
       linkToken: null,
+      initiatorRecipient: req.initiatorRecipient ?? null,
     })
     .returning();
 

@@ -17,13 +17,16 @@ import {
   Loader2,
   Lock,
 } from "lucide-react";
-import type { Contract, BundleResult } from "@repo/shared";
+import JSZip from "jszip";
+import type { Contract, BundleResult, BundleBlob, InputFile } from "@repo/shared";
 import {
   buildBundle,
   encryptToRecipients,
+  decryptWithIdentity,
   DELIVERABLE_TYPE_LABELS as TYPE_LABEL,
 } from "@repo/shared";
 import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
+import { deriveDeliverableKey } from "@/lib/deliverableKey";
 import { StatusPill } from "@/components/StatusPill";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +47,109 @@ function toBase64(bytes: Uint8Array): string {
     bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(bin);
+}
+
+/** Decode base64 → bytes (chunk-free; safe for large blobs). */
+function fromBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Decode a hex string → bytes. */
+function fromHex(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+/**
+ * Initiator-only: on a Pass, re-derive the deliverable key (one wallet signature),
+ * download the SAME ciphertext the moderator judged, decrypt it, verify the bytes
+ * match the on-chain hash, and hand over the files as a zip. This is what makes a
+ * Pass deliver the verified bytes rather than a side-channel promise.
+ */
+function VerifiedDownload({ c }: { c: Contract }) {
+  const { signMessage } = useWallet();
+  const [result, setResult] = useState<{ ok: boolean; files: number } | null>(null);
+
+  const run = useMutation({
+    mutationFn: async () => {
+      if (!signMessage) {
+        throw new Error("your wallet can't sign messages, so the key can't be derived");
+      }
+      const { identity } = await deriveDeliverableKey(signMessage);
+      const { ciphertext } = await api.get<{ ciphertext: string }>(
+        `/contracts/${c.id}/deliverable/ciphertext`
+      );
+      const plain = await decryptWithIdentity(fromBase64(ciphertext), identity);
+      const blob = JSON.parse(new TextDecoder().decode(plain)) as BundleBlob;
+
+      // Verify: rebuild from the decrypted files + salt, compare to the chain hash.
+      const inputs: InputFile[] = blob.files.map((f) => ({
+        path: f.path,
+        content: fromBase64(f.contentBase64),
+      }));
+      const rebuilt = buildBundle(inputs, { salt: fromHex(blob.manifest.salt) });
+      const ok = rebuilt.deliverableHash === c.deliverable?.deliverableHash;
+
+      // Zip + download.
+      const zip = new JSZip();
+      for (const f of blob.files) zip.file(f.path, fromBase64(f.contentBase64));
+      const out = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(out);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `deliverable-${c.id.slice(0, 8)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      return { ok, files: blob.files.length };
+    },
+    onSuccess: setResult,
+  });
+
+  return (
+    <div className="glass p-4">
+      <div className="text-sm font-medium text-zinc-100">Your verified deliverable</div>
+      <p className="mt-1 mb-3 text-xs text-zinc-500">
+        Re-derive your key (one signature) to download the exact files the moderator
+        verified — checked against the on-chain hash.
+      </p>
+      <Button
+        variant="outline"
+        className="w-full"
+        disabled={run.isPending}
+        onClick={() => run.mutate()}
+      >
+        {run.isPending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <FolderUp className="size-4" />
+        )}
+        Download verified files
+      </Button>
+      {result && (
+        <div
+          className={cn(
+            "mt-3 flex items-center gap-2 text-sm",
+            result.ok ? "text-st-settled" : "text-red-300"
+          )}
+        >
+          {result.ok ? <Check className="size-4" /> : <FileX2 className="size-4" />}
+          {result.ok
+            ? `Verified — ${result.files} files, hash matches the chain.`
+            : "Hash mismatch — these bytes don't match what was verified."}
+        </div>
+      )}
+      {run.error && (
+        <div className="mt-3 text-sm text-red-300">{(run.error as Error).message}</div>
+      )}
+    </div>
+  );
 }
 
 function Field({
@@ -105,10 +211,13 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
         throw new Error("pick a valid folder first");
       }
       const { recipients } = await api.get<{ recipients: string[] }>("/config/moderators");
-      if (!recipients.length) {
+      // Seal to the moderators AND (if enrolled) the initiator, so a Pass delivers
+      // the exact verified bytes to the initiator — not a side-channel copy.
+      const all = c.initiatorRecipient ? [...recipients, c.initiatorRecipient] : recipients;
+      if (!all.length) {
         throw new Error("no moderators configured — run moderator-register on the api");
       }
-      const ciphertext = await encryptToRecipients(bundle.blob, recipients);
+      const ciphertext = await encryptToRecipients(bundle.blob, all);
       await uploadDeliverable(c.linkToken!, {
         deliverableHash: bundle.deliverableHash,
         root: bundle.root,
@@ -414,7 +523,14 @@ function Actions({
         );
 
       case "settled":
-        return <Passive ok>Settled — funds released to the committer.</Passive>;
+        return (
+          <div className="space-y-4">
+            <Passive ok>Settled — funds released to the committer.</Passive>
+            {isInitiator && c.deliverable && c.initiatorRecipient && (
+              <VerifiedDownload c={c} />
+            )}
+          </div>
+        );
       case "refunded":
         return <Passive>Refunded to the initiator.</Passive>;
       case "cancelled":

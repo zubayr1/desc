@@ -8,7 +8,7 @@ import { buildSubmitDeliverable } from "../solana/instructions/submitDeliverable
 import { submitSignedTx } from "../solana/rpc";
 import * as storage from "../storage";
 import { toContract } from "./mapper";
-import { getRowByLink, cacheFields } from "./repo";
+import { getRow, getRowByLink, cacheFields } from "./repo";
 
 /** Friendly early-fail (the program is the real guard): must be active + bound. */
 async function activeGuard(escrowAddress: string): Promise<OnChainEscrow> {
@@ -87,4 +87,30 @@ export async function submitDeliverable(token: string, signedTx: string): Promis
     .where(eq(contracts.id, row.id))
     .returning();
   return toContract(updated, oc);
+}
+
+/**
+ * Serve the stored ciphertext (base64) so the **initiator** can decrypt the
+ * verified deliverable on a Pass. Gated to a settled contract — delivery happens
+ * only after release. The blob is encrypted (sealed to the mods + the initiator),
+ * so the server stays blind; only the initiator's re-derived key opens it.
+ */
+export async function getDeliverableCiphertext(
+  id: string
+): Promise<{ ciphertext: string }> {
+  const row = await getRow(id);
+  const oc = await readEscrow(new PublicKey(row.escrowAddress));
+  if (oc.status !== "settled") {
+    throw Object.assign(
+      new Error("the deliverable is available only after the contract settles"),
+      { statusCode: 409 }
+    );
+  }
+  if (!row.deliverableStorageKey || !(await storage.exists(row.deliverableStorageKey))) {
+    throw Object.assign(new Error("no deliverable stored for this contract"), {
+      statusCode: 404,
+    });
+  }
+  const bytes = await storage.get(row.deliverableStorageKey);
+  return { ciphertext: Buffer.from(bytes).toString("base64") };
 }

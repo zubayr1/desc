@@ -13,6 +13,7 @@ import {
   prepareMutualCancel,
   submitMutualCancel,
   getContract,
+  getDeliverableCiphertext,
   listContracts,
 } from "../contracts/service";
 
@@ -30,6 +31,7 @@ const createSchema = z.object({
   moderatorCount: z.number().int().nonnegative(),
   moderatorSurcharge: z.string().regex(/^\d+$/),
   deadline: z.string().min(1),
+  initiatorRecipient: z.string().min(1).optional(),
 });
 
 const submitSchema = z.object({ signedTx: z.string().min(1) });
@@ -128,5 +130,11 @@ export function registerContractRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: "contract not funded yet" });
     }
     return contract;
+  });
+
+  // The initiator downloads the sealed deliverable to decrypt it (settle gated).
+  app.get("/contracts/:id/deliverable/ciphertext", async (req) => {
+    const { id } = req.params as { id: string };
+    return getDeliverableCiphertext(id);
   });
 }

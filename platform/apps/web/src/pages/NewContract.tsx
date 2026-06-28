@@ -15,6 +15,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { createAndFund } from "@/lib/api";
+import { deriveDeliverableKey } from "@/lib/deliverableKey";
 
 // No AI moderators in the MVP (manual verdict), so no per-moderator surcharge
 // yet. The V1 pricing (2% fee + per-moderator surcharge) returns with the AI.
@@ -32,7 +33,7 @@ function FormField({ label, children }: { label: string; children: ReactNode }) 
 }
 
 export function NewContract() {
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected, signTransaction, signMessage } = useWallet();
   const { setVisible } = useWalletModal();
 
   const [title, setTitle] = useState("");
@@ -53,7 +54,19 @@ export function NewContract() {
     title.trim() && brief.trim() && amountNum > 0 && deadline && validCriteria.length > 0;
 
   const createMut = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      // Enrol the initiator's deliverable key: sign the fixed message → derive the
+      // age recipient the committer will also seal to (so a Pass delivers the
+      // verified bytes). Graceful: if the wallet can't sign a message or the user
+      // declines, fall back to mods-only sealing.
+      let initiatorRecipient: string | undefined;
+      if (signMessage) {
+        try {
+          initiatorRecipient = (await deriveDeliverableKey(signMessage)).recipient;
+        } catch {
+          initiatorRecipient = undefined;
+        }
+      }
       const body: CreateContractRequest = {
         initiator: publicKey!.toBase58(),
         title: title.trim(),
@@ -64,6 +77,7 @@ export function NewContract() {
         moderatorCount: MODERATOR_COUNT,
         moderatorSurcharge: "0",
         deadline: new Date(deadline).toISOString(),
+        initiatorRecipient,
       };
       return createAndFund(body, signTransaction!);
     },

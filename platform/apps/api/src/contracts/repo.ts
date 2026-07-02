@@ -43,3 +43,8 @@ export const cacheFields = (oc: OnChainEscrow) => ({
   outcome: oc.outcome,
   updatedAt: new Date(),
 });
+
+/** Reconcile one row's cached fields from a fresh on-chain read (reconciler). */
+export async function writeCache(id: string, oc: OnChainEscrow): Promise<void> {
+  await db.update(contracts).set(cacheFields(oc)).where(eq(contracts.id, id));
+}

@@ -74,9 +74,9 @@ export interface OnChainEscrow {
   deadline: number;
 }
 
-/** Read an escrow account and map it into domain fields. */
-export async function readEscrow(escrow: PublicKey): Promise<OnChainEscrow> {
-  const acc = await program.account.escrow.fetch(escrow);
+/** Map a decoded escrow account into domain fields. */
+type EscrowAccount = Awaited<ReturnType<typeof program.account.escrow.fetch>>;
+function mapEscrowAccount(acc: EscrowAccount): OnChainEscrow {
   return {
     status: mapStatus(acc.status as Record<string, unknown>),
     committer: acc.committer ? acc.committer.toBase58() : null,
@@ -89,4 +89,30 @@ export async function readEscrow(escrow: PublicKey): Promise<OnChainEscrow> {
       : acc.moderator.toBase58(),
     deadline: acc.deadline.toNumber(),
   };
+}
+
+/** Read a single escrow account and map it into domain fields. */
+export async function readEscrow(escrow: PublicKey): Promise<OnChainEscrow> {
+  return mapEscrowAccount(await program.account.escrow.fetch(escrow));
+}
+
+/**
+ * Batch-read many escrow accounts in one `getMultipleAccounts` round-trip
+ * (chunked at 100). Missing accounts are omitted. Used by the read-model
+ * reconciler so the list view reflects chain — including direct-to-chain txns
+ * and `mod-run` verdicts that bypass the API's write-through cache.
+ */
+export async function readEscrows(
+  addresses: PublicKey[]
+): Promise<Map<string, OnChainEscrow>> {
+  const out = new Map<string, OnChainEscrow>();
+  const CHUNK = 100;
+  for (let i = 0; i < addresses.length; i += CHUNK) {
+    const slice = addresses.slice(i, i + CHUNK);
+    const accs = await program.account.escrow.fetchMultiple(slice);
+    accs.forEach((acc, j) => {
+      if (acc) out.set(slice[j].toBase58(), mapEscrowAccount(acc));
+    });
+  }
+  return out;
 }

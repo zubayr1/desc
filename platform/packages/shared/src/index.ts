@@ -171,6 +171,10 @@ export interface Contract {
   verificationFee: TokenAmount;
   moderatorSurcharge: TokenAmount;
   moderatorCount: number;
+  /** The initiator opted out of moderation: no moderator, no surcharge, no
+   *  verification fee, and submission passes automatically. Visible to both
+   *  parties — the committer can see the work won't be checked. */
+  noMod: boolean;
 
   // On-chain references
   escrowAddress: Address;
@@ -209,6 +213,8 @@ export interface CreateContractRequest {
   amount: TokenAmount;
   moderatorCount: number;
   moderatorSurcharge: TokenAmount;
+  /** Opt out of moderation. Count and surcharge are recomputed server-side. */
+  noMod?: boolean;
   deadline: Timestamp;
   /** The initiator's age recipient, derived client-side from a wallet signature.
    *  Optional — if absent, the deliverable is sealed to the moderators only. */

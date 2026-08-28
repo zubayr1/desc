@@ -49,21 +49,25 @@ export async function createContract(
     );
   }
 
+  // A no-mod contract has no moderator to pay and never gets verified, so the
+  // surcharge and the verification fee are both zero. The protocol fee still
+  // applies — storage, UI and chain costs don't go away.
+  const noMod = req.noMod === true;
+
   const bpsFee = (BigInt(req.amount) * BigInt(cfg.protocolFeeBps)) / 10_000n;
   const feeMin = BigInt(cfg.protocolFeeMin.toString());
   const protocolFee = (bpsFee > feeMin ? bpsFee : feeMin).toString();
   // The floor doubles as the non-refundable verification fee — kept only once a
   // moderator has rendered a verdict. Same snapshot the program stores.
-  const verificationFee = feeMin.toString();
+  const verificationFee = noMod ? "0" : feeMin.toString();
 
   // V1: the moderator earns its surcharge, computed server-side (never trusted
   // from the client). `GET /config/fees` serves the same constants so the form
   // can quote the exact total the wallet will be asked to sign.
-  const moderatorSurcharge = (
-    (BigInt(req.amount) * BigInt(MODERATOR_SURCHARGE_BPS)) /
-    10_000n
-  ).toString();
-  const moderatorCount = MODERATOR_COUNT;
+  const moderatorSurcharge = noMod
+    ? "0"
+    : ((BigInt(req.amount) * BigInt(MODERATOR_SURCHARGE_BPS)) / 10_000n).toString();
+  const moderatorCount = noMod ? 0 : MODERATOR_COUNT;
 
   const criteria = req.acceptanceCriteria.map((c, i) => ({
     id: `c${i + 1}`,
@@ -80,6 +84,7 @@ export async function createContract(
     moderatorCount,
     moderatorSurcharge,
     deadlineUnix: Math.floor(deadline.getTime() / 1000),
+    noMod,
   });
 
   const [row] = await db
@@ -99,6 +104,7 @@ export async function createContract(
       verificationFee,
       moderatorSurcharge,
       moderatorCount,
+      noMod,
       deadline,
       linkToken: null,
       initiatorRecipient: req.initiatorRecipient ?? null,

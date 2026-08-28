@@ -1,4 +1,4 @@
-import { PublicKey, Transaction } from "@solana/web3.js";
+import { PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
@@ -10,7 +10,9 @@ import { finalizeUnsigned } from "../buildTransaction";
 export interface BuildReleaseParams {
   signer: PublicKey; // initiator OR committer (the one claiming)
   committer: PublicKey;
-  moderator: PublicKey; // the mod that judged — receives the 1% surcharge
+  /** The mod that judged — receives the 1% surcharge. Omitted on a no-mod
+   *  escrow, where nobody judged and there is no surcharge. */
+  moderator?: PublicKey;
   escrow: PublicKey;
   vault: PublicKey;
   treasury: PublicKey; // = Config.treasury
@@ -18,24 +20,32 @@ export interface BuildReleaseParams {
 }
 
 /** Build the unsigned `release` transaction. Prepends idempotent creates of the
- *  committer's and the moderator's USDC accounts so both payouts always have
- *  somewhere to land. Signed by either party. */
+ *  payout accounts so every transfer has somewhere to land. On a no-mod escrow
+ *  the moderator account is omitted entirely. Signed by either party. */
 export async function buildRelease(p: BuildReleaseParams): Promise<string> {
   const committerTokenAccount = getAssociatedTokenAddressSync(usdcMint, p.committer);
-  const moderatorTokenAccount = getAssociatedTokenAddressSync(usdcMint, p.moderator);
 
-  const ensureCommitterAta = createAssociatedTokenAccountIdempotentInstruction(
-    p.signer, // payer
-    committerTokenAccount,
-    p.committer, // owner
-    usdcMint
-  );
-  const ensureModeratorAta = createAssociatedTokenAccountIdempotentInstruction(
-    p.signer,
-    moderatorTokenAccount,
-    p.moderator,
-    usdcMint
-  );
+  const ixs: TransactionInstruction[] = [
+    createAssociatedTokenAccountIdempotentInstruction(
+      p.signer, // payer
+      committerTokenAccount,
+      p.committer, // owner
+      usdcMint
+    ),
+  ];
+
+  let moderatorTokenAccount: PublicKey | null = null;
+  if (p.moderator) {
+    moderatorTokenAccount = getAssociatedTokenAddressSync(usdcMint, p.moderator);
+    ixs.push(
+      createAssociatedTokenAccountIdempotentInstruction(
+        p.signer,
+        moderatorTokenAccount,
+        p.moderator,
+        usdcMint
+      )
+    );
+  }
 
   const releaseIx = await program.methods
     .release()
@@ -51,9 +61,7 @@ export async function buildRelease(p: BuildReleaseParams): Promise<string> {
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .instruction();
+  ixs.push(releaseIx);
 
-  return finalizeUnsigned(
-    new Transaction().add(ensureCommitterAta, ensureModeratorAta, releaseIx),
-    p.signer
-  );
+  return finalizeUnsigned(new Transaction().add(...ixs), p.signer);
 }

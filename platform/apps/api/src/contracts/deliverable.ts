@@ -3,7 +3,12 @@ import { PublicKey } from "@solana/web3.js";
 import type { Contract, DeliverableUploadRequest } from "@repo/shared";
 import { db } from "../db/client";
 import { contracts } from "../db/schema";
-import { readEscrow, type OnChainEscrow } from "../solana/program";
+import {
+  program,
+  platformConfigPda,
+  readEscrow,
+  type OnChainEscrow,
+} from "../solana/program";
 import { buildSubmitDeliverable } from "../solana/instructions/submitDeliverable";
 import { submitSignedTx } from "../solana/rpc";
 import * as storage from "../storage";
@@ -68,10 +73,22 @@ export async function prepareDeliverable(
     throw Object.assign(new Error("deliverable bundle missing from storage"), { statusCode: 409 });
   }
 
+  // A no-mod escrow passes on submit, so settle it in the same transaction —
+  // one signature, and the contract lands on `settled` rather than sitting at
+  // `submitted` waiting for a click whose outcome is already decided.
+  const settle = oc.noMod
+    ? {
+        vault: new PublicKey(row.vaultAddress),
+        treasury: (await program.account.config.fetch(platformConfigPda)).treasury,
+        initiator: new PublicKey(row.initiator),
+      }
+    : undefined;
+
   const unsignedTx = await buildSubmitDeliverable({
     committer: new PublicKey(oc.committer!),
     escrow: new PublicKey(row.escrowAddress),
     deliverableHashBytes: Array.from(Buffer.from(row.deliverableHash, "hex")),
+    settle,
   });
   return { id: row.id, unsignedTx };
 }

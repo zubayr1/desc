@@ -30,6 +30,7 @@ const createSchema = z.object({
   amount: z.string().regex(/^\d+$/),
   moderatorCount: z.number().int().nonnegative(),
   moderatorSurcharge: z.string().regex(/^\d+$/),
+  noMod: z.boolean().optional(),
   deadline: z.string().min(1),
   initiatorRecipient: z.string().min(1).optional(),
 });

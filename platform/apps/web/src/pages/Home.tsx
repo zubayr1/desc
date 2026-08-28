@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  Ban,
   CheckCircle2,
   Cpu,
   EyeOff,
@@ -12,13 +13,28 @@ import {
   Plus,
   ScanLine,
   Scale,
+  Undo2,
   UploadCloud,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
+import {
+  DEFAULT_PROTOCOL_FEE_BPS,
+  DEFAULT_PROTOCOL_FEE_MIN,
+  DEFAULT_MIN_AMOUNT,
+  MODERATOR_SURCHARGE_BPS,
+} from "@repo/shared";
 import { Button } from "@/components/ui/Button";
 import { Reveal } from "@/components/landing/Reveal";
 import { FlowDiagram } from "@/components/landing/FlowDiagram";
+
+// Marketing copy reads the same constants the form and the program do, so the
+// pricing on the landing page can't drift from what a wallet is actually asked
+// to sign. (The on-chain Config stays the source of truth at contract time.)
+const PROTOCOL_PCT = DEFAULT_PROTOCOL_FEE_BPS / 100;
+const MODERATOR_PCT = MODERATOR_SURCHARGE_BPS / 100;
+const FEE_FLOOR = DEFAULT_PROTOCOL_FEE_MIN / 1_000_000;
+const MIN_CONTRACT = DEFAULT_MIN_AMOUNT / 1_000_000;
 
 const STEPS: { n: string; icon: LucideIcon; t: string; d: string }[] = [
   { n: "01", icon: FileText, t: "Draft", d: "Initiator writes the brief + checkable criteria" },
@@ -216,18 +232,61 @@ export function Home() {
       <section>
         <SectionHead
           eyebrow="Pricing"
-          title="One flat fee, no surprises"
-          sub="No subscriptions, no listing fees — you pay only when you escrow a deal."
+          title="Priced per deal, no surprises"
+          sub="No subscriptions, no listing fees, and no profit when a deal falls through."
         />
         <Reveal className="glass mx-auto max-w-md p-8 text-center">
           <div className="text-5xl font-semibold tracking-tight">
-            2%
-            <span className="ml-1 text-lg font-normal text-zinc-500">+ moderator fee</span>
+            {PROTOCOL_PCT}%
+            <span className="ml-1 text-lg font-normal text-zinc-500">
+              + {MODERATOR_PCT}% moderator
+            </span>
           </div>
-          <p className="mx-auto mt-3 max-w-sm text-sm text-zinc-400">
-            A flat 2% protocol fee per contract, plus a small fee to the AI moderator that
-            verifies it. Settled in USDC, on-chain.
-          </p>
+
+          <dl className="mt-6 space-y-2 text-left text-sm">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-zinc-400">Protocol fee</dt>
+              <dd className="text-zinc-300">
+                {PROTOCOL_PCT}% of the contract, minimum ${FEE_FLOOR.toFixed(2)}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-zinc-400">Moderator fee</dt>
+              <dd className="text-zinc-300">
+                {MODERATOR_PCT}%, to whoever verifies the work
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-zinc-400">Smallest contract</dt>
+              <dd className="text-zinc-300">${MIN_CONTRACT} USDC</dd>
+            </div>
+          </dl>
+
+          {/* The failure cases, scannable — same shape as the fee rows above. */}
+          <div className="mt-5 border-t border-white/5 pt-5 text-left">
+            <div className="mb-2.5 text-xs uppercase tracking-wider text-zinc-500">
+              If it doesn't work out
+            </div>
+            <ul className="space-y-2 text-sm text-zinc-400">
+              <li className="flex items-start gap-2.5">
+                <Undo2 className="mt-0.5 size-4 shrink-0 text-zinc-500" />
+                <span>
+                  <span className="text-zinc-300">Fails verification</span> —
+                  refunded, less ${FEE_FLOOR.toFixed(2)} + {MODERATOR_PCT}% for
+                  the check
+                </span>
+              </li>
+              <li className="flex items-start gap-2.5">
+                <Ban className="mt-0.5 size-4 shrink-0 text-zinc-500" />
+                <span>
+                  <span className="text-zinc-300">Cancelled or never delivered</span>{" "}
+                  — you pay nothing
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          <p className="mt-5 text-xs text-zinc-500">Settled in USDC, on-chain.</p>
           <Link to="/new" className="mt-6 inline-block">
             <Button variant="accent">
               <Plus className="size-4" /> Create a contract

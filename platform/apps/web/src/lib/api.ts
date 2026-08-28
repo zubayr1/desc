@@ -5,6 +5,7 @@ import type {
   Contract,
   CreateContractRequest,
   DeliverableUploadRequest,
+  FeeConfig,
 } from "@repo/shared";
 
 const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -67,6 +68,9 @@ export async function createAndFund(
     signedTx: signed.serialize().toString("base64"),
   });
 }
+
+/** Live fee parameters, read from the on-chain Config by the api. */
+export const getFeeConfig = () => api.get<FeeConfig>("/config/fees");
 
 /** Upload the encrypted deliverable bundle (server stores it blind). */
 export const uploadDeliverable = (token: string, payload: DeliverableUploadRequest) =>

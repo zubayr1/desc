@@ -2,24 +2,38 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, Copy, Loader2, Plus, X } from "lucide-react";
 import {
   DELIVERABLE_TYPES,
   DELIVERABLE_TYPE_LABELS as TYPE_LABELS,
   DELIVERABLE_TYPE_HINTS as TYPE_HINTS,
+  DEFAULT_PROTOCOL_FEE_BPS,
+  DEFAULT_PROTOCOL_FEE_MIN,
+  DEFAULT_MIN_AMOUNT,
+  MODERATOR_SURCHARGE_BPS,
+  MODERATOR_COUNT,
   type Contract,
+  type FeeConfig,
   type CreateContractRequest,
   type DeliverableType,
 } from "@repo/shared";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { createAndFund } from "@/lib/api";
+import { createAndFund, getFeeConfig } from "@/lib/api";
 import { deriveDeliverableKey } from "@/lib/deliverableKey";
 
-// No AI moderators in the MVP (manual verdict), so no per-moderator surcharge
-// yet. The V1 pricing (2% fee + per-moderator surcharge) returns with the AI.
-const MODERATOR_COUNT = 0;
+// Used only until `GET /config/fees` answers. The on-chain Config is the real
+// source of truth; these mirror it so the panel isn't blank on first paint.
+const FALLBACK_FEES: FeeConfig = {
+  protocolFeeBps: DEFAULT_PROTOCOL_FEE_BPS,
+  protocolFeeMin: String(DEFAULT_PROTOCOL_FEE_MIN),
+  minAmount: String(DEFAULT_MIN_AMOUNT),
+  moderatorSurchargeBps: MODERATOR_SURCHARGE_BPS,
+  moderatorCount: MODERATOR_COUNT,
+};
+
+const toUsdc = (baseUnits: string) => Number(baseUnits) / 1_000_000;
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -45,13 +59,40 @@ export function NewContract() {
   const [created, setCreated] = useState<Contract | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const { data: fees = FALLBACK_FEES } = useQuery({
+    queryKey: ["feeConfig"],
+    queryFn: getFeeConfig,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const amountNum = Number(amount) || 0;
-  const fee = amountNum * 0.02;
-  const total = amountNum + fee;
+  const feeFloor = toUsdc(fees.protocolFeeMin);
+  const minAmount = toUsdc(fees.minAmount);
+
+  // Mirrors the program exactly: protocol fee = max(bps of amount, floor), plus
+  // the moderator's surcharge. All three numbers come from the api, so what the
+  // panel quotes is what the wallet is asked to sign.
+  const fee =
+    amountNum > 0
+      ? Math.max((amountNum * fees.protocolFeeBps) / 10_000, feeFloor)
+      : 0;
+  const surcharge = (amountNum * fees.moderatorSurchargeBps) / 10_000;
+  const total = amountNum + fee + surcharge;
+
+  // Kept only when a moderator actually rendered a verdict (Pass or Fail); the
+  // rest of the protocol fee comes back on a Fail. Mirrors Config.protocol_fee_min.
+  const verificationFee = amountNum > 0 ? feeFloor : 0;
+  const refundedOnFail = amountNum + fee - verificationFee;
+
+  const belowMin = amountNum > 0 && amountNum < minAmount;
 
   const validCriteria = criteria.map((c) => c.trim()).filter(Boolean);
   const valid =
-    title.trim() && brief.trim() && amountNum > 0 && deadline && validCriteria.length > 0;
+    title.trim() &&
+    brief.trim() &&
+    amountNum >= minAmount &&
+    deadline &&
+    validCriteria.length > 0;
 
   const createMut = useMutation({
     mutationFn: async () => {
@@ -74,8 +115,9 @@ export function NewContract() {
         deliverableType: type,
         acceptanceCriteria: validCriteria.map((description) => ({ description })),
         amount: String(Math.round(amountNum * 1_000_000)),
-        moderatorCount: MODERATOR_COUNT,
-        moderatorSurcharge: "0",
+        // Both are recomputed server-side from the live config; sent for shape.
+        moderatorCount: fees.moderatorCount,
+        moderatorSurcharge: String(Math.round(surcharge * 1_000_000)),
         deadline: new Date(deadline).toISOString(),
         initiatorRecipient,
       };
@@ -226,14 +268,56 @@ export function NewContract() {
           </FormField>
         </div>
 
-        <div className="glass flex items-center justify-between p-4 text-sm">
-          <span className="text-zinc-400">
-            You pay <span className="text-zinc-200">{amountNum || 0}</span> +{" "}
-            {fee.toFixed(2)} protocol fee
-          </span>
-          <span className="font-mono text-base font-semibold">
-            {total.toLocaleString()} USDC
-          </span>
+        {belowMin && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
+            Minimum contract is {minAmount} USDC. Below that the{" "}
+            {feeFloor.toFixed(2)} fee floor would be an unreasonable share of the
+            deal.
+          </div>
+        )}
+
+        {/* Every line here is derived from the live on-chain config, so the total
+            matches what the wallet asks the initiator to sign. */}
+        <div className="glass p-4 text-sm">
+          <div className="space-y-1.5 text-zinc-400">
+            <div className="flex items-center justify-between">
+              <span>Payout to committer</span>
+              <span className="font-mono text-zinc-200">
+                {amountNum.toFixed(2)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>
+                Protocol fee ({(fees.protocolFeeBps / 100).toFixed(2)}%, min{" "}
+                {feeFloor.toFixed(2)})
+              </span>
+              <span className="font-mono text-zinc-200">{fee.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>
+                Moderator fee ({(fees.moderatorSurchargeBps / 100).toFixed(2)}%)
+              </span>
+              <span className="font-mono text-zinc-200">
+                {surcharge.toFixed(2)}
+              </span>
+            </div>
+          </div>
+          <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2.5">
+            <span className="text-zinc-300">You deposit</span>
+            <span className="font-mono text-base font-semibold">
+              {total.toFixed(2)} USDC
+            </span>
+          </div>
+          {/* The verification fee is the only thing the protocol keeps when a deal
+              doesn't pass — cost recovery for the check that ran, never margin. */}
+          <p className="mt-2.5 border-t border-white/5 pt-2.5 text-xs text-zinc-500">
+            If the work fails verification you get{" "}
+            {refundedOnFail.toFixed(2)} back. We keep only the{" "}
+            {verificationFee.toFixed(2)} verification fee, and the moderator keeps
+            its {surcharge.toFixed(2)} for doing the check. Nothing at all is
+            charged if you cancel or the committer never delivers — and we refund
+            the verification fee if we got the call wrong.
+          </p>
         </div>
 
         {createMut.error && (

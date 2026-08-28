@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Check, Copy, Loader2, Plus, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Copy, Loader2, Plus, X } from "lucide-react";
 import {
   DELIVERABLE_TYPES,
   DELIVERABLE_TYPE_LABELS as TYPE_LABELS,
@@ -56,6 +56,7 @@ export function NewContract() {
   const [criteria, setCriteria] = useState<string[]>([""]);
   const [amount, setAmount] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [noMod, setNoMod] = useState(false);
   const [created, setCreated] = useState<Contract | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -76,12 +77,14 @@ export function NewContract() {
     amountNum > 0
       ? Math.max((amountNum * fees.protocolFeeBps) / 10_000, feeFloor)
       : 0;
-  const surcharge = (amountNum * fees.moderatorSurchargeBps) / 10_000;
+  // No moderator, no moderator fee — and no verification fee either, since
+  // nothing is ever checked. The protocol fee still applies.
+  const surcharge = noMod ? 0 : (amountNum * fees.moderatorSurchargeBps) / 10_000;
   const total = amountNum + fee + surcharge;
 
   // Kept only when a moderator actually rendered a verdict (Pass or Fail); the
   // rest of the protocol fee comes back on a Fail. Mirrors Config.protocol_fee_min.
-  const verificationFee = amountNum > 0 ? feeFloor : 0;
+  const verificationFee = amountNum > 0 && !noMod ? feeFloor : 0;
   const refundedOnFail = amountNum + fee - verificationFee;
 
   const belowMin = amountNum > 0 && amountNum < minAmount;
@@ -115,9 +118,10 @@ export function NewContract() {
         deliverableType: type,
         acceptanceCriteria: validCriteria.map((description) => ({ description })),
         amount: String(Math.round(amountNum * 1_000_000)),
-        // Both are recomputed server-side from the live config; sent for shape.
-        moderatorCount: fees.moderatorCount,
+        // All three are recomputed server-side from the live config; sent for shape.
+        moderatorCount: noMod ? 0 : fees.moderatorCount,
         moderatorSurcharge: String(Math.round(surcharge * 1_000_000)),
+        noMod,
         deadline: new Date(deadline).toISOString(),
         initiatorRecipient,
       };
@@ -268,6 +272,39 @@ export function NewContract() {
           </FormField>
         </div>
 
+        {/* Opting out of verification. Deliberately plain about who carries the
+            risk — the committer can see this mode on the contract too. */}
+        <div className="glass p-4">
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 shrink-0 accent-[var(--color-accent)]"
+              checked={noMod}
+              onChange={(e) => setNoMod(e.target.checked)}
+            />
+            <span className="text-sm">
+              <span className="text-zinc-200">Skip verification</span>
+              <span className="mt-1 block text-xs text-zinc-500">
+                No moderator checks the work. You pay no moderator fee.
+              </span>
+            </span>
+          </label>
+
+          {noMod && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              <span>
+                The deliverable is accepted and paid out automatically the moment
+                it's submitted. Nobody checks it against your criteria, and there
+                is no refund if the work is wrong.{" "}
+                <span className="text-amber-200">
+                  You are trusting the committer completely.
+                </span>
+              </span>
+            </div>
+          )}
+        </div>
+
         {belowMin && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
             Minimum contract is {minAmount} USDC. Below that the{" "}
@@ -293,14 +330,16 @@ export function NewContract() {
               </span>
               <span className="font-mono text-zinc-200">{fee.toFixed(2)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span>
-                Moderator fee ({(fees.moderatorSurchargeBps / 100).toFixed(2)}%)
-              </span>
-              <span className="font-mono text-zinc-200">
-                {surcharge.toFixed(2)}
-              </span>
-            </div>
+            {!noMod && (
+              <div className="flex items-center justify-between">
+                <span>
+                  Moderator fee ({(fees.moderatorSurchargeBps / 100).toFixed(2)}%)
+                </span>
+                <span className="font-mono text-zinc-200">
+                  {surcharge.toFixed(2)}
+                </span>
+              </div>
+            )}
           </div>
           <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2.5">
             <span className="text-zinc-300">You deposit</span>
@@ -309,14 +348,25 @@ export function NewContract() {
             </span>
           </div>
           {/* The verification fee is the only thing the protocol keeps when a deal
-              doesn't pass — cost recovery for the check that ran, never margin. */}
+              doesn't pass — cost recovery for the check that ran, never margin.
+              With no moderator there is no failure branch at all. */}
           <p className="mt-2.5 border-t border-white/5 pt-2.5 text-xs text-zinc-500">
-            If the work fails verification you get{" "}
-            {refundedOnFail.toFixed(2)} back. We keep only the{" "}
-            {verificationFee.toFixed(2)} verification fee, and the moderator keeps
-            its {surcharge.toFixed(2)} for doing the check. Nothing at all is
-            charged if you cancel or the committer never delivers — and we refund
-            the verification fee if we got the call wrong.
+            {noMod ? (
+              <>
+                There is no failing this contract — submission pays out. You are
+                only refunded if you cancel before it's accepted, or the committer
+                never delivers by the deadline.
+              </>
+            ) : (
+              <>
+                If the work fails verification you get {refundedOnFail.toFixed(2)}{" "}
+                back. We keep only the {verificationFee.toFixed(2)} verification
+                fee, and the moderator keeps its {surcharge.toFixed(2)} for doing
+                the check. Nothing at all is charged if you cancel or the committer
+                never delivers — and we refund the verification fee if we got the
+                call wrong.
+              </>
+            )}
           </p>
         </div>
 

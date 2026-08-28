@@ -124,10 +124,19 @@ pub struct Escrow {
     /// `protocol_fee = max(bps_fee, protocol_fee_min)`.
     pub verification_fee: u64,
 
+    /// This escrow runs WITHOUT verification: the initiator opted out of
+    /// moderation at creation, accepting the risk. `submit` then records a Pass
+    /// straight away — there is no moderator, no surcharge, and no verification
+    /// fee. Immutable once set; both parties can see it.
+    ///
+    /// Zero (false) for escrows created before this field existed, which is the
+    /// moderated behaviour. Carved from `reserved`.
+    pub no_mod: bool,
+
     /// Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,
     /// `dispute_account`) can be added without a risky `realloc`. Carve new
     /// fields from here; keep this the LAST field.
-    pub reserved: [u8; 88],
+    pub reserved: [u8; 87],
 }
 
 impl Escrow {

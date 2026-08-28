@@ -28,4 +28,6 @@ pub enum EscrowError {
     AmountBelowMinimum,
     #[msg("Fee floor exceeds the minimum contract amount")]
     FeeFloorAboveMinimum,
+    #[msg("Moderator count and surcharge do not match the escrow's moderation mode")]
+    ModeratorConfigMismatch,
 }

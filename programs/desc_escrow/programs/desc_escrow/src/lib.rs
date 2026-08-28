@@ -57,6 +57,7 @@ pub mod desc_escrow {
         moderator_count: u8,
         moderator_surcharge: u64,
         deadline: i64,
+        no_mod: bool,
     ) -> Result<()> {
         ctx.accounts.create_escrow(
             contract_id,
@@ -64,6 +65,7 @@ pub mod desc_escrow {
             moderator_count,
             moderator_surcharge,
             deadline,
+            no_mod,
             &ctx.bumps,
         )
     }

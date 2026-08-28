@@ -12,6 +12,9 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome};
 /// `protocol_fee` to the treasury, and the `moderator_surcharge` (the 1% reward)
 /// to the moderator that judged it, then closes the vault (rent -> initiator) and
 /// marks the escrow `Settled`.
+///
+/// On a no-mod escrow there is no moderator and no surcharge, so the moderator
+/// token account is omitted.
 #[derive(Accounts)]
 pub struct Release<'info> {
     pub signer: Signer<'info>,
@@ -47,13 +50,13 @@ pub struct Release<'info> {
     pub treasury: Box<Account<'info, TokenAccount>>,
 
     /// The judging moderator's USDC account — receives the surcharge (its reward).
-    /// Bound to the moderator that `record_verdict` stored.
+    /// Bound to the moderator that `record_verdict` stored. Omit on a no-mod
+    /// escrow, where nobody judged and there is no surcharge to pay.
     #[account(
         mut,
         constraint = moderator_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
-        constraint = moderator_token_account.owner == escrow.moderator @ EscrowError::Unauthorized,
     )]
-    pub moderator_token_account: Box<Account<'info, TokenAccount>>,
+    pub moderator_token_account: Option<Box<Account<'info, TokenAccount>>>,
 
     /// Initiator — receives the vault's rent on close.
     #[account(mut)]
@@ -126,14 +129,23 @@ impl<'info> Release<'info> {
             )?;
         }
 
-        // Moderator surcharge (the 1% reward) to the judging moderator.
+        // Moderator surcharge (the 1% reward) to the judging moderator. Zero on a
+        // no-mod escrow, where the account is absent entirely.
         if self.escrow.moderator_surcharge > 0 {
+            let mod_token = self
+                .moderator_token_account
+                .as_ref()
+                .ok_or(EscrowError::Unauthorized)?;
+            require!(
+                mod_token.owner == self.escrow.moderator,
+                EscrowError::Unauthorized
+            );
             transfer(
                 CpiContext::new_with_signer(
                     self.token_program.to_account_info(),
                     Transfer {
                         from: self.vault.to_account_info(),
-                        to: self.moderator_token_account.to_account_info(),
+                        to: mod_token.to_account_info(),
                         authority: self.escrow.to_account_info(),
                     },
                     signer_seeds,

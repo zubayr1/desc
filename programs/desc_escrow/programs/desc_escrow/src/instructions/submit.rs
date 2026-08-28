@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;
-use crate::states::{Escrow, EscrowStatus};
+use crate::states::{Escrow, EscrowStatus, Outcome};
 
 /// The bound committer submits their deliverable before the deadline.
 /// `Active -> Submitted`.
@@ -10,6 +10,12 @@ use crate::states::{Escrow, EscrowStatus};
 /// no longer matters and only a recorded verdict can move the money. Submitting
 /// after the deadline is rejected — that window is the initiator's ghost-refund
 /// path, not a submission.
+///
+/// On a **no-mod** escrow the verdict is settled here: there is no moderator to
+/// render one, and the initiator accepted that at creation. The outcome is Pass,
+/// so the committer can `release` immediately. Doing it on-chain rather than in a
+/// backend job means the payout never waits on a server being up, and `moderator`
+/// stays zeroed — nobody judged it, and the record says so.
 #[derive(Accounts)]
 pub struct Submit<'info> {
     pub committer: Signer<'info>,
@@ -39,6 +45,10 @@ impl<'info> Submit<'info> {
         self.escrow.deliverable_hash = deliverable_hash;
         self.escrow.submitted_at = Some(now);
         self.escrow.status = EscrowStatus::Submitted;
+
+        if self.escrow.no_mod {
+            self.escrow.outcome = Some(Outcome::Pass);
+        }
 
         Ok(())
     }

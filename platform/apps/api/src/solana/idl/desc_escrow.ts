@@ -269,6 +269,10 @@ export type DescEscrow = {
         {
           "name": "deadline",
           "type": "i64"
+        },
+        {
+          "name": "noMod",
+          "type": "bool"
         }
       ]
     },
@@ -676,9 +680,11 @@ export type DescEscrow = {
           "name": "moderatorTokenAccount",
           "docs": [
             "The judging moderator's USDC account — receives the surcharge (its reward).",
-            "Bound to the moderator that `record_verdict` stored."
+            "Bound to the moderator that `record_verdict` stored. Omit on a no-mod",
+            "escrow, where nobody judged and there is no surcharge to pay."
           ],
-          "writable": true
+          "writable": true,
+          "optional": true
         },
         {
           "name": "initiator",
@@ -928,6 +934,11 @@ export type DescEscrow = {
       "code": 6011,
       "name": "feeFloorAboveMinimum",
       "msg": "Fee floor exceeds the minimum contract amount"
+    },
+    {
+      "code": 6012,
+      "name": "moderatorConfigMismatch",
+      "msg": "Moderator count and surcharge do not match the escrow's moderation mode"
     }
   ],
   "types": [
@@ -1252,6 +1263,19 @@ export type DescEscrow = {
             "type": "u64"
           },
           {
+            "name": "noMod",
+            "docs": [
+              "This escrow runs WITHOUT verification: the initiator opted out of",
+              "moderation at creation, accepting the risk. `submit` then records a Pass",
+              "straight away — there is no moderator, no surcharge, and no verification",
+              "fee. Immutable once set; both parties can see it.",
+              "",
+              "Zero (false) for escrows created before this field existed, which is the",
+              "moderated behaviour. Carved from `reserved`."
+            ],
+            "type": "bool"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
@@ -1261,7 +1285,7 @@ export type DescEscrow = {
             "type": {
               "array": [
                 "u8",
-                88
+                87
               ]
             }
           }

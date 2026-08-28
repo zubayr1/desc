@@ -63,6 +63,7 @@ impl<'info> CreateEscrow<'info> {
         moderator_count: u8,
         moderator_surcharge: u64,
         deadline: i64,
+        no_mod: bool,
         bumps: &CreateEscrowBumps,
     ) -> Result<()> {
         require!(!self.config.paused, EscrowError::ProtocolPaused);
@@ -73,6 +74,17 @@ impl<'info> CreateEscrow<'info> {
             amount >= self.config.min_amount,
             EscrowError::AmountBelowMinimum
         );
+
+        // A no-mod escrow has nobody to pay: enforce that here rather than
+        // trusting the caller to send a consistent triple.
+        if no_mod {
+            require!(
+                moderator_count == 0 && moderator_surcharge == 0,
+                EscrowError::ModeratorConfigMismatch
+            );
+        } else {
+            require!(moderator_count > 0, EscrowError::ModeratorConfigMismatch);
+        }
 
         let now = Clock::get()?.unix_timestamp;
         require!(deadline > now, EscrowError::InvalidDeadline);
@@ -89,7 +101,14 @@ impl<'info> CreateEscrow<'info> {
         // the protocol fee kept once a moderator has actually rendered a verdict,
         // Pass or Fail. Snapshotted like `protocol_fee` so a later config change
         // can't alter an in-flight deal. `<= protocol_fee` by the `max` above.
-        let verification_fee = self.config.protocol_fee_min;
+        //
+        // A no-mod escrow never gets a verification, so there is nothing to
+        // recover: it pays the protocol fee only.
+        let verification_fee = if no_mod {
+            0
+        } else {
+            self.config.protocol_fee_min
+        };
 
         // Total the initiator must deposit: payout + protocol fee + surcharge.
         let total = amount
@@ -132,7 +151,8 @@ impl<'info> CreateEscrow<'info> {
             vault_bump: bumps.vault,
             moderator: Pubkey::default(),
             verification_fee,
-            reserved: [0; 88],
+            no_mod,
+            reserved: [0; 87],
         });
 
         Ok(())

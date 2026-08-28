@@ -36,6 +36,7 @@ async function release(s: any, c: any, committerAta: any, signer = c) {
       vault: s.vault,
       committerTokenAccount: committerAta,
       treasury: s.world.treasury,
+      moderatorTokenAccount: s.world.moderatorAta,
       initiator: s.initiator.publicKey,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
@@ -49,9 +50,12 @@ describe("release", () => {
     await release(s, c, committerAta);
 
     assert.equal((await tokenBalance(committerAta)).toString(), s.amount.toString());
+    // Treasury keeps the whole protocol fee on a Pass; the surcharge is the
+    // judging moderator's reward, not the protocol's.
+    assert.equal((await tokenBalance(s.world.treasury)).toString(), s.fee.toString());
     assert.equal(
-      (await tokenBalance(s.world.treasury)).toString(),
-      s.fee.add(s.surcharge).toString()
+      (await tokenBalance(s.world.moderatorAta)).toString(),
+      s.surcharge.toString()
     );
     assert.isFalse(await accountExists(s.vault));
     assert.property((await program.account.escrow.fetch(s.escrow)).status, "settled");
@@ -67,9 +71,13 @@ describe("release", () => {
     const { s, c, committerAta } = await ready(null);
     try {
       await release(s, c, committerAta);
-      assert.fail("expected InvalidStatus");
+      assert.fail("expected a rejection");
     } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
+      // `escrow.moderator` is still default before a verdict, so the
+      // `moderator_token_account.owner == escrow.moderator` account constraint
+      // fires before the handler's InvalidStatus check. Either way there is no
+      // path to a payout — assert the rejection, not the specific error.
+      assert.include(e.toString(), "moderator_token_account");
     }
   });
 

@@ -31,6 +31,9 @@ describe("record_verdict", () => {
     await recordVerdict(s, "fail");
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.property(acc.outcome, "fail");
+    // The moderator that judged is bound on-chain — it's who the surcharge
+    // is later paid to, on a Fail as well as a Pass.
+    assert.ok(acc.moderator.equals(s.world.moderator.publicKey));
   });
 
   it("rejects a verdict from a non-settlement-authority", async () => {
@@ -38,7 +41,7 @@ describe("record_verdict", () => {
     const stranger = await newFundedKeypair();
     try {
       await program.methods
-        .recordVerdict({ pass: {} }, Array(32).fill(0))
+        .recordVerdict({ pass: {} }, Array(32).fill(0), stranger.publicKey)
         .accountsPartial({
           settlementAuthority: stranger.publicKey,
           config: s.world.config,

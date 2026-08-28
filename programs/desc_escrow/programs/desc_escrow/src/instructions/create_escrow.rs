@@ -67,15 +67,29 @@ impl<'info> CreateEscrow<'info> {
     ) -> Result<()> {
         require!(!self.config.paused, EscrowError::ProtocolPaused);
         require!(amount > 0, EscrowError::InvalidAmount);
+        // Below the minimum the fee floor would be a punitive share of the
+        // contract. Zero (legacy configs) disables the check.
+        require!(
+            amount >= self.config.min_amount,
+            EscrowError::AmountBelowMinimum
+        );
 
         let now = Clock::get()?.unix_timestamp;
         require!(deadline > now, EscrowError::InvalidDeadline);
 
-        // Snapshot the protocol fee from the live config (trustless).
-        let protocol_fee = (amount as u128)
+        // Snapshot the protocol fee from the live config (trustless), applying the
+        // floor so tiny contracts still cover the roughly-fixed cost to serve them.
+        let bps_fee = (amount as u128)
             .checked_mul(self.config.protocol_fee_bps as u128)
             .and_then(|v| v.checked_div(10_000))
             .ok_or(EscrowError::MathOverflow)? as u64;
+        let protocol_fee = bps_fee.max(self.config.protocol_fee_min);
+
+        // The floor doubles as the non-refundable verification fee: the slice of
+        // the protocol fee kept once a moderator has actually rendered a verdict,
+        // Pass or Fail. Snapshotted like `protocol_fee` so a later config change
+        // can't alter an in-flight deal. `<= protocol_fee` by the `max` above.
+        let verification_fee = self.config.protocol_fee_min;
 
         // Total the initiator must deposit: payout + protocol fee + surcharge.
         let total = amount
@@ -117,7 +131,8 @@ impl<'info> CreateEscrow<'info> {
             bump: bumps.escrow,
             vault_bump: bumps.vault,
             moderator: Pubkey::default(),
-            reserved: [0; 96],
+            verification_fee,
+            reserved: [0; 88],
         });
 
         Ok(())

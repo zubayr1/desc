@@ -44,6 +44,8 @@ app.get("/health", async () => {
       authority: cfg.authority.toBase58(),
       settlementAuthority: cfg.settlementAuthority.toBase58(),
       protocolFeeBps: cfg.protocolFeeBps,
+      protocolFeeMin: cfg.protocolFeeMin.toString(),
+      minAmount: cfg.minAmount.toString(),
       paused: cfg.paused,
     },
   };

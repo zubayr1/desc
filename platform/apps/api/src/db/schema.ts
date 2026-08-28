@@ -38,6 +38,9 @@ export const contracts = pgTable(
     mint: text("mint").notNull(),
     amount: text("amount").notNull(),
     protocolFee: text("protocol_fee").notNull(),
+    // Non-refundable slice of the fee, kept once a verdict exists (Pass or Fail).
+    // Mirrors the escrow's snapshotted `verification_fee`.
+    verificationFee: text("verification_fee").notNull().default("0"),
     moderatorSurcharge: text("moderator_surcharge").notNull(),
     moderatorCount: integer("moderator_count").notNull(),
     deadline: timestamp("deadline", { withTimezone: true }).notNull(),

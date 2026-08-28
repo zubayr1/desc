@@ -20,6 +20,8 @@ export interface BuildCreateEscrowParams {
   moderatorCount: number;
   moderatorSurcharge: string; // base units
   deadlineUnix: number;
+  /** Initiator opted out of moderation — the program checks count/surcharge are 0. */
+  noMod: boolean;
 }
 
 /** Build the unsigned `create_escrow` transaction (initiator = fee payer + signer). */
@@ -37,7 +39,8 @@ export async function buildCreateEscrow(
       new BN(p.amount),
       p.moderatorCount,
       new BN(p.moderatorSurcharge),
-      new BN(p.deadlineUnix)
+      new BN(p.deadlineUnix),
+      p.noMod
     )
     .accountsPartial({
       initiator: p.initiator,

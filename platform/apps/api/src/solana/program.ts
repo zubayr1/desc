@@ -71,6 +71,8 @@ export interface OnChainEscrow {
   outcome: Outcome | null;
   /** The moderator that recorded the verdict (null until a verdict is recorded). */
   moderator: string | null;
+  /** Initiator opted out of moderation — no moderator will ever be set. */
+  noMod: boolean;
   deadline: number;
 }
 
@@ -87,6 +89,7 @@ function mapEscrowAccount(acc: EscrowAccount): OnChainEscrow {
     moderator: acc.moderator.equals(PublicKey.default)
       ? null
       : acc.moderator.toBase58(),
+    noMod: acc.noMod,
     deadline: acc.deadline.toNumber(),
   };
 }

@@ -33,6 +33,7 @@ export function toContract(row: ContractRow, state: EscrowState): Contract {
     verificationFee: row.verificationFee,
     moderatorSurcharge: row.moderatorSurcharge,
     moderatorCount: row.moderatorCount,
+    noMod: row.noMod,
     escrowAddress: row.escrowAddress,
     vaultAddress: row.vaultAddress,
     linkToken: row.linkToken,

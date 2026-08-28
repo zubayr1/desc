@@ -29,7 +29,7 @@ On-chain programs live outside this monorepo under `../programs`:
 
 ## Start everything (in order)
 
-A **fresh validator** has no program/Config/mint, so steps 2–4 must run after every
+A **fresh validator** has no program/Config/mint, so steps 2–5 must run after every
 `anchor localnet` restart. Each block is its own terminal.
 
 ### 1. Postgres
@@ -46,7 +46,32 @@ cd programs/desc_escrow
 anchor localnet
 ```
 
-### 3. Bootstrap the chain (Config + dev USDC mint)
+### 3. Deploy the program (after any Rust change)
+```bash
+# from the repo root, in a NEW terminal — step 2 keeps running
+cd programs/desc_escrow
+solana program deploy target/deploy/desc_escrow.so \
+  --program-id target/deploy/desc_escrow-keypair.json \
+  --use-rpc -u localhost
+```
+`anchor localnet` only loads programs at **genesis**, and genesis happens only on a
+*fresh* ledger. Restart it against an existing `test-ledger` and it silently keeps
+running the **old** binary — your Rust changes never reach the chain. Worse, Anchor's
+borsh ignores trailing bytes, so a call with a newly-added argument still succeeds and
+the argument is quietly dropped.
+
+So deploy explicitly whenever the program changed. `--use-rpc` is required: the default
+TPU path panics against the test validator with "Failed to get slot leaders".
+
+Confirm it took:
+```bash
+solana program dump <PROGRAM_ID> /tmp/deployed.so -u localhost
+ls -l /tmp/deployed.so target/deploy/desc_escrow.so   # sizes should match
+```
+> This upgrades **in place** — Config, mint, wallets and existing escrows all survive.
+> Only reset the ledger when you actually want a clean slate (see *Reset local state*).
+
+### 4. Bootstrap the chain (Config + dev USDC mint)
 ```bash
 cd platform/apps/api
 pnpm bootstrap
@@ -61,19 +86,19 @@ USDC_MINT=...
 PDA** (no hot key — the api holds no signing key). Re-running on an existing Config just
 reprints these (incl. the current `USDC_MINT`).
 
-### 4. Apply the DB schema
+### 5. Apply the DB schema
 ```bash
 # in apps/api
 pnpm db:push
 ```
 
-### 5. API
+### 6. API
 ```bash
 # in apps/api
 pnpm dev            # → http://localhost:3000
 ```
 
-### 6. Web
+### 7. Web
 ```bash
 cd platform/apps/web
 pnpm dev            # → http://localhost:5173
@@ -81,10 +106,11 @@ pnpm dev            # → http://localhost:5173
 
 ### Dependency order at a glance
 ```
-docker compose up → anchor localnet → pnpm bootstrap (edit .env, restart api)
-                                    → pnpm db:push
-                                    → api  pnpm dev
-                                    → web  pnpm dev
+docker compose up → anchor localnet → solana program deploy → pnpm bootstrap
+                                                                (edit .env, restart api)
+                                                            → pnpm db:push
+                                                            → api  pnpm dev
+                                                            → web  pnpm dev
 ```
 
 ---

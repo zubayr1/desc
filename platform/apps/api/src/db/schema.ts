@@ -43,6 +43,8 @@ export const contracts = pgTable(
     verificationFee: text("verification_fee").notNull().default("0"),
     moderatorSurcharge: text("moderator_surcharge").notNull(),
     moderatorCount: integer("moderator_count").notNull(),
+    // Initiator opted out of moderation. Mirrors the escrow's `no_mod`.
+    noMod: boolean("no_mod").notNull().default(false),
     deadline: timestamp("deadline", { withTimezone: true }).notNull(),
 
     // Cached on-chain state (read model) — refreshed by write-through on each

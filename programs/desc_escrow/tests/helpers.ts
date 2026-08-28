@@ -239,6 +239,7 @@ export interface EscrowSetup {
   surcharge: BN;
   moderatorCount: number;
   deadline: BN;
+  noMod: boolean;
 }
 
 let labelCounter = 0;
@@ -252,11 +253,15 @@ export async function createEscrow(opts?: {
   /** Absolute deadline in CHAIN time. Use with `chainUnixTs()` for deadline
    *  tests; `deadlineOffset` is wall-relative and only safe for far futures. */
   deadlineAbsolute?: number;
+  /** Initiator opts out of moderation. Defaults the count and surcharge to 0,
+   *  which is what the program requires of a no-mod escrow. */
+  noMod?: boolean;
 }): Promise<EscrowSetup> {
   const world = opts?.world ?? (await setupWorld());
   const amount = opts?.amount ?? usdc(1000);
-  const surcharge = opts?.surcharge ?? usdc(30);
-  const moderatorCount = opts?.moderatorCount ?? 3;
+  const noMod = opts?.noMod ?? false;
+  const surcharge = opts?.surcharge ?? (noMod ? usdc(0) : usdc(30));
+  const moderatorCount = opts?.moderatorCount ?? (noMod ? 0 : 3);
   const deadlineOffset = opts?.deadlineOffset ?? 3600;
 
   const initiator = await newFundedKeypair();
@@ -282,7 +287,7 @@ export async function createEscrow(opts?: {
   );
 
   await program.methods
-    .createEscrow(cid, amount, moderatorCount, surcharge, deadline)
+    .createEscrow(cid, amount, moderatorCount, surcharge, deadline, noMod)
     .accountsPartial({
       initiator: initiator.publicKey,
       config: world.config,
@@ -308,6 +313,7 @@ export async function createEscrow(opts?: {
     surcharge,
     moderatorCount,
     deadline,
+    noMod,
   };
 }
 

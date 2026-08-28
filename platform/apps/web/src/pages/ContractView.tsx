@@ -8,6 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   Copy,
@@ -210,12 +211,27 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
       if (!bundle?.ok || !bundle.blob || !bundle.deliverableHash || !bundle.root) {
         throw new Error("pick a valid folder first");
       }
-      const { recipients } = await api.get<{ recipients: string[] }>("/config/moderators");
-      // Seal to the moderators AND (if enrolled) the initiator, so a Pass delivers
-      // the exact verified bytes to the initiator — not a side-channel copy.
-      const all = c.initiatorRecipient ? [...recipients, c.initiatorRecipient] : recipients;
-      if (!all.length) {
-        throw new Error("no moderators configured — run moderator-register on the api");
+      // No moderator will ever open this bundle, so don't hand it to them: seal
+      // a no-mod deliverable to the initiator alone. Their key is mandatory here
+      // — with no moderators, skipping it would seal the work to nobody.
+      let all: string[];
+      if (c.noMod) {
+        if (!c.initiatorRecipient) {
+          throw new Error(
+            "this contract has no verification and no initiator key — nobody could open the deliverable"
+          );
+        }
+        all = [c.initiatorRecipient];
+      } else {
+        const { recipients } = await api.get<{ recipients: string[] }>(
+          "/config/moderators"
+        );
+        // Seal to the moderators AND (if enrolled) the initiator, so a Pass
+        // delivers the exact verified bytes — not a side-channel copy.
+        all = c.initiatorRecipient ? [...recipients, c.initiatorRecipient] : recipients;
+        if (!all.length) {
+          throw new Error("no moderators configured — run moderator-register on the api");
+        }
       }
       const ciphertext = await encryptToRecipients(bundle.blob, all);
       await uploadDeliverable(c.linkToken!, {
@@ -518,7 +534,9 @@ function Actions({
         return (
           <Passive>
             <span className="size-2 animate-pulse rounded-full bg-st-submitted" />
-            Awaiting verdict from the moderators.
+            {c.noMod
+              ? "Submitted — settling."
+              : "Awaiting verdict from the moderators."}
           </Passive>
         );
 
@@ -550,6 +568,7 @@ export function ContractView() {
   const { id = "" } = useParams();
   const byLink = useLocation().pathname.startsWith("/c/");
   const queryClient = useQueryClient();
+  const { publicKey } = useWallet();
 
   const queryKey = ["contract", byLink ? "link" : "id", id];
   const {
@@ -605,6 +624,10 @@ export function ContractView() {
             label="Type"
             value={TYPE_LABEL[contract.deliverableType] ?? contract.deliverableType}
           />
+          <Field
+            label="Verification"
+            value={contract.noMod ? "None" : "Moderator"}
+          />
           {contract.committer && (
             <Field label="Committer" value={short(contract.committer)} mono />
           )}
@@ -627,10 +650,25 @@ export function ContractView() {
           </ul>
         </div>
 
+        {/* The initiator chose this and carries the risk, so warn them. For
+            everyone else it's stated plainly in the fields above — visible if
+            you look, but not an alarm aimed at the wrong person. */}
+        {contract.noMod && publicKey?.toBase58() === contract.initiator && (
+          <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              <span className="text-amber-200">You skipped verification.</span>{" "}
+              Nothing checks the deliverable against your criteria — submitting it
+              pays out automatically, and there is no refund if the work is wrong.
+            </span>
+          </div>
+        )}
+
         {contract.deliverable && (
           <div className="mt-6">
             <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-500">
-              <Lock className="size-3.5" /> Deliverable — sealed to the moderators
+              <Lock className="size-3.5" /> Deliverable — sealed to{" "}
+              {contract.noMod ? "the initiator" : "the moderators"}
             </div>
             <div className="break-all font-mono text-xs text-zinc-500">
               hash {short(contract.deliverable.deliverableHash)} · root{" "}

@@ -33,7 +33,9 @@ export async function prepareRelease(
   if (!oc.committer) {
     throw Object.assign(new Error("no committer bound"), { statusCode: 409 });
   }
-  if (!oc.moderator) {
+  // A no-mod escrow passes on submit with no moderator, so only require one when
+  // the contract was actually moderated.
+  if (!oc.noMod && !oc.moderator) {
     throw Object.assign(new Error("no moderator on record for this verdict"), {
       statusCode: 409,
     });
@@ -49,7 +51,7 @@ export async function prepareRelease(
   const unsignedTx = await buildRelease({
     signer: new PublicKey(signer),
     committer: new PublicKey(oc.committer),
-    moderator: new PublicKey(oc.moderator),
+    moderator: oc.moderator ? new PublicKey(oc.moderator) : undefined,
     escrow: new PublicKey(row.escrowAddress),
     vault: new PublicKey(row.vaultAddress),
     treasury: cfg.treasury,

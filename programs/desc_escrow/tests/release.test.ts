@@ -71,13 +71,9 @@ describe("release", () => {
     const { s, c, committerAta } = await ready(null);
     try {
       await release(s, c, committerAta);
-      assert.fail("expected a rejection");
+      assert.fail("expected InvalidStatus");
     } catch (e) {
-      // `escrow.moderator` is still default before a verdict, so the
-      // `moderator_token_account.owner == escrow.moderator` account constraint
-      // fires before the handler's InvalidStatus check. Either way there is no
-      // path to a payout — assert the rejection, not the specific error.
-      assert.include(e.toString(), "moderator_token_account");
+      assert.include(e.toString(), "InvalidStatus");
     }
   });
 

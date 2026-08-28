@@ -31,6 +31,20 @@ export type Timestamp = string;
 
 export const USDC_DECIMALS = 6;
 export const DEFAULT_PROTOCOL_FEE_BPS = 200; // 2%
+/** Minimum protocol fee in USDC base units ($1). The fee is
+ *  max(2% of amount, this) — a floor so tiny contracts cover the fixed cost.
+ *  The on-chain Config is the source of truth; this mirrors it for fee display. */
+export const DEFAULT_PROTOCOL_FEE_MIN = 1_000_000;
+/** Smallest contract the protocol escrows, in USDC base units ($50). Below this
+ *  the fee floor would be a punitive share of the contract — at 2% + a $1 floor
+ *  the two meet here. The on-chain Config is the source of truth. */
+export const DEFAULT_MIN_AMOUNT = 50_000_000;
+/** Moderator surcharge in basis points (1%), paid to the judging moderator on
+ *  ANY verdict. Unlike the protocol fee this is a server-side rule, not an
+ *  on-chain Config field — the client's value in a create request is ignored. */
+export const MODERATOR_SURCHARGE_BPS = 100;
+/** Moderators per contract in V1. */
+export const MODERATOR_COUNT = 1;
 
 // ---------------------------------------------------------------------------
 // Enums / unions
@@ -150,6 +164,11 @@ export interface Contract {
   mint: Address;
   amount: TokenAmount;
   protocolFee: TokenAmount;
+  /** The slice of `protocolFee` the treasury keeps when a moderator renders a
+   *  verdict — on a Pass (inside the full fee) or a Fail (this much only). The
+   *  rest of the fee is returned on a Fail, and nothing at all is charged on a
+   *  ghost-timeout or a cancel. Cost recovery, not margin. */
+  verificationFee: TokenAmount;
   moderatorSurcharge: TokenAmount;
   moderatorCount: number;
 
@@ -194,6 +213,17 @@ export interface CreateContractRequest {
   /** The initiator's age recipient, derived client-side from a wallet signature.
    *  Optional — if absent, the deliverable is sealed to the moderators only. */
   initiatorRecipient?: string;
+}
+
+/** Live fee parameters (`GET /config/fees`). The first three come from the
+ *  on-chain Config — the authoritative source — so the UI never has to guess at
+ *  what the wallet will actually be asked to sign. Amounts are base units. */
+export interface FeeConfig {
+  protocolFeeBps: number;
+  protocolFeeMin: TokenAmount;
+  minAmount: TokenAmount;
+  moderatorSurchargeBps: number;
+  moderatorCount: number;
 }
 
 /** Response to `POST /contracts` — the unsigned tx for the wallet to sign. */

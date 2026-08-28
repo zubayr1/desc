@@ -4,21 +4,25 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
-import { program, usdcMint } from "../program";
+import { program, platformConfigPda, usdcMint } from "../program";
 import { finalizeUnsigned } from "../buildTransaction";
 
 export interface BuildRefundParams {
   initiator: PublicKey;
   escrow: PublicKey;
   vault: PublicKey;
+  /** = Config.treasury. Receives the verification fee on a Fail verdict; nothing
+   *  on a ghost-timeout, but the account is always required by the program. */
+  treasury: PublicKey;
   /** Present on a Fail verdict — the judging mod receives the surcharge. Omit on
    *  a ghost-timeout (no verdict → full refund, no moderator account). */
   moderator?: PublicKey;
 }
 
 /** Build the unsigned `refund` transaction. On a Fail verdict the moderator's
- *  USDC account is wired in (gets the surcharge); on a ghost-timeout it's omitted
- *  and the full deposit returns. Initiator = fee payer + signer. */
+ *  USDC account is wired in (gets the surcharge) and the treasury keeps the
+ *  verification fee; on a ghost-timeout the moderator account is omitted and the
+ *  full deposit returns. Initiator = fee payer + signer. */
 export async function buildRefund(p: BuildRefundParams): Promise<string> {
   const initiatorTokenAccount = getAssociatedTokenAddressSync(usdcMint, p.initiator);
 
@@ -41,8 +45,10 @@ export async function buildRefund(p: BuildRefundParams): Promise<string> {
     .accountsPartial({
       initiator: p.initiator,
       escrow: p.escrow,
+      config: platformConfigPda,
       vault: p.vault,
       initiatorTokenAccount,
+      treasury: p.treasury,
       // optional account — null on a ghost-timeout (no moderator paid)
       moderatorTokenAccount,
       tokenProgram: TOKEN_PROGRAM_ID,

@@ -3,7 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import type { Contract } from "@repo/shared";
 import { db } from "../db/client";
 import { contracts } from "../db/schema";
-import { readEscrow } from "../solana/program";
+import { program, platformConfigPda, readEscrow } from "../solana/program";
 import { buildRefund } from "../solana/instructions/refund";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
@@ -29,17 +29,20 @@ export async function prepareRefund(
     );
   }
 
+  const cfg = await program.account.config.fetch(platformConfigPda);
   const unsignedTx = await buildRefund({
     initiator: new PublicKey(row.initiator),
     escrow: new PublicKey(row.escrowAddress),
     vault: new PublicKey(row.vaultAddress),
+    treasury: cfg.treasury,
     // On a Fail verdict the judging mod gets the surcharge; ghost-timeout = none.
     moderator: failed && oc.moderator ? new PublicKey(oc.moderator) : undefined,
   });
   return { id: row.id, unsignedTx };
 }
 
-/** Submit the signed `refund` tx; the full deposit returns to the initiator. */
+/** Submit the signed `refund` tx. Ghost-timeout returns the full deposit; a Fail
+ *  verdict returns it less the moderator surcharge and the verification fee. */
 export async function submitRefund(
   id: string,
   signedTx: string

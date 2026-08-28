@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::error::EscrowError;
+
 /// Global protocol config (PDA, seeds = [b"config", authority]).
 ///
 /// Seeded with `authority` so the config is deterministic per-admin and not a
@@ -37,8 +39,21 @@ pub struct Config {
     /// Global kill-switch — blocks new escrows / settlements when true.
     pub paused: bool,
     pub bump: u8,
+    /// Minimum protocol fee in token base units. The fee charged is
+    /// `max(protocol_fee_bps of amount, protocol_fee_min)` — a floor so tiny
+    /// contracts still cover the roughly-fixed cost to serve them. Zero disables
+    /// the floor (old configs, whose `reserved` was zeroed, read 0 → no floor).
+    pub protocol_fee_min: u64,
+    /// Smallest contract `amount` the protocol will escrow, in token base units.
+    ///
+    /// Pairs with `protocol_fee_min`: below the crossover point the floor is a
+    /// rising share of a shrinking contract, so a minimum keeps the effective
+    /// fee rate sane (at 200 bps + a $1 floor, $50 is where they meet). Zero
+    /// disables the minimum — including for configs created before this field
+    /// existed, whose `reserved` was zeroed.
+    pub min_amount: u64,
     /// Forward-compat padding. Carve new fields from here.
-    pub reserved: [u8; 64],
+    pub reserved: [u8; 48],
 }
 
 impl Config {
@@ -50,4 +65,26 @@ impl Config {
 
     /// Upper bound on the protocol fee (10%). Base fee is 2% (200 bps).
     pub const MAX_FEE_BPS: u16 = 1_000;
+
+    /// Upper bound on the fee floor — 100 tokens (USDC, 6 decimals). The floor
+    /// is an absolute amount rather than a rate, so an unbounded value would let
+    /// a fat-fingered config make every contract unaffordable (or overflow the
+    /// deposit) with no clear error. Well above any plausible cost to serve.
+    pub const MAX_FEE_MIN: u64 = 100_000_000;
+
+    /// Checks the fee parameters are coherent *together*. Call this on the
+    /// finished config, after every field has been applied — a single
+    /// `update_config` may raise the floor and the minimum in one go, and
+    /// per-field checks would reject that depending on the order.
+    ///
+    /// The floor must never exceed the smallest contract the protocol accepts,
+    /// or a minimum-sized deal pays 100% or more in fees. `min_amount == 0`
+    /// disables the minimum, and with it this check.
+    pub fn validate_fee_bounds(&self) -> Result<()> {
+        require!(
+            self.min_amount == 0 || self.protocol_fee_min <= self.min_amount,
+            EscrowError::FeeFloorAboveMinimum
+        );
+        Ok(())
+    }
 }

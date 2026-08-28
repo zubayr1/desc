@@ -15,7 +15,9 @@
  * Prereq: a validator is running with the escrow program deployed (`anchor localnet`).
  * Run with: `pnpm bootstrap`.
  */
-import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+// `BN` isn't a statically-detectable named export under ESM — pull it off default.
+const { BN } = anchorPkg;
 import {
   createMint,
   getAccount,
@@ -42,6 +44,10 @@ const AUTHORITY_PATH = expand(
   process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
 );
 const FEE_BPS = 200;
+const FEE_MIN = 1_000_000; // $1 floor (base units) — configurable via update-config
+// Smallest contract the protocol accepts. At 200 bps + a $1 floor the two meet
+// at $50; below that the floor would be a punitive share of the contract.
+const MIN_AMOUNT = 50_000_000; // $50
 
 function loadKeypair(path: string): Keypair {
   return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
@@ -101,7 +107,13 @@ async function main() {
     authority.publicKey
   );
   await program.methods
-    .initializeConfig(settlementAuthority, treasury.address, FEE_BPS)
+    .initializeConfig(
+      settlementAuthority,
+      treasury.address,
+      FEE_BPS,
+      new BN(FEE_MIN),
+      new BN(MIN_AMOUNT)
+    )
     .accountsPartial({
       authority: authority.publicKey,
       config,

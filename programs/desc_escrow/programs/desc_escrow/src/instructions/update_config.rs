@@ -24,11 +24,20 @@ impl<'info> UpdateConfig<'info> {
         settlement_authority: Option<Pubkey>,
         treasury: Option<Pubkey>,
         protocol_fee_bps: Option<u16>,
+        protocol_fee_min: Option<u64>,
+        min_amount: Option<u64>,
         paused: Option<bool>,
     ) -> Result<()> {
         if let Some(bps) = protocol_fee_bps {
             require!(bps <= Config::MAX_FEE_BPS, EscrowError::InvalidFeeBps);
             self.config.protocol_fee_bps = bps;
+        }
+        if let Some(min) = protocol_fee_min {
+            require!(min <= Config::MAX_FEE_MIN, EscrowError::InvalidFeeMin);
+            self.config.protocol_fee_min = min;
+        }
+        if let Some(min) = min_amount {
+            self.config.min_amount = min;
         }
         if let Some(settlement_authority) = settlement_authority {
             self.config.settlement_authority = settlement_authority;
@@ -39,6 +48,10 @@ impl<'info> UpdateConfig<'info> {
         if let Some(paused) = paused {
             self.config.paused = paused;
         }
+
+        // Checked on the RESULT, after every option is applied, so one call may
+        // raise the floor and the minimum together in either order.
+        self.config.validate_fee_bounds()?;
 
         Ok(())
     }

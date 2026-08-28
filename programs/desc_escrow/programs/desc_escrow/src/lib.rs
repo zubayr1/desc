@@ -18,9 +18,17 @@ pub mod desc_escrow {
         settlement_authority: Pubkey,
         treasury: Pubkey,
         protocol_fee_bps: u16,
+        protocol_fee_min: u64,
+        min_amount: u64,
     ) -> Result<()> {
-        ctx.accounts
-            .initialize_config(settlement_authority, treasury, protocol_fee_bps, &ctx.bumps)
+        ctx.accounts.initialize_config(
+            settlement_authority,
+            treasury,
+            protocol_fee_bps,
+            protocol_fee_min,
+            min_amount,
+            &ctx.bumps,
+        )
     }
 
     pub fn update_config(
@@ -28,10 +36,18 @@ pub mod desc_escrow {
         settlement_authority: Option<Pubkey>,
         treasury: Option<Pubkey>,
         protocol_fee_bps: Option<u16>,
+        protocol_fee_min: Option<u64>,
+        min_amount: Option<u64>,
         paused: Option<bool>,
     ) -> Result<()> {
-        ctx.accounts
-            .update_config(settlement_authority, treasury, protocol_fee_bps, paused)
+        ctx.accounts.update_config(
+            settlement_authority,
+            treasury,
+            protocol_fee_bps,
+            protocol_fee_min,
+            min_amount,
+            paused,
+        )
     }
 
     pub fn create_escrow(
@@ -70,7 +86,8 @@ pub mod desc_escrow {
         verdict_hash: [u8; 32],
         moderator: Pubkey,
     ) -> Result<()> {
-        ctx.accounts.record_verdict(outcome, verdict_hash, moderator)
+        ctx.accounts
+            .record_verdict(outcome, verdict_hash, moderator)
     }
 
     pub fn release(ctx: Context<Release>) -> Result<()> {

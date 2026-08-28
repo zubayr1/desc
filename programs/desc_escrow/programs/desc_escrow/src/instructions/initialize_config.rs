@@ -28,8 +28,14 @@ impl<'info> InitializeConfig<'info> {
         settlement_authority: Pubkey,
         treasury: Pubkey,
         protocol_fee_bps: u16,
+        protocol_fee_min: u64,
+        min_amount: u64,
         bumps: &InitializeConfigBumps,
     ) -> Result<()> {
+        require!(
+            protocol_fee_min <= Config::MAX_FEE_MIN,
+            EscrowError::InvalidFeeMin
+        );
         require!(
             protocol_fee_bps <= Config::MAX_FEE_BPS,
             EscrowError::InvalidFeeBps
@@ -43,8 +49,13 @@ impl<'info> InitializeConfig<'info> {
             protocol_fee_bps,
             paused: false,
             bump: bumps.config,
-            reserved: [0; 64],
+            protocol_fee_min,
+            min_amount,
+            reserved: [0; 48],
         });
+
+        // Cross-field check on the finished config (see `validate_fee_bounds`).
+        self.config.validate_fee_bounds()?;
 
         Ok(())
     }

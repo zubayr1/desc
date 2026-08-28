@@ -330,6 +330,14 @@ export type DescEscrow = {
         {
           "name": "protocolFeeBps",
           "type": "u16"
+        },
+        {
+          "name": "protocolFeeMin",
+          "type": "u64"
+        },
+        {
+          "name": "minAmount",
+          "type": "u64"
         }
       ]
     },
@@ -537,6 +545,16 @@ export type DescEscrow = {
           }
         },
         {
+          "name": "config",
+          "docs": [
+            "Bound via `escrow.config` — supplies the treasury the verification fee",
+            "goes to (read live, like `release` does)."
+          ],
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
           "name": "vault",
           "writable": true,
           "relations": [
@@ -549,6 +567,18 @@ export type DescEscrow = {
             "Refund destination — the initiator's USDC account."
           ],
           "writable": true
+        },
+        {
+          "name": "treasury",
+          "docs": [
+            "Protocol treasury token account — receives the verification fee on a Fail.",
+            "Always required (it's bound by the config) even on a ghost-timeout, where",
+            "nothing is transferred to it."
+          ],
+          "writable": true,
+          "relations": [
+            "config"
+          ]
         },
         {
           "name": "moderatorTokenAccount",
@@ -790,6 +820,18 @@ export type DescEscrow = {
           }
         },
         {
+          "name": "protocolFeeMin",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "minAmount",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
           "name": "paused",
           "type": {
             "option": "bool"
@@ -871,6 +913,21 @@ export type DescEscrow = {
       "code": 6008,
       "name": "deadlinePassed",
       "msg": "The deadline has passed"
+    },
+    {
+      "code": 6009,
+      "name": "invalidFeeMin",
+      "msg": "Minimum protocol fee exceeds the maximum allowed"
+    },
+    {
+      "code": 6010,
+      "name": "amountBelowMinimum",
+      "msg": "Amount is below the protocol minimum for a contract"
+    },
+    {
+      "code": 6011,
+      "name": "feeFloorAboveMinimum",
+      "msg": "Fee floor exceeds the minimum contract amount"
     }
   ],
   "types": [
@@ -949,6 +1006,29 @@ export type DescEscrow = {
             "type": "u8"
           },
           {
+            "name": "protocolFeeMin",
+            "docs": [
+              "Minimum protocol fee in token base units. The fee charged is",
+              "`max(protocol_fee_bps of amount, protocol_fee_min)` — a floor so tiny",
+              "contracts still cover the roughly-fixed cost to serve them. Zero disables",
+              "the floor (old configs, whose `reserved` was zeroed, read 0 → no floor)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "minAmount",
+            "docs": [
+              "Smallest contract `amount` the protocol will escrow, in token base units.",
+              "",
+              "Pairs with `protocol_fee_min`: below the crossover point the floor is a",
+              "rising share of a shrinking contract, so a minimum keeps the effective",
+              "fee rate sane (at 200 bps + a $1 floor, $50 is where they meet). Zero",
+              "disables the minimum — including for configs created before this field",
+              "existed, whose `reserved` was zeroed."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding. Carve new fields from here."
@@ -956,7 +1036,7 @@ export type DescEscrow = {
             "type": {
               "array": [
                 "u8",
-                64
+                48
               ]
             }
           }
@@ -1151,6 +1231,27 @@ export type DescEscrow = {
             "type": "pubkey"
           },
           {
+            "name": "verificationFee",
+            "docs": [
+              "The non-refundable slice of `protocol_fee`, snapshotted at creation from",
+              "`Config::protocol_fee_min`.",
+              "",
+              "Cost recovery for the verification itself: charged to the treasury",
+              "whenever a moderator actually rendered a verdict — on `release` (Pass, as",
+              "part of the full fee) and on `refund` (Fail, this slice only). The rest of",
+              "`protocol_fee` goes back to the initiator on a Fail, so the protocol never",
+              "*profits* from a failed deal but is never paid to *pass* one either.",
+              "",
+              "Zero when no floor is configured, and for escrows created before this",
+              "field existed (their `reserved` was zeroed) — both mean \"charge nothing on",
+              "a Fail\", i.e. the old fee-on-Pass-only behaviour. Carved from `reserved`.",
+              "",
+              "Invariant: `verification_fee <= protocol_fee`, since",
+              "`protocol_fee = max(bps_fee, protocol_fee_min)`."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
@@ -1160,7 +1261,7 @@ export type DescEscrow = {
             "type": {
               "array": [
                 "u8",
-                96
+                88
               ]
             }
           }

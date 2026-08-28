@@ -20,4 +20,12 @@ pub enum EscrowError {
     Unauthorized,
     #[msg("The deadline has passed")]
     DeadlinePassed,
+    // APPEND-ONLY: anchor assigns codes (6000 + index) by declaration order, so
+    // new variants go at the END — never insert or reorder.
+    #[msg("Minimum protocol fee exceeds the maximum allowed")]
+    InvalidFeeMin,
+    #[msg("Amount is below the protocol minimum for a contract")]
+    AmountBelowMinimum,
+    #[msg("Fee floor exceeds the minimum contract amount")]
+    FeeFloorAboveMinimum,
 }

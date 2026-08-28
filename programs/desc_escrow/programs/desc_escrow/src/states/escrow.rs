@@ -107,10 +107,27 @@ pub struct Escrow {
     /// on `release` (Pass) or `refund` (Fail). Carved from `reserved`.
     pub moderator: Pubkey,
 
+    /// The non-refundable slice of `protocol_fee`, snapshotted at creation from
+    /// `Config::protocol_fee_min`.
+    ///
+    /// Cost recovery for the verification itself: charged to the treasury
+    /// whenever a moderator actually rendered a verdict — on `release` (Pass, as
+    /// part of the full fee) and on `refund` (Fail, this slice only). The rest of
+    /// `protocol_fee` goes back to the initiator on a Fail, so the protocol never
+    /// *profits* from a failed deal but is never paid to *pass* one either.
+    ///
+    /// Zero when no floor is configured, and for escrows created before this
+    /// field existed (their `reserved` was zeroed) — both mean "charge nothing on
+    /// a Fail", i.e. the old fee-on-Pass-only behaviour. Carved from `reserved`.
+    ///
+    /// Invariant: `verification_fee <= protocol_fee`, since
+    /// `protocol_fee = max(bps_fee, protocol_fee_min)`.
+    pub verification_fee: u64,
+
     /// Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,
     /// `dispute_account`) can be added without a risky `realloc`. Carve new
     /// fields from here; keep this the LAST field.
-    pub reserved: [u8; 96],
+    pub reserved: [u8; 88],
 }
 
 impl Escrow {

@@ -6,6 +6,8 @@
  *   pnpm update-config --pause
  *   pnpm update-config --unpause
  *   pnpm update-config --fee-bps 250
+ *   pnpm update-config --fee-min 1000000            (min fee, base units — $1)
+ *   pnpm update-config --min-amount 50000000        (smallest contract — $50)
  *   pnpm update-config --treasury <PUBKEY>
  *   pnpm update-config --settlement <PUBKEY>
  *   pnpm update-config --fee-bps 150 --pause       (combine)
@@ -15,7 +17,8 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+const { BN } = anchorPkg;
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import type { DescEscrow } from "../src/solana/idl/desc_escrow";
 import idl from "../src/solana/idl/desc_escrow.json";
@@ -38,15 +41,26 @@ async function main() {
   const settlement = val("--settlement");
   const treasury = val("--treasury");
   const feeBps = val("--fee-bps");
+  const feeMin = val("--fee-min");
+  const minAmount = val("--min-amount");
   const paused = has("--pause") ? true : has("--unpause") ? false : null;
 
   const settlementArg = settlement ? new PublicKey(settlement) : null;
   const treasuryArg = treasury ? new PublicKey(treasury) : null;
   const feeArg = feeBps !== undefined ? Number(feeBps) : null;
+  const feeMinArg = feeMin !== undefined ? new BN(feeMin) : null;
+  const minAmountArg = minAmount !== undefined ? new BN(minAmount) : null;
 
-  if (!settlementArg && !treasuryArg && feeArg === null && paused === null) {
+  if (
+    !settlementArg &&
+    !treasuryArg &&
+    feeArg === null &&
+    feeMinArg === null &&
+    minAmountArg === null &&
+    paused === null
+  ) {
     console.error(
-      "Nothing to update. Flags: --settlement <pk> --treasury <pk> --fee-bps <n> --pause --unpause"
+      "Nothing to update. Flags: --settlement <pk> --treasury <pk> --fee-bps <n> --fee-min <baseUnits> --min-amount <baseUnits> --pause --unpause"
     );
     process.exit(1);
   }
@@ -66,7 +80,7 @@ async function main() {
   );
 
   await program.methods
-    .updateConfig(settlementArg, treasuryArg, feeArg, paused)
+    .updateConfig(settlementArg, treasuryArg, feeArg, feeMinArg, minAmountArg, paused)
     .accountsPartial({ authority: authority.publicKey, config })
     .rpc();
 
@@ -75,6 +89,8 @@ async function main() {
   console.log("  settlementAuthority:", cfg.settlementAuthority.toBase58());
   console.log("  treasury           :", cfg.treasury.toBase58());
   console.log("  protocolFeeBps     :", cfg.protocolFeeBps);
+  console.log("  protocolFeeMin     :", cfg.protocolFeeMin.toString());
+  console.log("  minAmount          :", cfg.minAmount.toString());
   console.log("  paused             :", cfg.paused);
 }
 

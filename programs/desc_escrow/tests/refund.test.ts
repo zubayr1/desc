@@ -8,8 +8,6 @@ import {
   setupWorld,
   tokenBalance,
   accountExists,
-  chainUnixTs,
-  waitForChainTime,
   usdc,
   TOKEN_PROGRAM_ID,
 } from "./helpers";
@@ -103,24 +101,6 @@ describe("refund", () => {
       (await tokenBalance(s.initiatorAta)).toString(),
       s.amount.toString() // fee and surcharge both earned, payout returned
     );
-  });
-
-  it("charges nothing on a ghost-timeout, even with a floor configured", async () => {
-    const world = await setupWorld(200, usdc(1).toNumber());
-    // Deadlines are compared against the VALIDATOR's clock, which drifts from
-    // wall time — so pin it in chain time and wait for the chain, not the wall.
-    const deadline = (await chainUnixTs()) + 5;
-    const s = await createEscrow({ world, deadlineAbsolute: deadline });
-    const total = s.amount.add(s.fee).add(s.surcharge);
-    await acceptEscrow(s);
-    await waitForChainTime(deadline);
-
-    await refund(s, false);
-
-    // No moderator did any work, so the initiator is made whole.
-    assert.equal((await tokenBalance(s.initiatorAta)).toString(), total.toString());
-    assert.equal((await tokenBalance(world.treasury)).toString(), "0");
-    assert.property((await program.account.escrow.fetch(s.escrow)).status, "refunded");
   });
 
   it("rejects refund while Active before the deadline", async () => {

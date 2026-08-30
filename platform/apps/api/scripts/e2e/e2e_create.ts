@@ -49,7 +49,7 @@ async function main() {
     initiator: initiator.publicKey.toBase58(),
     title: "Implement token vesting program",
     brief: "Linear vesting with a configurable cliff; deliver as a merged PR.",
-    deliverableType: "merged_pr",
+    deliverableType: "mergeable",
     acceptanceCriteria: [
       { description: "PR merged into main of the repo" },
       { description: "All vesting tests pass in CI" },

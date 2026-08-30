@@ -67,7 +67,7 @@ async function main() {
     initiator: initiator.publicKey.toBase58(),
     title: "Deal both sides call off",
     brief: "Mutually agreed to unwind after acceptance.",
-    deliverableType: "merged_pr",
+    deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "n/a" }],
     amount: "1000000000",
     moderatorCount: 3,

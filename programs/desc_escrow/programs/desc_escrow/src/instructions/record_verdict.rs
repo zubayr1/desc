@@ -3,13 +3,15 @@ use anchor_lang::prelude::*;
 use crate::error::EscrowError;
 use crate::states::{Config, Escrow, EscrowStatus, Outcome};
 
-/// The settlement authority attests the aggregated verdict for a submitted
+/// The settlement authority attests a moderator's verdict for a submitted
 /// escrow. Attestation only — no money moves; the parties then execute
 /// `release` (Pass) or `refund` (Fail) themselves.
 ///
 /// The authority is read LIVE from the bound `Config` (via `escrow.config`), so
-/// it stays rotatable — the V1->V2 seam. In V2 the signer is a `desc_moderation`
-/// PDA invoked by CPI; this instruction is unchanged.
+/// it stays rotatable. Today it is the `desc_moderation` verdict PDA, which
+/// invokes this by CPI — there is no platform keypair that can reach it. V2
+/// widens who may drive that PDA (k-of-n consensus); this instruction is
+/// unchanged by that.
 #[derive(Accounts)]
 pub struct RecordVerdict<'info> {
     pub settlement_authority: Signer<'info>,

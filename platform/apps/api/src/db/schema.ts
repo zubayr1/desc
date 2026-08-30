@@ -88,19 +88,3 @@ export const contracts = pgTable(
 
 export type ContractRow = typeof contracts.$inferSelect;
 export type NewContractRow = typeof contracts.$inferInsert;
-
-/**
- * Moderator registry. Each row is one moderator's PUBLIC age recipient — the
- * committer's browser encrypts deliverables to every `active` recipient
- * (multi-recipient envelope). The matching SECRET identity is never here; it's
- * held by that moderator's own service. Add a moderator = insert a row.
- */
-export const moderators = pgTable("moderators", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  recipient: text("recipient").notNull().unique(), // age1…
-  label: text("label").notNull(),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
-
-export type ModeratorRow = typeof moderators.$inferSelect;

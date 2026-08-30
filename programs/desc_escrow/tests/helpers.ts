@@ -216,14 +216,26 @@ export async function chainUnixTs(): Promise<number> {
   return Number(info.data.readBigInt64LE(32));
 }
 
-/** Block until the validator's clock has passed `ts`. */
+/**
+ * Block until the validator's clock has passed `ts`.
+ *
+ * The local validator only advances slots when there is something to put in a
+ * block, and `Clock::unix_timestamp` moves with the slot — so a loop that only
+ * *reads* the clock can wait forever while the chain sits still. Each iteration
+ * therefore sends a throwaway airdrop to force a block.
+ */
 export async function waitForChainTime(ts: number, timeoutMs = 120_000) {
   const started = Date.now();
   while ((await chainUnixTs()) <= ts) {
     if (Date.now() - started > timeoutMs) {
       throw new Error(`chain clock did not reach ${ts} within ${timeoutMs}ms`);
     }
-    await sleep(1000);
+    try {
+      await connection.requestAirdrop(Keypair.generate().publicKey, 1_000);
+    } catch {
+      // the faucet refusing is fine — we only wanted the block it produces
+    }
+    await sleep(400);
   }
 }
 

@@ -14,56 +14,71 @@ V1 wedge: **Solana bounty-style dev work** with objectively-checkable deliverabl
 
 ```
 .
-├── program/                    # Solana escrow program (Rust / Anchor)
+├── programs/
+│   ├── desc_escrow/            # escrow + money lifecycle (Rust / Anchor)
+│   └── desc_moderation/        # on-chain moderator registry; signs verdicts by CPI
 └── platform/
     ├── apps/
-    │   ├── web/                # user frontend — 4 screens
-    │   ├── admin/              # manual dispute review tool (internal)
-    │   └── api/                # backend + verdict aggregator
+    │   ├── web/                # user frontend
+    │   ├── admin/              # read-only oversight console (internal)
+    │   └── api/                # backend — builds unsigned txns, owns the read model
     ├── packages/
-    │   └── shared/             # shared TS domain types
+    │   └── shared/             # shared TS domain types + deliverable pipeline
     └── services/
-        └── ai/                 # Helper AI + moderator agents (Python)
+        └── ai/                 # Helper AI + moderator agents (Python) — not built yet
 ```
 
 ## What each piece does
 
 | Piece | Responsibility |
 |---|---|
-| `program` | On-chain escrow: deposit, lock, release-on-verdict, refund-on-timeout. Holds funds — neither party does. |
-| `apps/web` | Public product. 4 screens: **draft contract**, **review & accept** (from shareable link), **submit deliverable**, **view verdict & settlement**. Talks only to `api`. |
-| `apps/api` | The brain. Owns the DB + contract lifecycle, generates shareable links, builds/submits Solana txns, calls the AI service, and runs the **verdict aggregator** (consensus → settle; no consensus → flag for manual review). |
-| `apps/admin` | Internal tool for the team to investigate disputes flagged by the aggregator. Separate auth from `web`. |
-| `packages/shared` | Library (not a service). Single source of truth for domain types (contract shape, status enum, verdict shape, AI DTOs) imported by `web`, `admin`, `api`. |
-| `services/ai` | Helper AI (drafts checkable acceptance criteria from a brief) + N federated moderator agents (independent verdict + confidence per deliverable). Python. |
+| `programs/desc_escrow` | On-chain escrow: deposit, accept, submit, record verdict, release, refund, cancel. Holds funds — neither party does. |
+| `programs/desc_moderation` | Moderator registry. Each moderator is a PDA with its own wallet; it signs a verdict and CPIs into the escrow. It is the escrow's `settlement_authority`, so **no platform keypair can settle**. |
+| `apps/web` | Public product: draft contract, review & accept (from a shareable link), submit a sealed deliverable, view verdict & settlement, dashboard. Talks only to `api`. |
+| `apps/api` | Owns the DB + off-chain contract metadata, generates shareable links, and **builds unsigned transactions for the user to sign**. It holds no signing key and cannot move funds. |
+| `apps/admin` | Read-only oversight for the team. It does **not** record verdicts — moderators do. Separate auth from `web`. |
+| `packages/shared` | Library (not a service). Domain types plus the deliverable pipeline: validate → Merkle → `age` multi-recipient encryption. Imported by `web`, `admin`, `api`. |
+| `services/ai` | Helper AI (drafts checkable acceptance criteria) + the moderator's verdict brain. **Placeholder** — a human operator answers through the same `runCheck` interface today. |
 
 ## Data flow
 
 ```
-web / admin  ──HTTP──►  api  ──HTTP──►  ai (Helper AI + N moderators)
+web / admin  ──HTTP──►  api
                          │
-                         ├── Postgres (contract state)
-                         └── Solana RPC ──► program (escrow)
+                         ├── Postgres (off-chain metadata + cached chain state)
+                         ├── blind storage (deliverable ciphertext only)
+                         └── Solana RPC ──► desc_escrow / desc_moderation
 
-shared ── types imported by web, admin, api
+user wallet ── signs every transaction; the api only builds and submits them
+moderator   ── decrypts, re-verifies the on-chain hash, signs its own verdict
+shared      ── types + bundle pipeline imported by web, admin, api
 ```
 
 ## Contract lifecycle
 
+Mirrors the program's on-chain `EscrowStatus` 1:1 — there is no off-chain `draft`
+or `disputed` state.
+
 ```
-draft → pending_acceptance → active → submitted → under_verification
-      → settled | refunded | disputed
-(draft | pending_acceptance) → cancelled
+funded → active → submitted → settled     (Pass, released)
+                            → refunded    (Fail)
+       → refunded                         (deadline passed, committer ghosted)
+funded → cancelled                        (before anyone accepts)
 ```
 
-## V1 commitments (from planning)
+## V1 commitments
 
 - USDC settlement, no native token.
-- Pricing: 2% base protocol fee + per-moderator surcharge; moderator count scales with contract value.
-- Random moderator assignment by the protocol (initiators never pick their own).
-- Objectively-verifiable deliverables only.
-- Manual dispute review by the team (target SLA: 48 business hours).
-- Federated platform-run moderators (third-party pluggable pool is V2).
+- Pricing: `max(2%, $1)` protocol fee + 1% per moderator; $50 minimum contract.
+  Nothing is charged if the deal is cancelled or never delivered.
+- Objectively-verifiable deliverables only (`mergeable`, `deployable`,
+  `tests_pass`, `spec_met`).
+- Deliverables are sealed in the browser and stored as ciphertext — the server
+  never sees plaintext.
+- Platform-run moderators; a single verdict settles. Manual dispute review by the
+  team (target SLA: 48 business hours).
+- Optional **no-mod** mode: the initiator may skip verification entirely.
 
-Marketplace, listings, discovery, decomposition, human jurors, SDK, embedded wallets,
-fiat ramps, reputation, and subjective deliverables are all explicitly deferred to V2+.
+Random moderator assignment, staking/slashing, k-of-n consensus, marketplace,
+listings, discovery, decomposition, human jurors, SDK, embedded wallets, fiat
+ramps, reputation, and subjective deliverables are all explicitly deferred to V2+.

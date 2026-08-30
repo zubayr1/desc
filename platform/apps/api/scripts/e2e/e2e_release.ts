@@ -22,6 +22,7 @@ import {
   mintTo,
   getAccount,
 } from "@solana/spl-token";
+import { deliverBundle, recordVerdict } from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -74,13 +75,13 @@ async function main() {
     initiator: initiator.publicKey.toBase58(),
     title: "Implement token vesting program",
     brief: "Linear vesting with a cliff; merged PR.",
-    deliverableType: "merged_pr",
+    deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: String(AMOUNT),
     moderatorCount: 3,
     moderatorSurcharge: "30000000",
     deadline: new Date(Date.now() + 3600_000).toISOString(),
-  })) as { id: string; unsignedTx: string };
+  })) as { id: string; escrowAddress: string; unsignedTx: string };
   const funded = (await signAndSubmit(
     created.unsignedTx,
     initiator,
@@ -93,13 +94,10 @@ async function main() {
   })) as { unsignedTx: string };
   await signAndSubmit(acceptPrep.unsignedTx, committer, `/links/${token}/accept/submit`);
 
-  const delPrep = (await postJson(`/links/${token}/deliverable/prepare`, {
-    payload: "https://github.com/acme/vesting/pull/42",
-  })) as { unsignedTx: string };
-  await signAndSubmit(delPrep.unsignedTx, committer, `/links/${token}/deliverable/submit`);
+  await deliverBundle(token, committer);
 
-  // verdict: pass (admin/API-signed)
-  await postJson(`/admin/contracts/${created.id}/verdict`, { outcome: "pass" });
+  // verdict: pass — signed by the registered moderator
+  await recordVerdict(created.escrowAddress, "pass");
 
   // release — committer claims
   const relPrep = (await postJson(`/contracts/${created.id}/release/prepare`, {

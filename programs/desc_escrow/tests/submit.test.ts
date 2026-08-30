@@ -5,7 +5,8 @@ import {
   acceptEscrow,
   submitEscrow,
   newFundedKeypair,
-  sleep,
+  chainUnixTs,
+  waitForChainTime,
 } from "./helpers";
 
 describe("submit", () => {
@@ -44,9 +45,12 @@ describe("submit", () => {
   });
 
   it("rejects submit after the deadline", async () => {
-    const s = await createEscrow({ deadlineOffset: 3 });
+    // Deadlines are compared against the VALIDATOR's clock, which drifts from
+    // wall time — pin it in chain time and wait for the chain, not the wall.
+    const deadline = (await chainUnixTs()) + 5;
+    const s = await createEscrow({ deadlineAbsolute: deadline });
     const c = await acceptEscrow(s);
-    await sleep(5000);
+    await waitForChainTime(deadline);
     try {
       await submitEscrow(s, c);
       assert.fail("expected DeadlinePassed");

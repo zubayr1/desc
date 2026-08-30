@@ -1,213 +1,325 @@
-# Project Idea — Final Features Document (V1 Planning Complete)
+# desc — status & roadmap
 
-*Planning phase complete for V1. This document is now the source of truth for what V1 is, and the roadmap for V2+.*
+*Last updated: 2026-08-28*
 
-**Status legend:**
-- ✅ Confirmed
-- 🛠 Built — implemented in the current codebase (manual/CI stand-in where the AI isn't wired yet)
-- 🔮 Future scope — committed to as a later phase
-- 🚫 Considered and set aside
+Legend: ✅ built · 🔨 in progress · ⬜ not started · 🔮 later version · 🚫 set aside
 
 ---
 
-## Product Identity
+## 1. What desc is
 
-✅ **This is a formalization tool, not a marketplace.** Two parties who have already agreed to a deal (on Twitter, Discord, Telegram, LinkedIn, anywhere) come to the platform to formalize it: escrow the funds, define checkable acceptance criteria, let AI moderators verify delivery, and settle. The platform does not host listings, does not facilitate discovery, does not match buyers with sellers.
+- A **formalization tool, not a marketplace.** Two people who already agreed on a
+  deal elsewhere come here to make it safe.
+- No listings, no discovery, no matching. Entry point is *"I have a deal."*
+- **Wedge:** Solana bounty-style dev work with checkable deliverables.
+- **Pitch:** *"You already made the deal — now make it safe."*
+- Onboarding is a **shareable link** — no signup for the committer.
+- The moat is **verification quality**, not network effects.
+- **"Made a deal"** means agreed on deliverable + price, *without* mutual trust.
+  That is precisely the buyer — the positioning holds.
 
-This identity is preserved through V1, V2, and V3. Marketplace dynamics, yield products, and tokenization are explicitly out of scope until very late phases (V4+).
-
-### Why this matters
-
-- No two-sided liquidity problem at any phase until very late.
-- Each contract is a discrete win — acquisition is per-deal, not per-user.
-- Marketing message is sharp: *"You already made the deal — now make it safe."*
-- Competitive moat is verification quality + formalization UX, not network effects.
-- Resists the founder temptation to bolt on a marketplace prematurely.
-
----
-
-## Vision vs. Launch
-
-✅ **Vision**: A neutral trust layer for any freelance or small-contract work, globally — addressing scams, non-payment, and unresolved disputes in both Web2 and Web3 contexts. Crypto rails are the implementation; the problem is universal.
-
-✅ **Launch wedge**: Solana **bounty hunters** specifically — bounty-style dev work where the deliverable is objectively checkable (merged PR, deployed contract, test suite pass, written technical report against a defined spec). Crypto-only at v1.
+This identity holds through V1, V2 and V3.
 
 ---
 
-## V1 Features (the launch product)
+## 2. How it works
 
-1. ✅ **A formalization tool for Solana bounty-style freelance work**, positioned around the trust-gap problem (scams, non-payment, unresolved disputes). Two parties bring their pre-agreed deal here to make it safe.
+```mermaid
+flowchart LR
+    A[Initiator drafts<br/>brief + criteria] --> B[Funds escrow<br/>USDC on-chain]
+    B --> C[Sends link]
+    C --> D[Committer accepts]
+    D --> E[Submits sealed<br/>folder]
+    E --> F[Moderator decrypts,<br/>checks criteria]
+    F -->|Pass| G[Committer paid]
+    F -->|Fail| H[Initiator refunded]
+```
 
-2. ✅ **On-chain escrow on Solana** — funds held by the protocol, not by either party.
+The moderator is an **automated service**, not a person in a UI. There is no
+moderator interface, and the admin console is read-only oversight.
 
-3. ✅ **AI moderator agents verify delivery** — a registered AI mod decrypts the deliverable and judges it against the criteria; **V1 settles on a single mod's verdict**, while multiple independent agents reaching **consensus is V2**.
+### On-chain lifecycle
 
-4. ✅ **Helper AI for the initiator** — assists in writing the project brief and drafting checkable acceptance criteria. Non-negotiable for v1.
+```mermaid
+stateDiagram-v2
+    [*] --> Funded: create_escrow
+    Funded --> Cancelled: cancel
+    Funded --> Active: accept
+    Active --> Submitted: submit
+    Active --> Refunded: refund (deadline passed)
+    Submitted --> Settled: release (Pass)
+    Submitted --> Refunded: refund (Fail)
+    Active --> Refunded: mutual_cancel
+    Submitted --> Refunded: mutual_cancel
+```
 
-5. ✅ **Launch constraint: objectively-verifiable deliverables only** — v1 only accepts tasks whose acceptance criteria can be checked programmatically or near-programmatically.
+Once **Submitted**, funds are frozen until a verdict. The deadline no longer
+applies. The off-chain status mirrors these six 1:1 — there is no `draft` or
+`disputed` state.
 
-6. ✅ **Positioning vs. Web2 incumbents**: faster settlement, lower fees, less regulatory overhead, more automated dispute resolution.
+### Deliverable pipeline
 
-7. 🔮 **Random moderator assignment by protocol (V2)** — initiators never pick their own moderators; random selection from the staked pool prevents collusion and Sybil bias. **V1 has no selection** — each registered internal mod may judge.
+```mermaid
+flowchart LR
+    A[Folder] --> B[Validate<br/>caps, denylist, path safety]
+    B --> C[Merkle root<br/>+ manifest hash]
+    C --> D[Encrypt to N mods<br/>+ initiator]
+    D --> E[Server stores<br/>ciphertext only]
+    E --> F[Mod decrypts,<br/>rebuilds, compares hash]
+```
 
-8. ✅ **USDC as the settlement currency at launch** — no native token at v1.
-
-9. ✅ **Pricing model**: 2% base protocol fee on each contract + a per-moderator surcharge that flows to the moderator(s). **V1: the surcharge is 1% of the contract, paid to the judging mod on a successful verdict;** V2 grows it to fee + desc-token and scales the % by moderator reputation. Number of moderators set by the protocol based on contract value.
-
-10. ✅ **Standalone platform at launch** — direct user-facing product. SDK is a later phase.
-
-11. ✅ **Platform-run internal moderators at launch** — the platform registers its own mod(s) on-chain (`desc_moderation`), each an automated AI service; a diverse federated pool + **third-party** pluggable mods come in **V2**.
-
-12. ✅ **Formalization flow is the only flow at v1** — no marketplace, no listings, no discovery. The entry point is "I have a deal, let's formalize it."
-
-13. ✅ **Shareable contract link as the primary onboarding mechanism** — initiator drafts the contract, gets a link, sends it to the committer through whatever channel they already used (Discord, Twitter DM, Telegram, etc.). Committer opens the link, connects wallet, reviews, accepts. No prior account creation required. This matches how deals actually happen and reinforces the formalization-tool identity at the UX level.
-
-14. ✅ **Manual dispute review by the platform team at v1** — when AI moderators disagree or one party contests a verdict, the platform team reviews manually. Acceptable at launch volume; replaced by the human juror tier in V2+.
-
----
-
-## Deliverable Mechanism (V1)
-
-How the committer hands over work so it's **tamper-evident, AI-verifiable, confidential until payment, and scalable.** This is **built** (with a CI/manual check standing in for the AI until the moderator agents land).
-
-- 🛠 **Sealed, content-addressed bundle.** The committer picks a project **folder**; the browser validates + cleans it, builds a deterministic **Merkle root** over the files, and the on-chain anchor is `deliverable_hash = sha256(manifest)` (manifest = `{root, per-file hashes, salt}`). The program stores only that 32-byte hash; the lifecycle is unchanged. `verdict_hash` embeds the deliverable hash, so the chain records *(exact artifact, verdict against it)*.
-- 🛠 **Validation pipeline** (security-critical, unit-tested): size/file-count caps + zip-bomb guard, denylist (`node_modules`, `.env`, `.git`, build dirs…), path-safety (no `..` / absolute / symlink → zip-slip), deterministic path-sorted hashing.
-- 🛠 **Encrypted to the moderators, in the browser.** The bundle is encrypted with a **multi-recipient `age` envelope** to every active moderator's public key; only the **ciphertext** is uploaded. The server stores it **blind** — it never sees plaintext.
-- 🛠 **Moderator decrypts + re-verifies.** A moderator decrypts with its own key, recomputes the bundle, and checks the hash equals the on-chain anchor → proof it judged *exactly* the committed bytes. (Today via a CLI stand-in; moves into the mod service next.)
-- ✅ **Deliverable types are an AI hint, not a transport.** The committer always delivers a **deployable** artifact (code / tests / report); the *initiator* does the real-world action (merge, deploy). desc escrows the **work product**, not the outcome — so only objectively-checkable artifacts are escrowed.
-- 🔮 **Settlement = decryption (V2):** the initiator's access becomes a cryptographic consequence of an on-chain PASS (threshold key release), not a server ACL flip.
-
-> **Pulled into V1 from later phases:** the sealed/encrypted deliverable, the multi-recipient envelope, and the moderator key registry — because "bring your AI" only makes sense if the encrypt → decrypt → verify pipeline exists from the start.
-
----
-
-## Moderator Architecture (V1 → V2 → V3)
-
-✅ **The moderator is an automated AI *service*, not a person clicking a UI.** It runs after the committer submits — **decrypt → check against the criteria → sign the verdict** — fully automatic. There is **no moderator UI**; the admin UI is **platform-only, read-only oversight**. **V1 puts mods on-chain**: they sign verdicts with their *own* wallets via the `desc_moderation` program, so there is **no central `settlement_authority` keypair**.
-
-- ✅ **V1 — the `desc_moderation` Anchor program.** Each mod is an on-chain account (PDA) with its own **non-custodial wallet** + age key; the program checks the signer is a registered mod and **CPIs the verdict into the escrow** (authority = the program's PDA). V1 mods are **platform-run internal** (registered by the admin); **no random selection yet** — each registered mod may judge.
-- ✅ **V1 reward** — a mod earns **1% of the contract** (the `moderator_surcharge`) on a successful moderation, paid from the escrow on `release`.
-- 🛠 **Already built (the seams):** the moderator registry, the **multi-recipient envelope** (deliverables seal to N mods), and an automated **decrypt → verify** path. The "AI" is a **CI/manual stand-in** until the agents land (AI-last).
-- 🔮 **V2 — open + decentralize.** External operators bring their own AI mods, **stake** (slashed for dishonesty), are **randomly assigned** per contract, and settle by **on-chain consensus (k-of-n)**; rewards grow to **fee + desc-token**, with the **fee % scaling by reputation**.
-- 🔮 **V3 — attested verdicts (TEE / zkML).** The verdict carries proof the agreed AI actually ran on the actual deliverable — the only mechanism that *prevents* (not just penalizes) a mod signing without checking. Receipt anchored on-chain.
-
-> **Honest limit:** *"a mod can only pass/fail after the AI ran"* can't be **enforced** cryptographically until V3. V1 relies on trusted internal mods; V2 adds economic enforcement (stake/slash + consensus); V3 adds proof.
+The chain stores only `sha256(manifest)`. The server never sees plaintext. A mod
+that can't reproduce the hash refuses to judge.
 
 ---
 
-## Operational Notes (not features, but real commitments)
+## 3. Money
 
-- **Dispute review SLA**: manual review means someone on the team must be available to investigate disputes within a defined window (suggest: 48 business hours at launch). This is an operational cost that scales with volume and needs to be planned for, including coverage during off-hours, vacations, and unexpected volume spikes.
-- **Helper AI quality is the make-or-break factor**: if acceptance criteria are vague, verification fails, disputes go up, manual review load explodes. Investing in Helper AI prompting and templates is the single highest-leverage v1 work.
-- **Cold-start expectation**: this is a formalization tool, so cold-start is per-deal, not per-user — but the first deals still need to come from somewhere. Expect to source the first 10–20 deals from your own network (Solana dev communities, Superteam Discord, Twitter), not from organic traffic.
+Settled in **USDC**. SOL is only transaction fees and refundable rent.
 
----
+| Parameter | Value | Where it lives |
+|---|---|---|
+| Protocol fee | `max(2%, $1)` | on-chain `Config` |
+| Moderator fee | 1% | server-side rule |
+| Smallest contract | $50 | on-chain `Config` |
+| Verification fee | $1 (= the floor) | snapshotted per escrow |
 
-## Future Scope — committed to as later phases
+### Who gets paid, by outcome
 
-### 🔮 V2 — Multi-task projects and decomposition
+| Outcome | Protocol | Moderator | Initiator |
+|---|---|---|---|
+| **Pass** | full fee | 1% | — (committer paid in full) |
+| **Fail** | $1 only | 1% | everything else back |
+| **Ghost timeout** | nothing | nothing | everything back |
+| **Cancel / mutual cancel** | nothing | nothing | everything back |
 
-When expanding to dev-for-contracts work in V2, projects become naturally multi-component and decomposition becomes valuable.
-- 🔮 Atomic task decomposition — large projects broken into sub-tasks.
-- 🔮 One committer per atomic task.
-- 🔮 Privacy via decomposition — no single committer sees the whole project.
-- 🔮 Helper AI extended to propose sub-task graphs.
+Two principles behind this:
 
-**Plan**: After bounty wedge proves out (~20–50 successful contracts, <10% manual intervention rate), extend the contract model to support a parent contract with child sub-task contracts, each with their own committer, escrow allotment, and verification.
-
-### 🔮 V2 — Niche expansion beyond bounties
-
-- 🔮 **Phase 2a — Devs hired for one-off contracts**, ~3–6 months after bounty launch.
-- 🔮 **Phase 2b — Campaign and marketing work**, ~6–12 months after bounty launch. Requires reputation-weighted moderation and/or the human-juror escalation tier first.
-
-**Plan**: Each niche expansion ships its own template library, its own Helper AI prompt set, and its own verification agent configurations. Re-use the core protocol; specialize the layer on top.
-
-### 🔮 V2 — Human juror escalation tier
-
-**Plan**: Build a staked-juror system (Kleros-style or lightweight homegrown) so disputes that exceed AI disagreement threshold escalate to humans instead of the platform team. Required before subjective deliverables are allowed. Likely the first thing built after the bounty launch stabilizes.
-
-### 🔮 V2 — Pluggable third-party moderator market
-
-**Plan**: Open the moderator pool to external operators who stake tokens and run their own AI agents. Verdicts that match consensus earn fees + reputation; disagreement burns stake. Requires designing staking economics, Sybil resistance for moderators, and verdict commit-reveal to prevent copying.
-
-### 🔮 V2 — Decentralized moderation (on top of the V1 `desc_moderation` program)
-
-**Plan**: The `desc_moderation` program itself ships in **V1** — mods are on-chain PDAs with **non-custodial wallets** that sign verdicts via CPI (no central `settlement_authority`), earning a 1% fee. V2 layers decentralization on top: open registration to **third-party** operators, **staking + slashing**, **random per-contract assignment**, **k-of-n consensus** (a per-contract verdict-record account), and richer rewards (**desc-token + reputation-scaled fee %**), plus Sybil resistance and verdict commit-reveal.
-
-### 🔮 V3 — Verifiable verdicts (TEE / zkML)
-
-**Plan**: The moderator's verdict ships with a proof the agreed AI actually ran on the agreed deliverable — TEE remote-attestation first, zkML later. Receipt anchored in `verdict_hash`; `release` can require it. This is the only mechanism that *prevents* (rather than just penalizes) a mod signing a verdict without checking. Until then, honesty is enforced by trust (V1) → stake/slash (V2).
-
-### 🔮 V2 — SDK / infrastructure offering
-
-**Plan**: Once standalone has real volume and a credible track record (~3–6 months of consistent operation), offer the escrow + verification primitive as an SDK/API for platforms like Superteam Earn, Layer3, Dework, Charmverse, Questbook, Bountycaster. Pitch backed by real metrics, not vapor.
-
-### 🔮 V2 — Web2 access (embedded wallets, fiat on/off ramps)
-
-**Plan**: Integrate Privy/Dynamic/Turnkey-style embedded wallets so users sign up with email and never see the crypto layer. Add fiat ramps (card → USDC → escrow → USDC → bank). Opens the vision-level market (general freelance, LinkedIn deals).
-
-### 🔮 V2+ — Reputation system for users
-
-**Plan**: On-chain reputation for initiators and committers, accumulated over completed deals. Reduces the "every contract starts at zero trust" problem and feeds into moderator weighting decisions.
-
-### 🔮 V2+ — Subjective deliverable support
-
-**Plan**: Once reputation-weighted moderation and human-juror escalation are live, allow subjective work (design, writing, creative). Acceptance criteria stay required but no longer need to be 100% programmatically checkable.
-
-### 🔮 V4+ — Yield, tokenization, marketplace
-
-Explicitly deferred to very late phases. Only after the formalization tool is a proven, widely-used trust primitive across multiple verticals.
-
-- 🔮 **Yield products** — possibly never if it doesn't fit the product identity.
-- 🔮 **Native token** — only if it solves a real problem (moderator staking, governance, fee discounts), not as a gimmick.
-- 🔮 **Marketplace / discovery side** — only if there's clear user demand beyond what off-platform sources already provide.
+- The protocol is paid for **running the check**, not for the answer. So it never
+  profits from a failed deal, and is never paid to pass one.
+- The floor exists because cost-to-serve is roughly fixed per contract while a
+  percentage is not. $50 is where 2% meets the $1 floor.
 
 ---
 
-## Features explicitly set aside
+## 4. Status at a glance
 
-- 🚫 Marketplace, listings, discovery, matching — V4+ at earliest. Possibly never.
-- 🚫 Yield products — V4+ at earliest.
-- 🚫 Native token — V4+ at earliest.
-- 🚫 Atomic task decomposition — V2.
-- 🚫 One committer per atomic task — V2.
-- 🚫 Privacy via decomposition — V2.
-- 🚫 Pluggable third-party moderators — V2.
-- 🚫 Marketing/campaign work at launch — V2 Phase 2b.
-- 🚫 Dev-for-contract work at launch — V2 Phase 2a.
-- 🚫 SDK offering at launch — V2.
-- 🚫 Embedded wallets / email signup — V2.
-- 🚫 Fiat on/off ramps — V2.
-- 🚫 Subjective deliverables — V2+.
-- 🚫 Milestone-based partial releases — over-engineering for v1.
-- 🚫 Initiator picks moderators — rejected. Random assignment only.
-- 🚫 Human juror escalation tier at launch — V2+.
-- 🚫 Reputation system for users at launch — V2+.
+| Piece | State |
+|---|---|
+| `desc_escrow` program (10 instructions) | ✅ |
+| `desc_moderation` program (4 instructions) | ✅ |
+| Deliverable pipeline (seal → encrypt → verify) | ✅ |
+| API + Postgres read model | ✅ |
+| Web app | ✅ |
+| Admin console (read-only) | ✅ |
+| Fee model (floor, verification fee, minimum) | ✅ |
+| No-mod mode | ✅ |
+| Moderator runner (`mod-run`) | ✅ with a **manual** verdict |
+| **AI moderator** | ⬜ |
+| **Helper AI** | ⬜ |
+| Background reconciler | ⬜ |
+| Verdict consensus (k-of-n) | 🔮 V2 |
 
 ---
 
-## V1 Summary
+## 5. What's built
 
-A formalization tool for Solana bounty deals. Two parties who already agreed somewhere else come here to make their deal safe — on-chain USDC escrow, Helper AI writes checkable acceptance criteria, federated AI moderators randomly verify deliverables, 2% protocol fee plus per-moderator surcharge. Shareable contract link as the primary onboarding flow. Manual dispute review by the platform team. Objectively-verifiable bounty work only. No marketplace, no discovery, no listings — just formalization.
+**On-chain**
 
-That's V1. Buildable, focused, and with a clear identity that holds through multiple expansion phases.
+- `desc_escrow` — full money lifecycle. Fee snapshotted at creation so a config
+  change can't alter a live deal. Both accounts carry `reserved` padding so new
+  fields never need a `realloc`.
+- `desc_moderation` — mods are on-chain PDAs with their own wallets. They sign
+  verdicts and CPI into the escrow. **There is no central settlement keypair.**
+
+**Off-chain**
+
+- API holds **no signing key** — it builds unsigned transactions, the user signs,
+  the API submits.
+- Deliverables are sealed to every active mod **and the initiator**, so a Pass
+  hands over exactly the bytes that were verified.
+- Read model caches chain state in Postgres, and the list view re-reads the chain
+  in one batched call.
+
+**The verification seam**
+
+`runCheck(criteria, files) → { outcome, reasoning }` is the swap point. Today it
+returns an operator's manual decision. The real AI drops in here without touching
+the runner, the API, or the chain.
 
 ---
 
-## V1 — Minimum Buildable Surface
+## 6. What's left for MVP
 
-The product reduces to roughly these components (with current build status):
+In order.
 
-1. 🛠 **Solana escrow program (Anchor)** — deposit, lock, release on verdict, refund on timeout. *Built: 10 instructions, full test suite, deployed to localnet.*
-2. **Helper AI service** — brief + bounty type → proposed acceptance criteria; initiator edits before commit. *Not started (AI-last).*
-3. **Moderator agent service** — N platform-run instances verifying with different prompts/models → verdict + confidence. *Stand-in built (decrypt → CI/manual check → sign); real AI agents not started.*
-4. **Verdict aggregator** — V1 settles on a single registered mod's verdict (no consensus yet); k-of-n consensus across the pool is V2. *Not started — lands with the AI agents.*
-5. 🛠 **Frontend** — draft contract, review-and-accept (shareable link), submit deliverable (folder → sealed/encrypted), view verdict + settlement, plus a dashboard. *Built.*
-6. 🛠 **Platform admin / dispute tool** — oversight console (contracts, queue, manual verdict stand-in). *Built; matures into the platform-only oversight view.*
-7. 🛠 **Deliverable pipeline + moderator registry** — folder → validate → Merkle → encrypt-to-mods → blind storage → decrypt + verify; off-chain registry of moderator recipients. *Built (this milestone).*
+| # | Item | Why |
+|---|---|---|
+| 1 | **Thin AI moderator slice** — one model call: criteria + files → pass/fail + reasoning | Tests the whole thesis. Everything else is chassis. |
+| 2 | **Helper AI** — brief → checkable criteria | Vague criteria cause failed verification and disputes. Highest-leverage V1 work. |
+| 3 | **Constrain criteria to bundle-checkable claims** | A mod sees a folder. It cannot see "merged" or "deployed". |
+| 4 | **Fix the deadline bug** — form accepts today's date, tx then fails | User signs, then loses a transaction fee. |
+| 5 | **Honest copy** — site says "AI moderator" and there isn't one yet | Decide: build it, or change the words. |
+| 6 | **Background reconciler** | Users can go direct to chain and bypass the API; the cached list then goes stale. |
+| 7 | **Crypto unit tests** — Merkle, denylist, `age` round-trip | Silent bugs there are security bugs. |
+| 8 | **Break-even model** | Confirms whether $1 / $50 are the right numbers. |
+| 9 | **10 willingness-to-pay conversations** with people scammed on a Solana bounty | Do this before expanding scope, not after. |
+
+Not blocking, but do before launch: revive the `e2e/` scripts (they use a removed
+deliverable type and a deleted admin route), and drop the vestigial `moderators`
+table and its unused repo.
+
+The validator covers path traversal, control characters, denylists, and per-file
+plus total size caps. What it lacks is tests — see #7.
 
 ---
 
-## Planning Phase: Complete
+## 7. No-mod mode
 
-Everything from here forward is execution: validation conversations with target users, then building the V1 surface above. The features document is now the reference for what V1 is and what is deliberately deferred.
+An escrow the initiator chooses to run **without verification**. Lets deals close
+cheaply, and becomes the upsell on-ramp to moderation.
+
+```mermaid
+flowchart LR
+    A[Initiator opts out<br/>of moderation] --> B[Risk warning<br/>accepted]
+    B --> C[Committer accepts<br/>and submits]
+    C --> D[Auto-Pass + payout<br/>one transaction]
+    D --> E[Settled]
+```
+
+**Rules**
+
+- Initiator opts out at creation, behind a warning modal. The initiator carries
+  all the risk.
+- **No moderator fee** — nobody earned one.
+- **No verification fee** either — no check ran, so there is nothing to recover.
+  Protocol fee only.
+- Submission auto-passes **and settles in the same transaction** — one signature,
+  no "click release" step for a verdict that was never in doubt.
+- **The mode is visible to both parties** — the committer can see there is no
+  moderator. Only the initiator gets the warning; they chose it and carry the risk.
+- The deliverable is sealed to the **initiator alone** — no moderator will ever
+  open it, so none receives a copy. The initiator's key is therefore mandatory.
+
+**The trade-off, stated plainly:** this protects the committer completely (paid
+on submission) and exposes the initiator completely (may pay for junk). That is
+the right asymmetry for the bounty wedge, where the committer's fear is
+non-payment. Market it as what it is — *the initiator trusts you* — not as a
+cheaper version of a moderated deal.
+
+**How it's built**
+
+| Layer | |
+|---|---|
+| Program | `no_mod` on the escrow, carved from `reserved`. `submit` records the Pass itself. `release`'s moderator account is optional. Creation rejects a no-mod escrow that still pays a moderator, and a moderated one with no moderators. |
+| API | `noMod` on the create request; surcharge, count and verification fee all forced to 0 server-side. The submit transaction carries `submit` + `release` together, so it lands on `settled`. |
+| Web | Opt-out checkbox with a risk warning, fee panel drops the moderator row, and the contract page shows an amber banner to **both** parties. |
+
+The auto-pass is on-chain, not a backend job. The payout rides in the same
+transaction, so it's atomic: if the money can't move, the submission doesn't
+happen either.
+
+---
+
+## 8. Open questions
+
+- **Fee floor vs. break-even** — $1 is a guess until the model is written.
+- **Dispute handling** — manual review at V1 with a 48-business-hour target. No
+  on-chain dispute state and no timelock; a recorded verdict is immediately
+  executable.
+
+---
+
+## 9. After MVP
+
+### V1.5 — cheap, high trust-signal
+
+- ⬜ **Reputation** — on-chain completed-deal counts for both parties. Low
+  complexity, directly attacks cold-start trust, feeds mod weighting later.
+
+### V2 — decentralize moderation *(this is the real differentiator)*
+
+```mermaid
+flowchart TD
+    A[V2-core: decentralize moderation] --> B[Stake + slash]
+    A --> C[Random per-contract assignment]
+    A --> D[k-of-n consensus]
+    A --> E[Commit-reveal]
+    A --> F[Sybil resistance]
+```
+
+**Watch the incentive:** paying on any verdict removes pass-bias, but once mods
+are external and staked, *"fail everything for a guaranteed fee at near-zero
+compute"* becomes viable. Slashing has to target false-**Fail**, not only
+false-Pass.
+
+Everything below is expansion, not core — do it after the above:
+
+- 🔮 Human juror escalation tier (required before subjective work)
+- 🔮 Third-party moderator market
+- 🔮 Task decomposition — parent/child escrows, one committer per sub-task
+- 🔮 SDK / API for Superteam Earn, Layer3, Questbook, Dework
+- 🔮 Embedded wallets + fiat ramps (opens the Web2 market)
+- 🔮 Niche expansion: one-off dev contracts, then campaign/marketing work
+
+**Settled:** stake in **USDC**, not a token. A token adds speculation and
+securities surface and solves nothing USDC can't.
+
+### V3 — attested verdicts
+
+- 🔮 TEE remote attestation first; zkML is years out and very expensive.
+- **Honest limit:** a TEE proves *some* code ran in an enclave — not that a *good*
+  model made a *good* judgment. Realistically V3 is an attested *pipeline*.
+- **Therefore:** rank V2-core above V3. The economics deliver most of the honesty
+  guarantee at far lower complexity. V3 is a credibility capstone.
+
+### V4+ — set aside
+
+🚫 Marketplace / discovery · 🚫 yield on escrowed funds (a venue hack kills a trust
+product) · 🚫 native token
+
+---
+
+## 10. Monetization
+
+Keep the consumer % low — it's the adoption lever. Make margin elsewhere.
+
+| Rank | Stream | Why |
+|---|---|---|
+| 1 | **Team / grants subscriptions** | A DAO grants desk pays monthly for volume, analytics, priority SLA. Best near-term margin. |
+| 2 | **SDK licensing** | High-margin B2B that never touches the consumer fee. |
+| 3 | **Premium Helper AI** | Better criteria *reduce your dispute cost*. Incentive-aligned. |
+| 4 | **Mod-marketplace take-rate** (V2) | Scales with the network, not the base fee. |
+| 5 | Priority dispute review | Subsidises the labour cost directly. |
+| 6 | Fiat ramp spread (V2) | Standard fintech revenue. |
+
+Goal: drop the consumer fee toward ~1% and monetize the platform instead.
+
+---
+
+## 11. Decisions log
+
+Settled — don't relitigate without a reason.
+
+| Decision | Detail |
+|---|---|
+| Moderator is paid on **any** verdict | Pass *or* Fail. Paying only on Pass creates pass-bias. |
+| Protocol keeps only the verification fee on a Fail | Never profits from failure, never paid to pass. |
+| No settlement keypair | Mods sign with their own wallets via `desc_moderation`. |
+| Deliverable types are bundle-checkable | `mergeable`, `deployable`, `tests_pass`, `spec_met` — not "merged"/"deployed". |
+| Initiator is an encryption recipient | A Pass delivers the verified bytes, not a side-channel promise. |
+| Single mod verdict at V1 | Consensus is V2. |
+| No moderator selection at V1 | Random assignment is V2. Initiators never pick, ever. |
+| Deliverable types: one per contract | Multiple types is an off-chain change, deferred. |
+| AI comes last | Build every seam first, drop the model in at `runCheck`. |
+| No "trustless" language at V1 | The platform runs every mod. Decentralization is a V2 promise. |
+| USDC only | No native token before V4, if ever. |
+
+### The honest V1 trust model
+
+V1 is **"trust desc."** The platform runs the mods and holds their keys. The
+no-settlement-keypair design is real but ceremonial at this scale.
+
+`trust (V1) → stake & slash (V2) → proof (V3)`
+
+Say that plainly in external copy.

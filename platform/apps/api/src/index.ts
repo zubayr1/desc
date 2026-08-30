@@ -9,6 +9,7 @@ import { registerLinkRoutes } from "./routes/links";
 import { registerAdminRoutes } from "./routes/admin";
 import { registerConfigRoutes } from "./routes/config";
 import { humanizeError } from "./errors";
+import { startReconciler } from "./contracts/reconciler";
 
 const app = Fastify({ logger: true });
 
@@ -54,6 +55,15 @@ app.get("/health", async () => {
 async function start() {
   try {
     await app.listen({ port: env.PORT, host: "0.0.0.0" });
+
+    // Catch settlements and verdicts that never went through this api.
+    if (env.RECONCILE_INTERVAL_MS > 0) {
+      startReconciler({ intervalMs: env.RECONCILE_INTERVAL_MS, log: app.log });
+      app.log.info(
+        { intervalMs: env.RECONCILE_INTERVAL_MS },
+        "reconciler started"
+      );
+    }
   } catch (err) {
     app.log.error(err);
     process.exit(1);

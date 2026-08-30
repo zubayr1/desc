@@ -76,9 +76,19 @@ pub struct Escrow {
     /// Protocol fee, snapshotted at creation so a later Config change can't
     /// alter the agreed terms of an in-flight deal.
     pub protocol_fee: u64,
-    /// Total surcharge flowing to moderator operators.
+    /// What the moderators earn on this contract, in total.
+    ///
+    /// Priced PER MODERATOR, not as a pot to divide: every moderator runs the
+    /// whole check — decrypt, rebuild, judge every criterion — so each is paid a
+    /// full fee. A contract with `n` moderators costs the initiator `n ×` the
+    /// per-moderator rate, and the alternative (one fee split `n` ways) is
+    /// rejected: it would pay the fifth moderator a fifth as much for identical
+    /// work, and no staked outside operator would take the job.
+    ///
+    /// V1 runs a single moderator, so this is that one fee and `release` pays it
+    /// whole to `moderator`. Dividing it across a k-of-n set is V2 work.
     pub moderator_surcharge: u64,
-    /// Number of moderators, set by the protocol from contract value.
+    /// Number of moderators on this contract. Always 1 in V1 (0 when `no_mod`).
     pub moderator_count: u8,
 
     pub status: EscrowStatus,

@@ -39,34 +39,50 @@ export async function getContractByLink(
  * the fresh state. Fail-safe: any RPC error falls back to the cached columns, so
  * the list degrades but never errors.
  */
+/**
+ * Re-read the given rows from chain and write back anything that drifted.
+ * Returns the fresh state per row id so a caller can serve it immediately.
+ *
+ * Shared by the list route and the background reconciler — one definition of
+ * "what counts as drift" so the two can never disagree.
+ */
+export async function reconcileRows(
+  rows: ContractRow[]
+): Promise<{ fresh: Map<string, OnChainEscrow>; updated: number }> {
+  const fresh = new Map<string, OnChainEscrow>();
+  let updated = 0;
+
+  const inflight = rows.filter((r) => !TERMINAL.has(r.status as ContractStatus));
+  if (!inflight.length) return { fresh, updated };
+
+  const live = await readEscrows(inflight.map((r) => new PublicKey(r.escrowAddress)));
+  const writes: Promise<void>[] = [];
+  for (const r of inflight) {
+    const oc = live.get(r.escrowAddress);
+    if (!oc) continue; // not on-chain (yet) — keep cached
+    fresh.set(r.id, oc);
+    if (
+      oc.status !== r.status ||
+      oc.committer !== r.committer ||
+      oc.outcome !== r.outcome
+    ) {
+      writes.push(writeCache(r.id, oc));
+      updated++;
+    }
+  }
+  if (writes.length) await Promise.all(writes);
+  return { fresh, updated };
+}
+
 export async function listContracts(opts: {
   initiator?: string;
   status?: ContractStatus;
 }): Promise<Contract[]> {
   const rows = await getRows(opts);
-  const fresh = new Map<string, OnChainEscrow>();
+  let fresh = new Map<string, OnChainEscrow>();
 
   try {
-    const inflight = rows.filter((r) => !TERMINAL.has(r.status as ContractStatus));
-    if (inflight.length) {
-      const live = await readEscrows(
-        inflight.map((r) => new PublicKey(r.escrowAddress))
-      );
-      const writes: Promise<void>[] = [];
-      for (const r of inflight) {
-        const oc = live.get(r.escrowAddress);
-        if (!oc) continue; // not on-chain (yet) — keep cached
-        fresh.set(r.id, oc);
-        if (
-          oc.status !== r.status ||
-          oc.committer !== r.committer ||
-          oc.outcome !== r.outcome
-        ) {
-          writes.push(writeCache(r.id, oc));
-        }
-      }
-      if (writes.length) await Promise.all(writes);
-    }
+    ({ fresh } = await reconcileRows(rows));
   } catch {
     // RPC unreachable — fall through to the cached state below.
   }

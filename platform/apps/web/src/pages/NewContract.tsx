@@ -89,12 +89,22 @@ export function NewContract() {
 
   const belowMin = amountNum > 0 && amountNum < minAmount;
 
+  // The program rejects a deadline that is already past, and a bare date string
+  // resolves to midnight — so "today" is behind us by the time the wallet signs.
+  // Validate the exact value the request sends, and stop the picker offering a
+  // date that cannot work.
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minDeadline = tomorrow.toISOString().slice(0, 10);
+  const deadlineOk = deadline !== "" && new Date(deadline).getTime() > Date.now();
+  const deadlinePast = deadline !== "" && !deadlineOk;
+
   const validCriteria = criteria.map((c) => c.trim()).filter(Boolean);
   const valid =
     title.trim() &&
     brief.trim() &&
     amountNum >= minAmount &&
-    deadline &&
+    deadlineOk &&
     validCriteria.length > 0;
 
   const createMut = useMutation({
@@ -266,9 +276,15 @@ export function NewContract() {
             <input
               type="date"
               className="inp"
+              min={minDeadline}
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
             />
+            {deadlinePast && (
+              <p className="mt-1.5 text-xs text-amber-300">
+                Pick a future date — the escrow would be rejected on signing.
+              </p>
+            )}
           </FormField>
         </div>
 

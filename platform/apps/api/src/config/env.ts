@@ -4,6 +4,8 @@ import { z } from "zod";
 
 const schema = z.object({
   PORT: z.coerce.number().default(3000),
+  /** Background reconciler sweep interval, ms. 0 disables it. */
+  RECONCILE_INTERVAL_MS: z.coerce.number().default(30_000),
   RPC_URL: z.string().min(1).default("http://127.0.0.1:8899"),
   DATABASE_URL: z.string().min(1),
   /** Cold admin authority PUBKEY — seeds the Config PDA. No secret needed here;

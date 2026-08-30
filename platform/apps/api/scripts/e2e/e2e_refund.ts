@@ -23,6 +23,7 @@ import {
   mintTo,
   getAccount,
 } from "@solana/spl-token";
+import { deliverBundle, recordVerdict } from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -75,13 +76,13 @@ async function main() {
     initiator: initiator.publicKey.toBase58(),
     title: "Deal that will fail review",
     brief: "Committer submits, but the verdict is Fail.",
-    deliverableType: "merged_pr",
+    deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: "1000000000",
     moderatorCount: 3,
     moderatorSurcharge: "30000000",
     deadline: new Date(Date.now() + 3600_000).toISOString(),
-  })) as { id: string; unsignedTx: string };
+  })) as { id: string; escrowAddress: string; unsignedTx: string };
   const funded = (await signAndSubmit(
     created.unsignedTx,
     initiator,
@@ -94,16 +95,10 @@ async function main() {
   })) as { unsignedTx: string };
   await signAndSubmit(acceptPrep.unsignedTx, committer, `/links/${token}/accept/submit`);
 
-  const delPrep = (await postJson(`/links/${token}/deliverable/prepare`, {
-    payload: "https://github.com/acme/vesting/pull/43",
-  })) as { unsignedTx: string };
-  await signAndSubmit(delPrep.unsignedTx, committer, `/links/${token}/deliverable/submit`);
+  await deliverBundle(token, committer);
 
-  // verdict: fail
-  await postJson(`/admin/contracts/${created.id}/verdict`, {
-    outcome: "fail",
-    note: "Criteria not met.",
-  });
+  // verdict: fail — signed by the registered moderator
+  await recordVerdict(created.escrowAddress, "fail");
 
   // refund — initiator reclaims
   const refPrep = (await postJson(`/contracts/${created.id}/refund/prepare`, {})) as {

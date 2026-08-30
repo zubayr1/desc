@@ -8,7 +8,6 @@
  * Run: `pnpm e2e:submit`.
  */
 import "dotenv/config";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import {
@@ -19,6 +18,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import { deliverBundle, getJson } from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -69,7 +69,7 @@ async function main() {
     initiator: initiator.publicKey.toBase58(),
     title: "Implement token vesting program",
     brief: "Linear vesting with a cliff; merged PR.",
-    deliverableType: "merged_pr",
+    deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: "1000000000",
     moderatorCount: 3,
@@ -90,17 +90,11 @@ async function main() {
   await signAndSubmit(acceptPrep.unsignedTx, committer, `/links/${token}/accept/submit`);
 
   // submit deliverable
-  const payload = "https://github.com/acme/vesting/pull/42";
-  const expectedHash = createHash("sha256").update(payload).digest("hex");
-
-  const delPrep = (await postJson(`/links/${token}/deliverable/prepare`, {
-    payload,
-  })) as { unsignedTx: string };
-  const submitted = (await signAndSubmit(
-    delPrep.unsignedTx,
-    committer,
-    `/links/${token}/deliverable/submit`
-  )) as { status: string; deliverable: { payload: string; deliverableHash: string } | null };
+  const delivered = await deliverBundle(token, committer);
+  const submitted = (await getJson(`/contracts/${created.id}`)) as {
+    status: string;
+    deliverable: { deliverableHash: string } | null;
+  };
 
   console.log("after submit → status:", submitted.status);
   console.log("deliverable hash:", submitted.deliverable?.deliverableHash);
@@ -108,12 +102,10 @@ async function main() {
   if (submitted.status !== "submitted") {
     throw new Error("expected submitted, got " + submitted.status);
   }
-  if (submitted.deliverable?.payload !== payload) {
-    throw new Error("payload mismatch");
-  }
-  if (submitted.deliverable?.deliverableHash !== expectedHash) {
+  // the hash the chain anchored must equal the one the client computed locally
+  if (submitted.deliverable?.deliverableHash !== delivered.deliverableHash) {
     throw new Error(
-      `hash mismatch: ${submitted.deliverable?.deliverableHash} != ${expectedHash}`
+      `hash mismatch: ${submitted.deliverable?.deliverableHash} != ${delivered.deliverableHash}`
     );
   }
   console.log("\n✅ create → fund → accept → submit flow OK (hash verified)");

@@ -18,6 +18,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import { deliverBundle, recordVerdict, getJson } from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -68,13 +69,13 @@ async function main() {
     initiator: initiator.publicKey.toBase58(),
     title: "Implement token vesting program",
     brief: "Linear vesting with a cliff; merged PR.",
-    deliverableType: "merged_pr",
+    deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: "1000000000",
     moderatorCount: 3,
     moderatorSurcharge: "30000000",
     deadline: new Date(Date.now() + 3600_000).toISOString(),
-  })) as { id: string; unsignedTx: string };
+  })) as { id: string; escrowAddress: string; unsignedTx: string };
   const funded = (await signAndSubmit(
     created.unsignedTx,
     initiator,
@@ -87,16 +88,14 @@ async function main() {
   })) as { unsignedTx: string };
   await signAndSubmit(acceptPrep.unsignedTx, committer, `/links/${token}/accept/submit`);
 
-  const delPrep = (await postJson(`/links/${token}/deliverable/prepare`, {
-    payload: "https://github.com/acme/vesting/pull/42",
-  })) as { unsignedTx: string };
-  await signAndSubmit(delPrep.unsignedTx, committer, `/links/${token}/deliverable/submit`);
+  await deliverBundle(token, committer);
 
-  // record_verdict — admin/API-signed, no user wallet
-  const judged = (await postJson(`/admin/contracts/${created.id}/verdict`, {
-    outcome: "pass",
-    note: "Manual review: criteria met.",
-  })) as { status: string; outcome: string | null };
+  // the moderator signs its own verdict; the api holds no key that can
+  await recordVerdict(created.escrowAddress, "pass");
+  const judged = (await getJson(`/contracts/${created.id}`)) as {
+    status: string;
+    outcome: string | null;
+  };
 
   console.log("after verdict → status:", judged.status, "outcome:", judged.outcome);
 
@@ -105,12 +104,14 @@ async function main() {
     throw new Error("expected status to stay submitted, got " + judged.status);
   }
 
-  // sanity: appears in the admin queue
-  const queue = (await (await fetch(`${BASE}/admin/contracts`)).json()) as Array<{
-    id: string;
-  }>;
+  // sanity: appears in the read-only oversight list (bearer-gated)
+  const res = await fetch(`${BASE}/admin/contracts`, {
+    headers: { authorization: `Bearer ${process.env.ADMIN_TOKEN ?? ""}` },
+  });
+  if (!res.ok) throw new Error(`admin list failed: ${await res.text()}`);
+  const queue = (await res.json()) as Array<{ id: string }>;
   if (!queue.find((c) => c.id === created.id)) {
-    throw new Error("contract missing from admin queue");
+    throw new Error("contract missing from the admin list");
   }
 
   console.log("\n✅ create → fund → accept → submit → verdict flow OK");

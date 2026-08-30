@@ -75,7 +75,7 @@ async function main() {
     initiator: initiator.publicKey.toBase58(),
     title: "Throwaway deal to cancel",
     brief: "Will be cancelled before any committer accepts.",
-    deliverableType: "merged_pr",
+    deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "n/a" }],
     amount: "1000000000",
     moderatorCount: 3,

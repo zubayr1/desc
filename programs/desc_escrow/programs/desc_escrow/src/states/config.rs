@@ -25,12 +25,12 @@ pub struct Config {
     pub version: u8,
     /// Admin — may update this config. Also part of the PDA seed.
     pub authority: Pubkey,
-    /// Key authorized to call `release` / `refund` on an escrow.
+    /// Key authorized to record a verdict on an escrow.
     ///
-    /// V1: the platform backend key, acting on the off-chain aggregated verdict.
-    /// V2: swapped (via `update_config`) to a PDA of the `desc_moderation`
-    /// program, so on-chain moderator consensus settles escrows via CPI. The
-    /// escrow accounts never change — this indirection is the V1->V2 seam.
+    /// `bootstrap` points this at the `desc_moderation` verdict-authority PDA,
+    /// so a registered moderator settles by CPI and no platform keypair can.
+    /// It is a field rather than a seed so it stays rotatable — that is the
+    /// seam V2 uses to widen the pool from one moderator to a staked set.
     pub settlement_authority: Pubkey,
     /// Destination for the protocol fee.
     pub treasury: Pubkey,

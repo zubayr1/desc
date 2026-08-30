@@ -1,0 +1,606 @@
+<title>desc — Deal Insurance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* desc — pitch deck. Palette inherited from the product: near-black canvas,
+     violet→cyan accent, JetBrains Mono for on-chain data. Committed dark;
+     print flips to ink-on-white, one slide per page. */
+  :root{
+    --bg:#07070b;--panel:#0e0e16;--rule-1:#242430;--rule-2:#17171f;
+    --ink:#f0f0f7;--ink-2:#a6a6b8;--ink-3:#68687a;
+    --accent:#8b5cff;--accent-2:#36e0d3;
+    --pass:#38d39f;--warn:#f5b13d;--bad:#ff6b6b;--null:#6f6f80;
+    --disp:"Archivo",ui-sans-serif,system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    --pad:clamp(1.5rem,4vw,5.5rem);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--disp);
+       line-height:1.5;-webkit-font-smoothing:antialiased;
+       scroll-snap-type:y mandatory;overflow-y:scroll;height:100vh}
+  .rail{position:fixed;inset:0 auto 0 0;width:2px;background:var(--rule-2);z-index:50}
+  .rail i{position:absolute;inset:0 0 auto 0;height:0;display:block;
+          background:linear-gradient(180deg,var(--accent),var(--accent-2))}
+  .slide{scroll-snap-align:start;height:100vh;overflow:hidden;display:flex;flex-direction:column;
+         padding:clamp(1rem,3.5vh,2.75rem) var(--pad);padding-left:calc(var(--pad) + .75rem)}
+  .rh{display:flex;gap:.9rem;align-items:baseline;flex-wrap:wrap;font-family:var(--mono);
+      font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+      padding-bottom:.7rem;border-bottom:1px solid var(--rule-1)}
+  .rh b{color:var(--accent-2);font-weight:500}
+  .rh .sp{margin-left:auto}
+  .body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;
+        gap:min(clamp(1rem,2.5vw,2.25rem),3.2vh);max-width:80rem;width:100%;
+        padding:min(clamp(1rem,4vh,3rem),4vh) 0}
+  h1,h2{font-variation-settings:"wdth" 116;font-weight:800;line-height:1;
+        letter-spacing:-.025em;text-wrap:balance;margin:0}
+  h1{font-size:min(clamp(3rem,8.5vw,7.5rem),15vh)}
+  h2{font-size:min(clamp(2.1rem,5.2vw,4.4rem),9vh)}
+  .eyebrow{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.18em;
+           text-transform:uppercase;color:var(--accent-2)}
+  /* the two parties talking past each other — the reply is set back and
+     dimmer so the deadlock reads before a word is parsed */
+  .standoff{display:grid;gap:.35rem;font-size:min(clamp(1.7rem,4.2vw,3.6rem),7.5vh)}
+  .standoff .reply{justify-self:end;text-align:right;color:var(--ink-3);max-width:88%}
+  .wordmark{font-variation-settings:"wdth" 108;font-weight:800;letter-spacing:-.01em;
+            font-size:clamp(1.5rem,3vw,2.4rem);line-height:1;color:var(--accent-2);
+            margin-bottom:.35rem}
+  .say{font-size:min(clamp(1.05rem,1.7vw,1.45rem),2.7vh);color:var(--ink-2);max-width:46ch;
+       text-wrap:pretty;margin:0;line-height:1.45}
+  .say b{color:var(--ink);font-weight:600}
+  p{margin:0}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .dim{color:var(--ink-3)}
+  .src{font-family:var(--mono);font-size:.63rem;letter-spacing:.05em;color:var(--ink-3)}
+  .figs{display:grid;gap:1px;background:var(--rule-2);border:1px solid var(--rule-2);
+        grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))}
+  .fig{background:var(--bg);padding:min(clamp(1rem,2vw,1.6rem),2.6vh)}
+  .fig .n{font-variation-settings:"wdth" 110;font-weight:800;line-height:.95;letter-spacing:-.03em;
+          font-variant-numeric:tabular-nums;font-size:min(clamp(2.2rem,4.6vw,3.6rem),6.5vh)}
+  .fig .l{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;
+          color:var(--ink-3);margin-top:.6rem;line-height:1.4}
+  .n.acc{color:var(--accent-2)}.n.bad{color:var(--bad)}.n.ok{color:var(--pass)}
+  /* 12 figures across 6 columns = exactly two rows at every breakpoint */
+  .figs.dense{grid-template-columns:repeat(6,1fr)}
+  @media (max-width:1100px){.figs.dense{grid-template-columns:repeat(3,1fr)}}
+  @media (max-width:620px){.figs.dense{grid-template-columns:repeat(2,1fr)}}
+  .figs.dense .fig{padding:min(clamp(.6rem,1vw,.9rem),1.5vh)}
+  .figs.dense .n{font-size:min(clamp(1.3rem,2.2vw,1.85rem),3.6vh)}
+  .figs.dense .l{font-size:.6rem;margin-top:.35rem;letter-spacing:.06em}
+  .split{display:grid;gap:clamp(1.5rem,3vw,3.5rem);
+         grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));align-items:center}
+  .tw{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:min(clamp(.82rem,1vw,.96rem),1.9vh)}
+  th,td{text-align:left;padding:min(.62rem,1.1vh) .9rem min(.62rem,1.1vh) 0;border-bottom:1px solid var(--rule-2);white-space:nowrap}
+  th{font-family:var(--mono);font-size:.62rem;font-weight:500;letter-spacing:.1em;
+     text-transform:uppercase;color:var(--ink-3);border-bottom-color:var(--rule-1)}
+  td{color:var(--ink-2)}td:first-child{color:var(--ink);font-weight:600}
+  td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  tr.us td{color:var(--ink)}tr.us td:first-child{color:var(--accent-2)}
+  .ok{color:var(--pass)}.no{color:var(--bad)}.mid{color:var(--warn)}.nul{color:var(--null)}
+  .pull{border-left:2px solid var(--accent);padding:.1rem 0 .1rem 1.3rem;
+        font-variation-settings:"wdth" 108;font-weight:700;line-height:1.25;letter-spacing:-.015em;
+        font-size:clamp(1.25rem,2.2vw,1.9rem);max-width:26ch}
+  .pull em{font-style:normal;color:var(--accent-2)}
+  .steps{list-style:none;margin:0;padding:0;display:grid;gap:1px;background:var(--rule-2);
+         border:1px solid var(--rule-2);grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))}
+  .steps li{background:var(--panel);padding:min(1.1rem,2vh) 1.1rem}
+  .steps .k{font-family:var(--mono);font-size:.63rem;letter-spacing:.12em;color:var(--accent-2);
+            text-transform:uppercase;display:block;margin-bottom:.45rem}
+  .steps h3{font-variation-settings:"wdth" 108;font-weight:700;font-size:1.02rem;margin:0 0 .3rem;letter-spacing:-.01em}
+  .steps p{color:var(--ink-2);font-size:min(.88rem,1.85vh);line-height:1.4}
+  /* roadmap: a rail with stage stops, each column carrying that stage's scope.
+     Status marks are content — shipped / building / planned. */
+  .road{list-style:none;margin:0;padding:0;display:grid;gap:0 clamp(.9rem,2vw,2rem);
+        grid-template-columns:repeat(auto-fit,minmax(10.5rem,1fr))}
+  .road > li{border-top:1px solid var(--rule-1);padding-top:1.15rem;position:relative}
+  .road > li::before{content:"";position:absolute;top:-4.5px;left:0;width:9px;height:9px;
+                     border-radius:50%;background:var(--ink-3)}
+  .road > li.now::before{background:var(--accent-2);box-shadow:0 0 0 4px color-mix(in oklab,var(--accent-2) 22%,transparent)}
+  .road .stage{font-family:var(--mono);font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;
+               color:var(--ink-3);display:block;margin-bottom:.3rem}
+  .road li.now .stage{color:var(--accent-2)}
+  .road h3{font-variation-settings:"wdth" 110;font-weight:800;font-size:clamp(1.05rem,1.5vw,1.3rem);
+           margin:0 0 .8rem;letter-spacing:-.015em}
+  .road ul{list-style:none;margin:0;padding:0;display:grid;gap:.42rem}
+  .road ul li{font-size:min(.88rem,1.85vh);color:var(--ink-2);display:grid;
+              grid-template-columns:1.1rem 1fr;gap:.5rem;align-items:baseline;line-height:1.3}
+  .road ul li::before{font-family:var(--mono);font-size:.7rem;color:var(--ink-3)}
+  .road ul li.done{color:var(--ink)}
+  .road ul li.done::before{content:"\2713";color:var(--pass)}
+  .road ul li.wip::before{content:"\25CF";color:var(--accent)}
+  .road ul li.next::before{content:"\25CB"}
+  /* numbered quick-start steps + the strike-through list of what you don't need */
+  .quick{list-style:none;margin:0;padding:0;display:grid;gap:.55rem;counter-reset:q}
+  .quick li{counter-increment:q;display:grid;grid-template-columns:1.5rem 1fr;gap:.65rem;
+            align-items:baseline;font-size:min(clamp(1rem,1.35vw,1.18rem),2.4vh);color:var(--ink)}
+  .quick li::before{content:counter(q);font-family:var(--mono);font-size:.7rem;color:var(--accent-2)}
+  .nots{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.55rem 1.5rem}
+  .nots li{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;
+           color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--bad);
+           text-decoration-thickness:1.5px}
+  .quote{background:var(--panel);border:1px solid var(--rule-2);padding:min(1rem,1.7vh) 1.15rem}
+  .quote q{font-size:min(.95rem,1.95vh);color:var(--ink);quotes:none;line-height:1.4}
+  .quote .who{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;
+              color:var(--ink-3);margin-top:.6rem;display:block}
+  figure{margin:0}figure svg{width:100%;height:auto;display:block}
+  figcaption{font-family:var(--mono);font-size:.66rem;color:var(--ink-3);margin-top:.8rem;letter-spacing:.04em}
+  /* a caption carrying an argument, not a label — set in the body face and
+     sized to be read from the back of the room */
+  figcaption.big{font-family:var(--disp);font-size:min(clamp(1rem,1.5vw,1.3rem),2.5vh);
+                 letter-spacing:-.005em;color:var(--ink-2);margin-top:min(1.4rem,2.2vh);max-width:60ch}
+  figcaption.big b{color:var(--accent-2);font-weight:700}
+  :focus-visible{outline:2px solid var(--accent-2);outline-offset:3px}
+  @media print{
+    body{background:#fff;color:#111;height:auto;overflow:visible;scroll-snap-type:none}
+    .rail{display:none}
+    .slide{height:auto;min-height:auto;overflow:visible;page-break-after:always;padding:1.8rem}
+    .fig,.steps li,.quote{background:#fff}
+    h1,h2,.fig .n,td:first-child,.steps h3,.quote q{color:#111}
+    .say,td,.steps p{color:#333}.eyebrow,.rh b{color:#555}.pull{border-left-color:#111}
+  }
+</style>
+
+<div class="rail" aria-hidden="true"><i id="rf"></i></div>
+
+<!-- 01 -->
+<section class="slide">
+  <header class="rh"><span>01</span><b>desc</b><span class="sp">Seed · 2026</span></header>
+  <div class="body">
+    <p class="wordmark">DeSC</p>
+    <h1>You already<br>made the deal.</h1>
+    <p style="font-variation-settings:'wdth' 112;font-weight:700;letter-spacing:-.02em;
+              font-size:clamp(1.4rem,3vw,2.4rem)">Now make it safe.</p>
+  </div>
+</section>
+
+<!-- 02 -->
+<section class="slide">
+  <header class="rh"><span>02</span><b>The problem</b><span class="sp">A standoff, not a disagreement</span></header>
+  <div class="body">
+    <h2 class="standoff">
+      <span>“Send the money and I'll start.”</span>
+      <span class="reply">“Send the work and I'll pay.”</span>
+    </h2>
+    <figure>
+      <svg viewBox="0 0 1000 244" role="img" aria-label="The initiator holds the money and the committer holds the work, separated by a barrier of no trust. Either the initiator pays first and may get nothing back, or the committer delivers first and may never be paid. Both options require one party to take all the risk.">
+        <defs>
+          <marker id="ax" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="#ff6b6b"/>
+          </marker>
+        </defs>
+
+        <!-- the two parties -->
+        <rect x="0" y="46" width="246" height="168" fill="none" stroke="currentColor" opacity=".45"/>
+        <rect x="754" y="46" width="246" height="168" fill="none" stroke="currentColor" opacity=".45"/>
+        <g font-family="'JetBrains Mono',monospace" font-size="10.5" letter-spacing="1.3" fill="currentColor" opacity=".5">
+          <text x="20" y="78">INITIATOR</text><text x="774" y="78">COMMITTER</text>
+        </g>
+        <g font-family="Archivo,sans-serif" font-size="17" font-weight="700" fill="currentColor">
+          <text x="20" y="110">Has the money</text><text x="774" y="110">Has the work</text>
+        </g>
+        <g font-family="'JetBrains Mono',monospace" font-size="12" fill="#36e0d3" opacity=".8">
+          <text x="20" y="136">$1,000 USDC</text><text x="774" y="136">the deliverable</text>
+        </g>
+        <g font-family="Archivo,sans-serif" font-size="13" fill="currentColor" opacity=".5">
+          <text x="20" y="186">wants the work</text><text x="774" y="186">wants to be paid</text>
+        </g>
+
+        <!-- the barrier -->
+        <line x1="500" y1="8" x2="500" y2="236" stroke="#ff6b6b" stroke-width="1.5"
+              stroke-dasharray="6 7" opacity=".55"/>
+        <text x="500" y="232" text-anchor="middle" font-family="'JetBrains Mono',monospace"
+              font-size="10.5" letter-spacing="1.3" fill="#ff6b6b" opacity=".75">NO TRUST</text>
+
+        <!-- option 1: money crosses first -->
+        <line x1="258" y1="112" x2="742" y2="112" stroke="#ff6b6b" stroke-width="1.6"
+              marker-end="url(#ax)" opacity=".8"/>
+        <text x="270" y="102" font-family="Archivo,sans-serif" font-size="14" font-weight="700" fill="currentColor">Pay first</text>
+        <text x="352" y="102" font-family="Archivo,sans-serif" font-size="14" fill="#ff6b6b">— and the work may never arrive</text>
+
+        <!-- option 2: work crosses first -->
+        <line x1="742" y1="166" x2="258" y2="166" stroke="#ff6b6b" stroke-width="1.6"
+              marker-end="url(#ax)" opacity=".8"/>
+        <text x="270" y="156" font-family="Archivo,sans-serif" font-size="14" font-weight="700" fill="currentColor">Deliver first</text>
+        <text x="380" y="156" font-family="Archivo,sans-serif" font-size="14" fill="#ff6b6b">— and the money may never come</text>
+      </svg>
+      <figcaption>Whoever moves first carries all of the counterparty risk.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 03 -->
+<section class="slide">
+  <header class="rh"><span>03</span><b>The conflict of interest</b><span class="sp">Delivered ≠ done</span></header>
+  <div class="body">
+    <h2 class="standoff">
+      <span>“It's done. Pay me.”</span>
+      <span class="reply">“That's not what I asked for.”</span>
+    </h2>
+    <figure>
+      <svg viewBox="0 0 1000 214" role="img" aria-label="One deliverable sits in the middle. The initiator says it fails the brief; the committer says it meets the brief. Both are looking at the identical files, and there is no neutral party who can settle which reading is right.">
+        <defs>
+          <marker id="ay" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- the one artifact both are looking at -->
+        <rect x="368" y="52" width="264" height="96" fill="none" stroke="#36e0d3"/>
+        <text x="388" y="80" font-family="'JetBrains Mono',monospace" font-size="10.5"
+              letter-spacing="1.3" fill="#36e0d3" opacity=".75">THE DELIVERABLE</text>
+        <text x="388" y="108" font-family="Archivo,sans-serif" font-size="16" font-weight="700"
+              fill="currentColor">One set of files</text>
+        <text x="388" y="132" font-family="'JetBrains Mono',monospace" font-size="11"
+              fill="currentColor" opacity=".45">764dc5b1…f2d9a1</text>
+
+        <!-- two opposing readings of it -->
+        <text x="0" y="70" font-family="'JetBrains Mono',monospace" font-size="10.5"
+              letter-spacing="1.3" fill="currentColor" opacity=".5">INITIATOR</text>
+        <text x="0" y="100" font-family="Archivo,sans-serif" font-size="17" font-weight="700" fill="#ff6b6b">Fails the brief</text>
+        <text x="0" y="126" font-family="Archivo,sans-serif" font-size="13" fill="currentColor" opacity=".5">wants the refund</text>
+
+        <text x="1000" y="70" text-anchor="end" font-family="'JetBrains Mono',monospace" font-size="10.5"
+              letter-spacing="1.3" fill="currentColor" opacity=".5">COMMITTER</text>
+        <text x="1000" y="100" text-anchor="end" font-family="Archivo,sans-serif" font-size="17" font-weight="700" fill="#38d39f">Meets the brief</text>
+        <text x="1000" y="126" text-anchor="end" font-family="Archivo,sans-serif" font-size="13" fill="currentColor" opacity=".5">wants the payout</text>
+
+        <line x1="196" y1="100" x2="358" y2="100" stroke="#ff6b6b" stroke-width="1.6" marker-end="url(#ay)" opacity=".75"/>
+        <line x1="804" y1="100" x2="642" y2="100" stroke="#38d39f" stroke-width="1.6" marker-end="url(#ay)" opacity=".75"/>
+
+        <!-- and nobody to break the tie -->
+        <line x1="368" y1="170" x2="632" y2="170" stroke="currentColor" opacity=".2"/>
+        <text x="500" y="196" text-anchor="middle" font-family="Archivo,sans-serif" font-size="15"
+              font-weight="700" fill="#ff6b6b" opacity=".85">Nobody neutral has read the files.</text>
+      </svg>
+      <figcaption>Escrow solves payment sequencing. It does not solve subjective acceptance.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 04 -->
+<section class="slide">
+  <header class="rh"><span>04</span><b>The evidence</b><span class="sp">The payer is the judge</span></header>
+  <div class="body">
+    <h2>Everyone built the vault.<br>Almost nobody built a judge.</h2>
+    <div class="split" style="align-items:start">
+      <div style="display:grid;gap:.75rem">
+        <div class="quote"><q>Clients alone approve or reject submissions.</q><span class="who">Gibwork — terms of service</span></div>
+        <div class="quote"><q>Paid out upon the sponsor's authorization.</q><span class="who">Superteam Earn</span></div>
+        <div class="quote"><q>A 14-day negotiation period, or contact a third-party arbitrator.</q><span class="who">Escrow.com — dispute process</span></div>
+        <div class="quote"><q>Parties are expected to resolve disputes between themselves.</q><span class="who">Bountycaster</span></div>
+      </div>
+      <div style="display:grid;gap:1.2rem">
+        <p class="say">Escrow without a judge only protects the person holding the money. The party who benefits from a “fail” is the one who declares it.</p>
+        <div class="figs" style="grid-template-columns:1fr 1fr">
+          <div class="fig"><div class="n bad">$3.53M</div><div class="l">Recovered under NYC's freelance law &mdash; 4,832 complaints since 2017</div></div>
+          <div class="fig"><div class="n bad">~1,000</div><div class="l">Kleros disputes, all time &mdash; human arbitration stays small</div></div>
+        </div>
+      </div>
+    </div>
+    <p class="say" style="max-width:66ch">Where a judge exists at all it is a <b>human one you pay for</b> &mdash; priced for contracts far larger than a bounty.</p>
+    <p class="src">Platform terms of service &middot; NYC DCWP, 2017&ndash;2026 &middot; Kleros</p>
+  </div>
+</section>
+
+<!-- 05 -->
+<section class="slide">
+  <header class="rh"><span>05</span><b>How it works</b><span class="sp">One link, no signup</span></header>
+  <div class="body">
+    <h2>Escrow that<br>reads the work</h2>
+    <figure>
+      <svg viewBox="0 0 1000 158" role="img" aria-label="Five steps: the initiator sets criteria and funds a USDC escrow, sends one link, the committer accepts, the committer submits a sealed folder, and an AI moderator judges it — paying the committer on a pass or refunding the initiator on a fail. A track underneath shows the money sitting in the escrow throughout.">
+        <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+        <g fill="none" stroke="currentColor" stroke-width="1" opacity=".3">
+          <rect x="2" y="18" width="176" height="50"/><rect x="222" y="18" width="176" height="50"/><rect x="442" y="18" width="176" height="50"/>
+        </g>
+        <rect x="662" y="18" width="176" height="50" fill="none" stroke="#8b5cff"/>
+        <g font-family="Archivo,sans-serif" font-size="13.5" fill="currentColor">
+          <text x="16" y="40">Initiator sets criteria</text><text x="16" y="59" opacity=".55">funds USDC escrow</text>
+          <text x="236" y="40">Committer accepts</text><text x="236" y="59" opacity=".55">one link, no account</text>
+          <text x="456" y="40">Sealed delivery</text><text x="456" y="59" opacity=".55">encrypted in-browser</text>
+          <text x="676" y="40" fill="#8b5cff">AI moderator</text><text x="676" y="59" fill="#8b5cff" opacity=".7">judges the work</text>
+          <text x="884" y="40" fill="#38d39f">Pass → paid</text><text x="884" y="59" fill="#a6a6b8">Fail → refunded</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.2" marker-end="url(#a1)" opacity=".5">
+          <line x1="182" y1="43" x2="216" y2="43"/><line x1="402" y1="43" x2="436" y2="43"/><line x1="622" y1="43" x2="656" y2="43"/>
+        </g>
+        <line x1="842" y1="43" x2="876" y2="43" stroke="#8b5cff" stroke-width="1.2" marker-end="url(#a1)"/>
+        <line x1="2" y1="96" x2="998" y2="96" stroke="currentColor" opacity=".18"/>
+        <text x="2" y="118" font-family="'JetBrains Mono',monospace" font-size="10.5" fill="currentColor" opacity=".4">MONEY:  initiator</text>
+        <text x="222" y="118" font-family="'JetBrains Mono',monospace" font-size="10.5" fill="#36e0d3" opacity=".65">escrow ──────────────────────────────</text>
+        <text x="884" y="118" font-family="'JetBrains Mono',monospace" font-size="10.5" fill="currentColor" opacity=".4">out</text>
+      </svg>
+      <figcaption class="big"><b>The initiator brings the committer with them.</b> One signup is a whole deal, not half a marketplace — so there is no supply side to go and find.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 06 -->
+<section class="slide">
+  <header class="rh"><span>06</span><b>The AI moderator</b><span class="sp">This is the company</span></header>
+  <div class="body">
+    <h2>A machine that reads<br>the work and rules on it</h2>
+    <figure>
+      <svg viewBox="0 0 1000 196" role="img" aria-label="The moderator takes the acceptance criteria and the decrypted files, rebuilds the bundle and matches the on-chain hash, runs the model against each criterion, emits a pass or fail with written reasoning, and signs the verdict from its own wallet. A hash mismatch makes it refuse to judge.">
+        <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+        <g fill="none" stroke="currentColor" stroke-width="1" opacity=".3">
+          <rect x="2" y="16" width="188" height="40"/><rect x="2" y="80" width="188" height="40"/>
+        </g>
+        <rect x="286" y="16" width="336" height="148" fill="none" stroke="#8b5cff"/>
+        <rect x="714" y="60" width="284" height="60" fill="none" stroke="#38d39f"/>
+        <g font-family="Archivo,sans-serif" font-size="13.5" fill="currentColor">
+          <text x="16" y="41">Acceptance criteria</text><text x="16" y="105">Decrypted files</text>
+          <text x="728" y="86" fill="#38d39f">Verdict + reasoning</text>
+          <text x="728" y="105" fill="#38d39f" opacity=".7">signed by its own wallet</text>
+        </g>
+        <text x="306" y="44" font-family="Archivo,sans-serif" font-size="15" font-weight="700" fill="#8b5cff">Moderator</text>
+        <g font-family="'JetBrains Mono',monospace" font-size="11" fill="currentColor" opacity=".72">
+          <text x="306" y="74">1 · rebuild bundle, match on-chain hash</text>
+          <text x="306" y="98">2 · run the model against each criterion</text>
+          <text x="306" y="122">3 · emit pass / fail + written reasoning</text>
+          <text x="306" y="146">4 · sign — no platform key involved</text>
+        </g>
+        <g stroke="currentColor" stroke-width="1.2" marker-end="url(#a2)" opacity=".5">
+          <path d="M194 36 L242 36 L242 82 L280 82" fill="none"/>
+          <path d="M194 100 L242 100 L242 98 L280 98" fill="none"/>
+        </g>
+        <line x1="626" y1="90" x2="708" y2="90" stroke="#38d39f" stroke-width="1.2" marker-end="url(#a2)"/>
+        <text x="286" y="186" font-family="'JetBrains Mono',monospace" font-size="10.5" fill="#ff6b6b" opacity=".65">hash mismatch → refuses to judge</text>
+      </svg>
+      <figcaption>Moderators are on-chain accounts with their own wallets. desc holds no settlement key and cannot overrule a verdict.</figcaption>
+    </figure>
+    <p class="say" style="max-width:64ch">Every rival asks a model <b>&ldquo;is this good?&rdquo;</b> We make the deal checkable first, then check it.</p>
+
+  </div>
+</section>
+
+<!-- 07 -->
+<section class="slide">
+  <header class="rh"><span>07</span><b>Decentralised moderation</b><span class="sp">The plumbing is already plural</span></header>
+  <div class="body">
+    <h2>One judge is a<br>single point of trust</h2>
+    <figure>
+      <svg viewBox="0 0 1000 178" role="img" aria-label="The sealed bundle is encrypted to every registered moderator at once. Two are run by desc today; the registry also admits third-party operators. Each signs independently, and k-of-n must agree before money moves.">
+        <defs><marker id="a2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+
+        <rect x="0" y="62" width="176" height="52" fill="none" stroke="currentColor" opacity=".4"/>
+        <text x="16" y="86" font-family="Archivo,sans-serif" font-size="13" fill="currentColor">Sealed bundle</text>
+        <text x="16" y="104" font-family="'JetBrains Mono',monospace" font-size="10" fill="currentColor" opacity=".45">sealed to all at once</text>
+
+        <g fill="none" stroke="currentColor" opacity=".4">
+          <rect x="252" y="8" width="300" height="44"/><rect x="252" y="66" width="300" height="44"/>
+        </g>
+        <rect x="252" y="124" width="300" height="44" fill="none" stroke="#36e0d3" stroke-dasharray="5 5"/>
+        <g font-family="Archivo,sans-serif" font-size="13" fill="currentColor">
+          <text x="268" y="36">Moderator 1 <tspan opacity=".5">&#8212; desc</tspan></text>
+          <text x="268" y="94">Moderator 2 <tspan opacity=".5">&#8212; desc</tspan></text>
+          <text x="268" y="152" fill="#36e0d3">Moderator 3 <tspan opacity=".75">&#8212; third party, staked</tspan></text>
+        </g>
+
+        <g stroke="currentColor" stroke-width="1.1" fill="none" opacity=".45" marker-end="url(#a2b)">
+          <path d="M180 88 L214 88 L214 30 L246 30"/>
+          <path d="M180 88 L214 88 L246 88"/>
+          <path d="M180 88 L214 88 L214 146 L246 146"/>
+        </g>
+        <g stroke="currentColor" stroke-width="1.1" opacity=".45">
+          <line x1="556" y1="30" x2="596" y2="30"/><line x1="556" y1="88" x2="596" y2="88"/>
+          <line x1="556" y1="146" x2="596" y2="146"/><line x1="596" y1="30" x2="596" y2="146"/>
+        </g>
+        <line x1="596" y1="88" x2="642" y2="88" stroke="#8b5cff" stroke-width="1.4" marker-end="url(#a2b)"/>
+
+        <rect x="648" y="62" width="352" height="52" fill="none" stroke="#8b5cff"/>
+        <text x="666" y="86" font-family="Archivo,sans-serif" font-size="13" font-weight="700" fill="#8b5cff">k-of-n must agree</text>
+        <text x="666" y="104" font-family="'JetBrains Mono',monospace" font-size="10" fill="#8b5cff" opacity=".7">sealed until all are in &#8212; no copying</text>
+      </svg>
+      <figcaption class="big">The registry takes <b>any number of moderators</b>, and the work is sealed to all of them at once. Today we run them and one verdict settles. Opening the pool to staked outsiders is the V2 step.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 08 -->
+<section class="slide">
+  <header class="rh"><span>08</span><b>Roadmap</b><span class="sp">Shipped · planned</span></header>
+  <div class="body">
+    <h2>From one verdict<br>to a network</h2>
+    <ol class="road">
+      <li class="now">
+        <span class="stage">V1 · now</span>
+        <h3>Prove the verdict</h3>
+        <ul>
+          <li class="done">Escrow &amp; settlement</li>
+          <li class="done">Sealed delivery</li>
+          <li class="done">Moderator registry</li>
+          <li class="done">AI moderator</li>
+        </ul>
+      </li>
+      <li>
+        <span class="stage">V1.5</span>
+        <h3>Portable trust</h3>
+        <ul>
+          <li class="next">On-chain reputation</li>
+        </ul>
+      </li>
+      <li>
+        <span class="stage">V2</span>
+        <h3>Remove ourselves</h3>
+        <ul>
+          <li class="next">Staked moderators</li>
+          <li class="next">Random assignment</li>
+          <li class="next">k-of-n consensus</li>
+          <li class="next">Atomic tasks</li>
+          <li class="next">SDK &middot; fiat ramps</li>
+        </ul>
+      </li>
+      <li>
+        <span class="stage">V3</span>
+        <h3>Prove the machine</h3>
+        <ul>
+          <li class="next">TEE attestation</li>
+        </ul>
+      </li>
+      <li>
+        <span class="stage">V4</span>
+        <h3>Open the market</h3>
+        <ul>
+          <li class="next">Marketplace &amp; discovery</li>
+        </ul>
+      </li>
+    </ol>
+    <div style="display:grid;gap:.5rem">
+      <p class="say" style="max-width:62ch"><b>Atomic tasks:</b> private, parallel, easier to judge.</p>
+      <p class="say" style="max-width:62ch"><b>SDK:</b> third-party apps embed verification instead of building it.</p>
+      <p class="say" style="max-width:62ch"><b>TEE attestation:</b> proof the model really ran — stops a lazy verdict rather than punishing it later.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 09 -->
+<section class="slide">
+  <header class="rh"><span>09</span><b>Pricing</b><span class="sp">Buy as much proof as you want</span></header>
+  <div class="body">
+    <h2>You choose<br>how many judges</h2>
+    <div class="split" style="align-items:start">
+      <div class="tw">
+        <table>
+          <thead><tr><th>Moderators</th><th class="num">Cost</th><th>What you get</th></tr></thead>
+          <tbody>
+            <tr><td class="num">0</td><td class="num">2%</td><td>Escrow only. You trust them.</td></tr>
+            <tr class="us"><td class="num">1</td><td class="num">3%</td><td>One AI verdict.</td></tr>
+            <tr><td class="num">n</td><td class="num">2% + n%</td><td>k-of-n must agree.</td></tr>
+          </tbody>
+        </table>
+        <p class="src" style="margin-top:.7rem">Protocol 2%, floored at $1, capped at 10% &middot; 1% per moderator &middot; smallest contract $50 &middot; the floor can never exceed the minimum</p>
+        <p class="say" style="font-size:1rem;margin-top:.9rem">Every bound is enforced <b>in the program</b> — not in a pricing page we can quietly edit.</p>
+      </div>
+      <div style="display:grid;gap:1.3rem">
+        <div class="tw">
+          <table>
+            <thead><tr><th>Outcome</th><th>Protocol keeps</th><th>Moderators keep</th></tr></thead>
+            <tbody>
+              <tr><td class="ok">Pass</td><td>the fee</td><td>their fee</td></tr>
+              <tr><td class="mid">Fail</td><td class="num">$1</td><td>their fee</td></tr>
+              <tr><td class="nul">No delivery</td><td>nothing</td><td>nothing</td></tr>
+              <tr><td class="nul">Cancelled</td><td>nothing</td><td>nothing</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="say">A fee that lands only on <b>pass</b> pays us to approve work. So we charge for the check, not the answer.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <header class="rh"><span>10</span><b>Competition</b><span class="sp">Who gets to decide</span></header>
+  <div class="body">
+    <h2>Everyone holds money.<br>Nobody judges the work.</h2>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Who</th><th class="num">Cost on $500</th><th>Who decides</th><th>Platform stays blind</th><th>Verdict bound to the bytes</th></tr></thead>
+        <tbody>
+          <tr><td>Upwork</td><td class="num">Up to ~20%</td><td class="no">The payer</td><td class="no">&mdash;</td><td class="no">&mdash;</td></tr>
+          <tr><td>Fiverr</td><td class="num">20% + 5.5%</td><td class="no">The payer</td><td class="no">&mdash;</td><td class="no">&mdash;</td></tr>
+          <tr><td>Escrow.com</td><td class="num">10% <span class="dim">on $500</span></td><td class="no">An arbitrator you pay for</td><td class="no">&mdash;</td><td class="no">&mdash;</td></tr>
+          <tr><td>Superteam &middot; Gibwork</td><td class="num">0&ndash;low%</td><td class="no">Sponsor / client approval</td><td class="no">&mdash;</td><td class="no">&mdash;</td></tr>
+          <tr><td>Kleros</td><td class="num">Hundreds per dispute</td><td class="mid">Staked human jurors</td><td class="no">&mdash;</td><td class="no">&mdash;</td></tr>
+          <tr><td>Abba Baba</td><td class="num">2% non-refundable</td><td class="mid">One AI, one operator</td><td class="no">&mdash;</td><td class="mid">Hash only</td></tr>
+          <tr class="us"><td>desc</td><td class="num">3%</td><td class="ok">Staked AI moderators, k-of-n</td><td class="ok">Yes</td><td class="ok">Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="split" style="align-items:start">
+      <p class="say">Human arbitration adds cost and coordination out of all proportion to a small bounty. <b>We stake the machines instead.</b></p>
+      <p class="say">Cascrow votes five models. All five belong to one company. <b>Five opinions from one owner is not decentralisation.</b></p>
+    </div>
+  </div>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <header class="rh"><span>11</span><b>Market</b><span class="sp">Sourced &middot; snapshot dated</span></header>
+  <div class="body">
+    <h2>The money already moves.<br>Unprotected.</h2>
+    <div class="figs dense">
+      <div class="fig"><div class="n acc">$15.7M</div><div class="l">Paid on Superteam Earn*</div></div>
+      <div class="fig"><div class="n acc">3,112</div><div class="l">Opportunities listed</div></div>
+      <div class="fig"><div class="n acc">211k</div><div class="l">Earners &middot; 2,670 sponsors</div></div>
+      <div class="fig"><div class="n">17k+</div><div class="l">Active Solana developers</div></div>
+      <div class="fig"><div class="n ok">$110M</div><div class="l">Paid to security researchers &middot; Immunefi</div></div>
+      <div class="fig"><div class="n">$450k+</div><div class="l">One of 25+ chapters, 2025</div></div>
+      <div class="fig"><div class="n">$4.0B</div><div class="l">Upwork FY2025 volume &middot; 18.7% take</div></div>
+      <div class="fig"><div class="n bad">$55M</div><div class="l">Lost to crypto non-payment</div></div>
+      <div class="fig"><div class="n bad">35%</div><div class="l">Freelancers paid late &middot; &pound;5,230 owed</div></div>
+      <div class="fig"><div class="n ok">$162M</div><div class="l">Bounties still unclaimed</div></div>
+      <div class="fig"><div class="n">$5,052</div><div class="l">Average per Solana listing</div></div>
+      <div class="fig"><div class="n">$788M</div><div class="l">Upwork revenue &mdash; no neutral adjudication</div></div>
+    </div>
+    <p class="say" style="max-width:66ch">Every bounty board is a <b>distribution channel</b>, not a competitor. None of them verify anything.</p>
+    <p class="src">*Superteam Earn stats API, snapshot 29 Aug 2026 &middot; Superteam Nigeria 2025 report &middot; Electric Capital &middot; Upwork FY2025 10-K &middot; FBI IC3 (crypto-nexus) &middot; IPSE &middot; Immunefi</p>
+  </div>
+</section>
+
+<!-- 12 -->
+<section class="slide">
+  <header class="rh"><span>12</span><b>V2</b><span class="sp">The differentiator</span></header>
+  <div class="body">
+    <p class="eyebrow">Company &rarr; protocol</p>
+    <h2>Take ourselves<br>out of the loop</h2>
+    <ul class="steps">
+      <li><span class="k">Stake</span><h3>Skin in the game</h3><p>Outsiders post USDC. Lie, and it&rsquo;s slashed.</p></li>
+      <li><span class="k">Assign</span><h3>Nobody picks their judge</h3><p>The protocol assigns, at random.</p></li>
+      <li><span class="k">Consensus</span><h3>Not one opinion</h3><p>Models must agree before money moves.</p></li>
+      <li><span class="k">Commit–reveal</span><h3>No copying homework</h3><p>Sealed until every verdict is in.</p></li>
+    </ul>
+  </div>
+</section>
+
+<!-- 13 -->
+<section class="slide">
+  <header class="rh"><span>13</span><b>Day one</b><span class="sp">Zero onboarding</span></header>
+  <div class="body">
+    <h2>From a DM to escrowed<br>in two minutes</h2>
+    <div class="split" style="align-items:start">
+      <div style="display:grid;gap:1rem">
+        <p class="eyebrow">Initiator &middot; ~2 min</p>
+        <ol class="quick">
+          <li>Connect a wallet</li>
+          <li>Write the brief and criteria</li>
+          <li>Fund the escrow</li>
+          <li>Send the link</li>
+        </ol>
+      </div>
+      <div style="display:grid;gap:1rem">
+        <p class="eyebrow">Committer &middot; ~30 sec</p>
+        <ol class="quick">
+          <li>Open the link</li>
+          <li>Connect and accept</li>
+        </ol>
+        <p class="say" style="font-size:1.05rem"><b>No account. Ever.</b></p>
+      </div>
+    </div>
+    <p class="say" style="max-width:60ch">It works inside the conversation where the deal already happened.</p>
+  </div>
+</section>
+
+<script>
+(function(){
+  var s=[].slice.call(document.querySelectorAll('.slide')),f=document.getElementById('rf');
+  function p(){var m=document.body.scrollHeight-innerHeight;f.style.height=(m>0?scrollY/m*100:0)+'%'}
+  addEventListener('scroll',p,{passive:true});addEventListener('resize',p);p();
+  function cur(){var b=0,d=1/0;s.forEach(function(x,i){var v=Math.abs(x.getBoundingClientRect().top);if(v<d){d=v;b=i}});return b}
+  addEventListener('keydown',function(e){
+    var t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))return;
+    var i=cur(),n=null;
+    if(e.key==='ArrowRight'||e.key==='PageDown')n=i+1;
+    else if(e.key==='ArrowLeft'||e.key==='PageUp')n=i-1;
+    else if(e.key==='Home')n=0;else if(e.key==='End')n=s.length-1;
+    if(n===null)return;n=Math.max(0,Math.min(s.length-1,n));e.preventDefault();
+    s[n].scrollIntoView({behavior:'smooth',block:'start'});
+  });
+})();
+</script>

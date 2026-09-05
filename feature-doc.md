@@ -241,7 +241,8 @@ happen either.
 
 ```mermaid
 flowchart TD
-    A[V2-core: decentralize moderation] --> B[Stake + slash]
+    A[V2-core: decentralize moderation] --> G[Moderator channel]
+    A --> B[Stake + slash]
     A --> C[Random per-contract assignment]
     A --> D[k-of-n consensus]
     A --> E[Commit-reveal]
@@ -252,6 +253,19 @@ flowchart TD
 are external and staked, *"fail everything for a guaranteed fee at near-zero
 compute"* becomes viable. Slashing has to target false-**Fail**, not only
 false-Pass.
+
+**Moderator channel — needed before the first external mod.** Today `mod-run`
+queries the database directly, so a third-party moderator would need our DB
+credentials. It has to become a small public API:
+
+- `GET /moderation/queue` → escrow address, criteria, deliverable hash
+- `GET /moderation/:id/bundle` → the ciphertext, still sealed to that mod's key
+
+The mod decrypts locally, judges, and signs `submit_verdict` itself — the
+platform sees no plaintext and no verdict, so it stays a queue and a blob store.
+Auth is a wallet signature checked against `moderatorPda`; no API keys. `mod-run`
+becomes a client of it, which is also the test: if our own moderator needs
+nothing private, nobody's does.
 
 Everything below is expansion, not core — do it after the above:
 

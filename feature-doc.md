@@ -258,8 +258,14 @@ false-Pass.
 queries the database directly, so a third-party moderator would need our DB
 credentials. It has to become a small public API:
 
-- `GET /moderation/queue` → escrow address, criteria, deliverable hash
+- `GET /moderation/queue` → **only the contracts assigned to the calling mod**;
+  escrow address, criteria, deliverable hash
 - `GET /moderation/:id/bundle` → the ciphertext, still sealed to that mod's key
+
+The queue is scoped per moderator, not global: once assignment is random a mod
+is on some contracts and not others, and handing it work it was not picked for
+would let it judge anything it liked. Scoping is what makes assignment mean
+something.
 
 The mod decrypts locally, judges, and signs `submit_verdict` itself — the
 platform sees no plaintext and no verdict, so it stays a queue and a blob store.

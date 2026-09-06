@@ -28,7 +28,8 @@
     "deliverable-decrypt": "tsx scripts/deliverable-decrypt.ts",
     "db:push": "drizzle-kit push",
     "claude-check": "tsx scripts/claude-check.ts",
-    "test:judge": "tsx scripts/judge-check.ts"
+    "test:judge": "tsx scripts/judge-check.ts",
+    "mod-watch": "tsx scripts/mod-watch.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

@@ -206,6 +206,23 @@ pnpm moderation-init                  # creates ModerationConfig (the PDA bootst
 pnpm moderator-register "Mod A"       # provision + fund + register on-chain
 ```
 
+> **Register the moderator BEFORE any deliverable is uploaded.** The committer's
+> browser seals the bundle to whichever moderators are active at upload time. A
+> mod registered afterwards holds no key that can open it, and fails at decrypt
+> rather than telling you it was late.
+
+**C) run the moderator — a second terminal, same package:**
+```bash
+DESC_JUDGE=claude pnpm mod-watch      # polls for submitted contracts, AI judges each
+```
+Leave it running while you test. `--once` does a single sweep and exits; drop
+`DESC_JUDGE=claude` and it expects you to settle contracts by hand instead.
+
+To judge one specific contract without the watcher:
+```bash
+DESC_JUDGE=claude pnpm mod-run <contractId|linkToken>
+```
+
 No repoint step — `bootstrap` already set the escrow's `settlement_authority` to this
 program's verdict PDA. Verdicts flow **only** through the mod, recorded with `mod-run`
 (next section). To rotate the authority manually: `update-config --settlement <PDA>`.

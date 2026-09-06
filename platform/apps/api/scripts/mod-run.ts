@@ -55,13 +55,23 @@ for (let i = 0; i < args.length; i++) {
 const ref = positional[0];
 const outcome = positional[1] as Outcome | undefined;
 
-if (!ref || (outcome !== "pass" && outcome !== "fail")) {
+// With DESC_JUDGE=claude the AI decides, so demanding a pass/fail here would be
+// worse than pointless: you would type one verdict and a different one could be
+// submitted, with nothing on screen saying which was used.
+const aiJudge = process.env.DESC_JUDGE === "claude";
+const hasOutcome = outcome === "pass" || outcome === "fail";
+
+if (!ref || (!aiJudge && !hasOutcome)) {
   console.error(
-    'usage: mod-run <contractId|linkToken> <pass|fail> [--mod <slug>] [--note "..."]'
+    'usage: mod-run <contractId|linkToken> <pass|fail> [--mod <slug>] [--note "..."]\n' +
+      "       DESC_JUDGE=claude mod-run <contractId|linkToken> [--mod <slug>]   (AI decides)"
   );
   process.exit(1);
 }
-const verdictOutcome: Outcome = outcome; // narrowed by the guard above
+if (aiJudge && (hasOutcome || note)) {
+  console.warn("! DESC_JUDGE=claude — ignoring the outcome/note you passed; the AI decides.");
+}
+const manual = hasOutcome ? { outcome: outcome as Outcome, note } : undefined;
 
 function resolveSlug(): string {
   if (slug) return slug;
@@ -112,9 +122,23 @@ async function main() {
   const opened = await openAndVerify({ ciphertext, identity, expectedHash: deliverableHash });
   console.log(`open+verify: ${opened.files.length} files, hash ✓ matches chain`);
 
-  // 6. runCheck (V1 stub: the operator's manual outcome)
+  // 6. runCheck — the judge behind it is chosen by DESC_JUDGE. If it cannot
+  //    reach a trustworthy answer it THROWS, which reaches the top-level catch
+  //    and exits without submitting anything. That is deliberate: no verdict
+  //    leaves the escrow to time out and refund, whereas a Pass we invented
+  //    would release funds for a deliverable nobody checked.
   const criteria = (row.acceptanceCriteria as AcceptanceCriterion[] | null) ?? [];
-  const result = await runCheck(criteria, opened.files, { outcome: verdictOutcome, note });
+  const result = await runCheck(criteria, opened.files, manual);
+  console.log(`judge:  ${result.judge} → ${result.outcome}`);
+  for (const c of result.criteria) {
+    console.log(`  [${c.met ? "met" : "NOT met"}] ${c.description} — ${c.reason}`);
+  }
+  if (result.usage.costUsd > 0) {
+    console.log(
+      `cost:   $${result.usage.costUsd.toFixed(4)} ` +
+        `(${result.usage.inputTokens} in / ${result.usage.outputTokens} out)`
+    );
+  }
 
   // verdict_hash embeds the deliverable hash → (exact artifact, verdict on it)
   const verdictHash = createHash("sha256")

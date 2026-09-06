@@ -26,9 +26,13 @@
     "moderator-register": "tsx scripts/moderator-register.ts",
     "mod-run": "tsx scripts/mod-run.ts",
     "deliverable-decrypt": "tsx scripts/deliverable-decrypt.ts",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "claude-check": "tsx scripts/claude-check.ts",
+    "test:judge": "tsx scripts/judge-check.ts",
+    "mod-watch": "tsx scripts/mod-watch.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
     "@coral-xyz/anchor": "^0.31.1",
     "@fastify/cors": "^11.2.0",
     "@fastify/rate-limit": "^10.3.0",
@@ -39,7 +43,7 @@
     "drizzle-orm": "^0.38.3",
     "fastify": "^5.2.1",
     "pg": "^8.13.1",
-    "zod": "^3.24.1"
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.3",

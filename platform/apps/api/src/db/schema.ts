@@ -11,6 +11,12 @@ import {
 import type { AcceptanceCriterion, ContractStatus, Outcome } from "@repo/shared";
 
 /**
+ * Off-chain moderation progress — see the `moderationState` column for the
+ * state machine. Not an on-chain concept.
+ */
+export type ModerationState = "in_progress" | "done" | "failed";
+
+/**
  * Off-chain contract metadata. The chain is the source of truth for status,
  * committer, amounts, and outcome — but status/committer/outcome are *cached*
  * here (write-through) so dashboards are queryable without N chain reads.
@@ -72,6 +78,26 @@ export const contracts = pgTable(
 
     // Verdict note (manual/admin context in the MVP)
     verdictNote: text("verdict_note"),
+
+    // --- Moderation progress (OFF-CHAIN worker bookkeeping) -----------------
+    // Deliberately NOT part of `status`: that column is a cache of on-chain
+    // state and the reconciler rewrites it every sweep, so anything invented
+    // there is erased. The chain has no concept of "being moderated" — that
+    // only exists between a deliverable landing and `submit_verdict`.
+    //
+    // Only meaningful while status = "submitted"; null everywhere else.
+    //   null         — delivered, no moderator has picked it up
+    //   in_progress  — a moderator claimed it (see moderationStartedAt for the lease)
+    //   done         — a verdict was submitted; terminal, never re-judged
+    //   failed       — cannot be judged; never retried, needs a human
+    moderationState: text("moderation_state").$type<ModerationState>(),
+    /** Bumped on each claim, so a contract that keeps failing is visible. */
+    moderationAttempts: integer("moderation_attempts").notNull().default(0),
+    /** Why it could not be judged. Safe to show a user. */
+    moderationError: text("moderation_error"),
+    /** When the claim was taken. A worker that dies leaves this stale, and the
+     *  claim is reclaimable once it ages past the lease. */
+    moderationStartedAt: timestamp("moderation_started_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

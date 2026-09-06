@@ -44,7 +44,7 @@ function resolveSlug(): string {
   );
 }
 
-/** Run `mod-run` for one contract. Resolves to false if it declined to settle. */
+/** Run `mod-run` for one contract. Resolves to the exit code and captured tail. */
 function judge(item: WorkItem, slug: string): Promise<boolean> {
   return new Promise((resolve) => {
     // The local tsx binary directly, not `npx` — npx shells out to npm, which
@@ -78,32 +78,36 @@ async function main() {
                 "  and exit. Set DESC_JUDGE=claude to run unattended.");
   }
 
-  // A contract that fails is not retried on the next tick. Failures here are
-  // near-always permanent for that contract (no criteria, bundle too large, a
-  // deliverable this mod cannot decrypt), and retrying every 15s would spend
-  // real money on the same doomed check forever.
-  const attempted = new Set<string>();
-
+  // Progress lives in the DATABASE, not in this process. A restart used to lose
+  // the in-memory record of what had been tried, so every fresh watcher paid to
+  // re-judge everything it had already judged.
   for (;;) {
     let work: WorkItem[] = [];
     try {
-      work = await source.pending(moderator);
+      work = await source.claim(moderator);
     } catch (err) {
-      console.error(`  ! could not read work: ${(err as Error).message}`);
+      console.error(`  ! could not claim work: ${(err as Error).message}`);
     }
 
-    const fresh = work.filter((w) => !attempted.has(w.contractId));
-    for (const item of fresh) {
-      attempted.add(item.contractId);
-      console.log(`\n--- ${item.title ?? "(untitled)"} · ${item.contractId} ---`);
+    for (const item of work) {
+      const nth = item.attempts > 1 ? ` (attempt ${item.attempts})` : "";
+      console.log(`\n--- ${item.title ?? "(untitled)"} · ${item.contractId}${nth} ---`);
       const ok = await judge(item, slug);
-      if (!ok) {
-        console.error(`  ! no verdict submitted — not retrying this contract`);
+      if (ok) {
+        await source.release(item.contractId);
+      } else {
+        // Marked failed rather than left claimed: these are near-always
+        // permanent for that contract (no criteria, bundle too large, a
+        // deliverable this mod cannot decrypt). Retrying every tick would
+        // spend real money on the same doomed check forever. The reason is
+        // stored, so it can be shown or cleared by hand.
+        await source.fail(item.contractId, "mod-run exited without submitting a verdict");
+        console.error("  ! no verdict submitted — marked failed, not retrying");
       }
     }
 
     if (once) {
-      console.log(fresh.length ? "\nsweep complete" : "nothing waiting");
+      console.log(work.length ? "\nsweep complete" : "nothing waiting");
       return;
     }
     await new Promise((r) => setTimeout(r, INTERVAL_MS));

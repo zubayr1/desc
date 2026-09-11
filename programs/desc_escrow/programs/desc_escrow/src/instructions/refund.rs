@@ -76,6 +76,9 @@ pub struct Refund<'info> {
 
 impl<'info> Refund<'info> {
     pub fn refund(&mut self) -> Result<()> {
+        // A stale program reading a newer account decodes silently and wrongly.
+        self.escrow.check_version()?;
+        self.config.check_version()?;
         let now = Clock::get()?.unix_timestamp;
 
         let ghosted = self.escrow.status == EscrowStatus::Active && now > self.escrow.deadline;

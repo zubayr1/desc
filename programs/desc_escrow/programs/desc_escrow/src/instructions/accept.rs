@@ -23,6 +23,8 @@ pub struct Accept<'info> {
 
 impl<'info> Accept<'info> {
     pub fn accept(&mut self) -> Result<()> {
+        // A stale program reading a newer account decodes silently and wrongly.
+        self.escrow.check_version()?;
         // Only a funded, unaccepted escrow can be accepted (first-accept-wins).
         require!(
             self.escrow.status == EscrowStatus::Funded,

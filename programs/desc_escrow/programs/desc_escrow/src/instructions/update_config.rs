@@ -28,6 +28,7 @@ impl<'info> UpdateConfig<'info> {
         min_amount: Option<u64>,
         paused: Option<bool>,
     ) -> Result<()> {
+        self.config.check_version()?;
         if let Some(bps) = protocol_fee_bps {
             require!(bps <= Config::MAX_FEE_BPS, EscrowError::InvalidFeeBps);
             self.config.protocol_fee_bps = bps;

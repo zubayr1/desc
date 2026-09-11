@@ -67,6 +67,9 @@ pub struct Release<'info> {
 
 impl<'info> Release<'info> {
     pub fn release(&mut self) -> Result<()> {
+        // A stale program reading a newer account decodes silently and wrongly.
+        self.escrow.check_version()?;
+        self.config.check_version()?;
         require!(
             self.escrow.status == EscrowStatus::Submitted,
             EscrowError::InvalidStatus

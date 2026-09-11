@@ -40,6 +40,8 @@ pub struct MutualCancel<'info> {
 
 impl<'info> MutualCancel<'info> {
     pub fn mutual_cancel(&mut self) -> Result<()> {
+        // A stale program reading a newer account decodes silently and wrongly.
+        self.escrow.check_version()?;
         require!(
             self.escrow.status == EscrowStatus::Active
                 || self.escrow.status == EscrowStatus::Submitted,

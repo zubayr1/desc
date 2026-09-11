@@ -35,6 +35,9 @@ impl<'info> RecordVerdict<'info> {
         verdict_hash: [u8; 32],
         moderator: Pubkey,
     ) -> Result<()> {
+        // A stale program reading a newer account decodes silently and wrongly.
+        self.escrow.check_version()?;
+        self.config.check_version()?;
         require!(
             self.escrow.status == EscrowStatus::Submitted,
             EscrowError::InvalidStatus

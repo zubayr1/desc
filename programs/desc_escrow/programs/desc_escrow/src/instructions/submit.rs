@@ -30,6 +30,8 @@ pub struct Submit<'info> {
 
 impl<'info> Submit<'info> {
     pub fn submit(&mut self, deliverable_hash: [u8; 32]) -> Result<()> {
+        // A stale program reading a newer account decodes silently and wrongly.
+        self.escrow.check_version()?;
         require!(
             self.escrow.status == EscrowStatus::Active,
             EscrowError::InvalidStatus

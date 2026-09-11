@@ -38,6 +38,8 @@ pub struct Cancel<'info> {
 
 impl<'info> Cancel<'info> {
     pub fn cancel(&mut self) -> Result<()> {
+        // A stale program reading a newer account decodes silently and wrongly.
+        self.escrow.check_version()?;
         // Cancellable only before any committer has accepted.
         require!(
             self.escrow.status == EscrowStatus::Funded,

@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::error::EscrowError;
+
 /// On-chain lifecycle of an escrow — only the transitions that move money.
 ///
 /// The richer off-chain contract states (draft, under_verification, disputed)
@@ -151,7 +153,31 @@ pub struct Escrow {
 
 impl Escrow {
     /// Current schema version.
+    ///
+    /// Bump whenever a field is carved from `reserved`. Still 1: everything
+    /// added so far predates any deployment that outlives a validator reset, so
+    /// no account with an older layout exists anywhere to distinguish.
     pub const VERSION: u8 = 1;
+
+    /// Reject an account written by a program NEWER than this one.
+    ///
+    /// Deliberately `<=`, never `==`: old accounts stay readable because fields
+    /// are only ever carved from zeroed `reserved` bytes, so an older layout
+    /// decodes correctly with the new fields reading as zero. An `==` check
+    /// would brick every escrow created before a bump — funds locked, no
+    /// instruction callable.
+    ///
+    /// The case this DOES catch is a stale deployment: an older program reading
+    /// accounts a newer one wrote. Anchor's borsh silently ignores trailing
+    /// bytes it does not know about, so without this the program does not fail —
+    /// it quietly behaves as though the newer fields were never set.
+    pub fn check_version(&self) -> Result<()> {
+        require!(
+            self.version <= Self::VERSION,
+            EscrowError::UnsupportedVersion
+        );
+        Ok(())
+    }
 
     /// Seed prefix; full seeds = [SEED_PREFIX, initiator, contract_id].
     pub const SEED_PREFIX: &'static [u8] = b"escrow";

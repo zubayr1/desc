@@ -66,6 +66,7 @@ impl<'info> CreateEscrow<'info> {
         no_mod: bool,
         bumps: &CreateEscrowBumps,
     ) -> Result<()> {
+        self.config.check_version()?;
         require!(!self.config.paused, EscrowError::ProtocolPaused);
         require!(amount > 0, EscrowError::InvalidAmount);
         // Below the minimum the fee floor would be a punitive share of the

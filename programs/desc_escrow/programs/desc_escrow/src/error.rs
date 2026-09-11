@@ -30,4 +30,6 @@ pub enum EscrowError {
     FeeFloorAboveMinimum,
     #[msg("Moderator count and surcharge do not match the escrow's moderation mode")]
     ModeratorConfigMismatch,
+    #[msg("Account was written by a newer program version than this one understands")]
+    UnsupportedVersion,
 }

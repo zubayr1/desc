@@ -57,8 +57,18 @@ pub struct Config {
 }
 
 impl Config {
-    /// Current schema version.
+    /// Current schema version. See `Escrow::VERSION` on when to bump.
     pub const VERSION: u8 = 1;
+
+    /// Reject a config written by a NEWER program than this one. See
+    /// `Escrow::check_version` for why this is `<=` and not `==`.
+    pub fn check_version(&self) -> Result<()> {
+        require!(
+            self.version <= Self::VERSION,
+            EscrowError::UnsupportedVersion
+        );
+        Ok(())
+    }
 
     /// Seed prefix; full seeds = [SEED_PREFIX, authority].
     pub const SEED_PREFIX: &'static [u8] = b"config";

@@ -1,5 +1,16 @@
-import { useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { StatusPill } from "@/components/StatusPill";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
+import { deriveDeliverableKey } from "@/lib/deliverableKey";
+import { cn, short, usd } from "@/lib/utils";
+import type { BundleBlob, BundleResult, Contract, InputFile } from "@repo/shared";
+import {
+  buildBundle,
+  decryptWithIdentity,
+  encryptToRecipients,
+  DELIVERABLE_TYPE_LABELS as TYPE_LABEL,
+} from "@repo/shared";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
@@ -7,6 +18,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import JSZip from "jszip";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,20 +30,8 @@ import {
   Loader2,
   Lock,
 } from "lucide-react";
-import JSZip from "jszip";
-import type { Contract, BundleResult, BundleBlob, InputFile } from "@repo/shared";
-import {
-  buildBundle,
-  encryptToRecipients,
-  decryptWithIdentity,
-  DELIVERABLE_TYPE_LABELS as TYPE_LABEL,
-} from "@repo/shared";
-import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
-import { deriveDeliverableKey } from "@/lib/deliverableKey";
-import { StatusPill } from "@/components/StatusPill";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { cn, short, usd } from "@/lib/utils";
+import { useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 const fmtSize = (n: number) =>
   n < 1024
@@ -570,6 +570,7 @@ export function ContractView() {
   const queryClient = useQueryClient();
   const { publicKey } = useWallet();
 
+  const me = publicKey?.toBase58();
   const queryKey = ["contract", byLink ? "link" : "id", id];
   const {
     data: contract,
@@ -596,6 +597,15 @@ export function ContractView() {
     );
   }
 
+  const isInitiator = me === contract.initiator;
+
+  const totalCost = (
+    BigInt(contract.amount) +
+    BigInt(contract.protocolFee) +
+    BigInt(contract.moderatorSurcharge)
+  ).toString();
+  const hasModFee = BigInt(contract.moderatorSurcharge) > 0n;
+
   return (
     <div className="mx-auto max-w-2xl">
       {!byLink && (
@@ -615,7 +625,11 @@ export function ContractView() {
         <p className="mt-3 text-zinc-400">{contract.brief}</p>
 
         <div className="mt-6 grid grid-cols-2 gap-5">
-          <Field label="Pays" value={usd(contract.amount)} mono />
+          <Field
+            label={isInitiator ? "Total cost" : "Committer receives"}
+            value={usd(isInitiator ? totalCost : contract.amount)}
+            mono
+          />
           <Field
             label="Deadline"
             value={new Date(contract.deadline).toLocaleDateString()}
@@ -632,6 +646,14 @@ export function ContractView() {
             <Field label="Committer" value={short(contract.committer)} mono />
           )}
         </div>
+
+        {isInitiator && (
+          <p className="mt-4 text-xs text-zinc-500">
+            {usd(contract.amount)} to the committer · {usd(contract.protocolFee)}{" "}
+            protocol fee
+            {hasModFee && <> · {usd(contract.moderatorSurcharge)} moderator fee</>}
+          </p>
+        )}
 
         <div className="mt-6">
           <div className="mb-2 text-xs uppercase tracking-wider text-zinc-500">

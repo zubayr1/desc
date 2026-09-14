@@ -340,17 +340,12 @@ export function NewContract() {
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span>
-                Protocol fee ({(fees.protocolFeeBps / 100).toFixed(2)}%, min{" "}
-                {feeFloor.toFixed(2)})
-              </span>
+              <span>Protocol fee</span>
               <span className="font-mono text-zinc-200">{fee.toFixed(2)}</span>
             </div>
             {!noMod && (
               <div className="flex items-center justify-between">
-                <span>
-                  Moderator fee ({(fees.moderatorSurchargeBps / 100).toFixed(2)}%)
-                </span>
+                <span>Moderator fee</span>
                 <span className="font-mono text-zinc-200">
                   {surcharge.toFixed(2)}
                 </span>

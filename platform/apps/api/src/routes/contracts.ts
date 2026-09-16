@@ -28,9 +28,9 @@ const createSchema = z.object({
     }),
   acceptanceCriteria: z.array(z.object({ description: z.string().min(1) })).min(1),
   amount: z.string().regex(/^\d+$/),
-  moderatorCount: z.number().int().nonnegative(),
-  moderatorSurcharge: z.string().regex(/^\d+$/),
   noMod: z.boolean().optional(),
+  // The moderator's WALLET the initiator picked. Optional while V1 has one mod.
+  moderator: z.string().min(1).optional(),
   deadline: z.string().min(1),
   initiatorRecipient: z.string().min(1).optional(),
 });

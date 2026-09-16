@@ -211,10 +211,11 @@ export interface CreateContractRequest {
   deliverableType: DeliverableType;
   acceptanceCriteria: Array<{ description: string }>;
   amount: TokenAmount;
-  moderatorCount: number;
-  moderatorSurcharge: TokenAmount;
-  /** Opt out of moderation. Count and surcharge are recomputed server-side. */
+  /** Opt out of moderation. No moderator, no surcharge, no verification fee. */
   noMod?: boolean;
+  /** Wallet of the chosen moderator. Its price is read on-chain — the client
+   *  never sends a fee. Optional while V1 has a single active moderator. */
+  moderator?: Address;
   deadline: Timestamp;
   /** The initiator's age recipient, derived client-side from a wallet signature.
    *  Optional — if absent, the deliverable is sealed to the moderators only. */

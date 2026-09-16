@@ -53,3 +53,55 @@ export async function listActiveRecipients(): Promise<string[]> {
     )
     .map((m) => m.account.recipient);
 }
+
+/** A moderator chosen for a contract, with the price escrow will snapshot. */
+export interface ModeratorQuote {
+  /** The moderator's wallet — what the escrow binds as `moderator`. */
+  authority: PublicKey;
+  /** The Moderator PDA, passed to `create_escrow`. */
+  pda: PublicKey;
+  baseBps: number;
+  feePerKb: bigint;
+  maxBundleKb: number;
+}
+
+/**
+ * Pick the moderator for a new contract and read its on-chain price.
+ *
+ * `requested` is the moderator's wallet when the initiator chose one. Without
+ * it, V1 falls back to the only active moderator — and refuses to guess when
+ * there are several, since the choice decides who judges and what it costs.
+ */
+export async function resolveModerator(requested?: PublicKey): Promise<ModeratorQuote> {
+  const active = (await moderationProgram.account.moderator.all()).filter(
+    (m) => m.account.active && m.account.config.equals(moderationConfigPda)
+  );
+
+  const pick = requested
+    ? active.find((m) => m.account.authority.equals(requested))
+    : active.length === 1
+      ? active[0]
+      : undefined;
+
+  if (!pick) {
+    const why = requested
+      ? "that moderator is not registered or not active"
+      : active.length === 0
+        ? "no active moderator is registered"
+        : `${active.length} moderators are active — choose one`;
+    throw Object.assign(new Error(why), { statusCode: 400 });
+  }
+
+  return {
+    authority: pick.account.authority,
+    pda: pick.publicKey,
+    baseBps: pick.account.baseBps,
+    feePerKb: BigInt(pick.account.feePerKb.toString()),
+    maxBundleKb: pick.account.maxBundleKb,
+  };
+}
+
+/** Same math as `Escrow::moderation_ceiling` on-chain — what the initiator locks up. */
+export function moderationCeiling(amount: bigint, q: ModeratorQuote): bigint {
+  return (amount * BigInt(q.baseBps)) / 10_000n + q.feePerKb * BigInt(q.maxBundleKb);
+}

@@ -32,7 +32,7 @@ async function main() {
   const mintAuthority = loadKeypair(AUTHORITY_PATH); // created the mint in bootstrap
   const initiator = Keypair.generate();
 
-  // Fund the initiator with SOL (gas) + USDC (amount + fee + surcharge = 1050).
+  // Fund the initiator with SOL (gas) + USDC (amount 1000 + fee 20 + moderator price, up to 5% = 1070).
   const air = await connection.requestAirdrop(initiator.publicKey, 2 * LAMPORTS_PER_SOL);
   await connection.confirmTransaction(air, "confirmed");
   const ata = await getOrCreateAssociatedTokenAccount(
@@ -41,7 +41,7 @@ async function main() {
     USDC_MINT,
     initiator.publicKey
   );
-  await mintTo(connection, mintAuthority, USDC_MINT, ata.address, mintAuthority, 1_050_000_000);
+  await mintTo(connection, mintAuthority, USDC_MINT, ata.address, mintAuthority, 1_070_000_000); // up to a 5% moderator price
   console.log("initiator:", initiator.publicKey.toBase58());
 
   // 1. POST /contracts → unsigned tx
@@ -55,8 +55,6 @@ async function main() {
       { description: "All vesting tests pass in CI" },
     ],
     amount: "1000000000",
-    moderatorCount: 3,
-    moderatorSurcharge: "30000000",
     deadline: new Date(Date.now() + 3600_000).toISOString(),
   };
   const createRes = await fetch(`${BASE}/contracts`, {

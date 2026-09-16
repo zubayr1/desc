@@ -8,6 +8,14 @@ skip-lint = false
 [programs.localnet]
 desc_escrow = "4Q1jTgR9UVpbbVo57Dx1cpjo77Hx8oBn78ieex4gY2CU"
 
+# Escrow no longer trusts a caller for the moderator's fee: create_escrow reads a
+# real `desc_moderation::Moderator` account and verdicts arrive by CPI from that
+# program. So the moderation program must be on the test validator too.
+# Build it first: (cd ../desc_moderation && anchor build)
+[[test.genesis]]
+address = "AHGBmnYQCXJwnKKPixjmt6KAbDjVpMQtETRASzycJ47T"
+program = "../desc_moderation/target/deploy/desc_moderation.so"
+
 [registry]
 url = "https://api.apr.dev"
 

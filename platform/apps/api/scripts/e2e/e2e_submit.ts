@@ -62,7 +62,7 @@ async function main() {
     USDC_MINT,
     initiator.publicKey
   );
-  await mintTo(connection, mintAuthority, USDC_MINT, ata.address, mintAuthority, 1_050_000_000);
+  await mintTo(connection, mintAuthority, USDC_MINT, ata.address, mintAuthority, 1_070_000_000); // up to a 5% moderator price
 
   // create → fund
   const created = (await postJson("/contracts", {
@@ -72,8 +72,6 @@ async function main() {
     deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: "1000000000",
-    moderatorCount: 3,
-    moderatorSurcharge: "30000000",
     deadline: new Date(Date.now() + 3600_000).toISOString(),
   })) as { id: string; unsignedTx: string };
   const funded = (await signAndSubmit(

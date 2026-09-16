@@ -53,7 +53,7 @@ async function main() {
   const initiator = Keypair.generate();
   const committer = Keypair.generate();
 
-  // Fund initiator (SOL + 1050 USDC) and committer (SOL for gas).
+  // Fund initiator (SOL + 1070 USDC, enough for a 5% moderator) and committer (SOL for gas).
   for (const kp of [initiator, committer]) {
     const air = await connection.requestAirdrop(kp.publicKey, 2 * LAMPORTS_PER_SOL);
     await connection.confirmTransaction(air, "confirmed");
@@ -64,7 +64,7 @@ async function main() {
     USDC_MINT,
     initiator.publicKey
   );
-  await mintTo(connection, mintAuthority, USDC_MINT, ata.address, mintAuthority, 1_050_000_000);
+  await mintTo(connection, mintAuthority, USDC_MINT, ata.address, mintAuthority, 1_070_000_000); // up to a 5% moderator price
 
   // create → fund
   const created = (await postJson("/contracts", {
@@ -74,8 +74,6 @@ async function main() {
     deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: "1000000000",
-    moderatorCount: 3,
-    moderatorSurcharge: "30000000",
     deadline: new Date(Date.now() + 3600_000).toISOString(),
   })) as { id: string; unsignedTx: string };
   const funded = (await signAndSubmit(

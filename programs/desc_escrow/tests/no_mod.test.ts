@@ -86,18 +86,19 @@ describe("no_mod", () => {
     assert.property((await program.account.escrow.fetch(s.escrow)).status, "settled");
   });
 
-  it("rejects a no-mod escrow that still pays a moderator", async () => {
+  it("rejects a no-mod escrow that still names a moderator", async () => {
+    const world = await setupWorld();
     try {
-      await createEscrow({ noMod: true, moderatorCount: 1, surcharge: usdc(10) });
+      await createEscrow({ world, noMod: true, moderator: world.moderatorPda });
       assert.fail("expected ModeratorConfigMismatch");
     } catch (e) {
       assert.include(e.toString(), "ModeratorConfigMismatch");
     }
   });
 
-  it("rejects a moderated escrow with no moderators", async () => {
+  it("rejects a moderated escrow with no moderator", async () => {
     try {
-      await createEscrow({ moderatorCount: 0 });
+      await createEscrow({ moderator: null });
       assert.fail("expected ModeratorConfigMismatch");
     } catch (e) {
       assert.include(e.toString(), "ModeratorConfigMismatch");

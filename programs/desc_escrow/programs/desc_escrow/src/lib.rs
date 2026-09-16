@@ -54,16 +54,12 @@ pub mod desc_escrow {
         ctx: Context<CreateEscrow>,
         contract_id: [u8; 16],
         amount: u64,
-        moderator_count: u8,
-        moderator_surcharge: u64,
         deadline: i64,
         no_mod: bool,
     ) -> Result<()> {
         ctx.accounts.create_escrow(
             contract_id,
             amount,
-            moderator_count,
-            moderator_surcharge,
             deadline,
             no_mod,
             &ctx.bumps,

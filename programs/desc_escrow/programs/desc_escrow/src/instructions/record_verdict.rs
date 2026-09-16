@@ -45,9 +45,16 @@ impl<'info> RecordVerdict<'info> {
         // One-shot: a verdict is final and can't be re-recorded.
         require!(self.escrow.outcome.is_none(), EscrowError::InvalidStatus);
 
+        // Only the moderator assigned at creation may judge — it is the one
+        // whose price the initiator paid.
+        require_keys_eq!(
+            moderator,
+            self.escrow.moderator,
+            EscrowError::NotAssignedModerator
+        );
+
         self.escrow.outcome = Some(outcome);
         self.escrow.verdict_hash = verdict_hash;
-        self.escrow.moderator = moderator;
 
         Ok(())
     }

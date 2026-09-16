@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{transfer, Mint, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Config, Escrow, EscrowStatus};
+use crate::states::{Config, Escrow, EscrowStatus, ModeratorPrice};
 
 /// Initiator opens an escrow and deposits the full amount (payout + protocol
 /// fee + moderator surcharge) into a program-owned vault. Status -> Funded.
@@ -51,6 +51,12 @@ pub struct CreateEscrow<'info> {
     )]
     pub initiator_token_account: Account<'info, TokenAccount>,
 
+    /// The moderator the initiator picked (a `desc_moderation::Moderator`).
+    /// Required when moderated, omitted for no-mod. Read raw and verified in
+    /// `ModeratorPrice::load` — escrow cannot import that account type.
+    /// CHECK: owner, discriminator and settlement-authority binding are checked.
+    pub moderator: Option<UncheckedAccount<'info>>,
+
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
@@ -60,8 +66,6 @@ impl<'info> CreateEscrow<'info> {
         &mut self,
         contract_id: [u8; 16],
         amount: u64,
-        moderator_count: u8,
-        moderator_surcharge: u64,
         deadline: i64,
         no_mod: bool,
         bumps: &CreateEscrowBumps,
@@ -76,16 +80,29 @@ impl<'info> CreateEscrow<'info> {
             EscrowError::AmountBelowMinimum
         );
 
-        // A no-mod escrow has nobody to pay: enforce that here rather than
-        // trusting the caller to send a consistent triple.
-        if no_mod {
-            require!(
-                moderator_count == 0 && moderator_surcharge == 0,
-                EscrowError::ModeratorConfigMismatch
-            );
+        // The moderator's fee comes from the MODERATOR's own quoted price, never
+        // from the caller. It used to be an instruction argument, so a caller
+        // could pass 0 and the moderator would judge for free.
+        let (moderator, moderator_count, base_bps, fee_per_kb, max_bundle_kb) = if no_mod {
+            require!(self.moderator.is_none(), EscrowError::ModeratorConfigMismatch);
+            (Pubkey::default(), 0u8, 0u16, 0u64, 0u32)
         } else {
-            require!(moderator_count > 0, EscrowError::ModeratorConfigMismatch);
-        }
+            let account = self
+                .moderator
+                .as_ref()
+                .ok_or(EscrowError::ModeratorConfigMismatch)?;
+            let price = ModeratorPrice::load(account, &self.config.settlement_authority)?;
+            // V1: settlement has no way to charge by delivered size or refund an
+            // unused ceiling yet, so a size-priced moderator is refused rather
+            // than silently paid its maximum.
+            require!(
+                price.fee_per_kb == 0 && price.max_bundle_kb == 0,
+                EscrowError::SizePricingNotEnabled
+            );
+            (price.authority, 1u8, price.base_bps, price.fee_per_kb, price.max_bundle_kb)
+        };
+        let moderator_surcharge =
+            Escrow::moderation_ceiling(amount, base_bps, fee_per_kb, max_bundle_kb)?;
 
         let now = Clock::get()?.unix_timestamp;
         require!(deadline > now, EscrowError::InvalidDeadline);
@@ -150,10 +167,13 @@ impl<'info> CreateEscrow<'info> {
             contract_id,
             bump: bumps.escrow,
             vault_bump: bumps.vault,
-            moderator: Pubkey::default(),
+            moderator,
             verification_fee,
             no_mod,
-            reserved: [0; 87],
+            base_bps,
+            fee_per_kb,
+            max_bundle_kb,
+            reserved: [0; 73],
         });
 
         Ok(())

@@ -229,8 +229,23 @@ export interface FeeConfig {
   protocolFeeBps: number;
   protocolFeeMin: TokenAmount;
   minAmount: TokenAmount;
-  moderatorSurchargeBps: number;
-  moderatorCount: number;
+  /** Active moderators and their own on-chain prices. The moderator fee is not a
+   *  protocol constant — each moderator quotes it, and escrow snapshots the
+   *  chosen one's price at creation. */
+  moderators: ModeratorOffer[];
+}
+
+/** A moderator an initiator can pick, with the price it charges. */
+export interface ModeratorOffer {
+  /** The moderator's wallet — send as `CreateContractRequest.moderator`. */
+  wallet: Address;
+  label: string;
+  /** Share of the contract amount, in basis points (100 = 1%). */
+  baseBps: number;
+  /** Per-KB of deliverable text, base units. 0 until size pricing ships. */
+  feePerKb: TokenAmount;
+  /** Largest deliverable accepted, KB. 0 = no limit. */
+  maxBundleKb: number;
 }
 
 /** Response to `POST /contracts` — the unsigned tx for the wallet to sign. */

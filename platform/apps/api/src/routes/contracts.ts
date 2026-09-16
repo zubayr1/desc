@@ -31,6 +31,7 @@ const createSchema = z.object({
   noMod: z.boolean().optional(),
   // The moderator's WALLET the initiator picked. Optional while V1 has one mod.
   moderator: z.string().min(1).optional(),
+  maxModeratorFee: z.string().regex(/^\d+$/).optional(),
   deadline: z.string().min(1),
   initiatorRecipient: z.string().min(1).optional(),
 });

@@ -274,6 +274,10 @@ export type DescEscrow = {
         {
           "name": "noMod",
           "type": "bool"
+        },
+        {
+          "name": "maxModeratorFee",
+          "type": "u64"
         }
       ]
     },
@@ -965,6 +969,11 @@ export type DescEscrow = {
       "code": 6017,
       "name": "notAssignedModerator",
       "msg": "Verdict is not from the moderator assigned to this escrow"
+    },
+    {
+      "code": 6018,
+      "name": "moderatorFeeAboveMax",
+      "msg": "Moderator's price is above the maximum the initiator agreed to"
     }
   ],
   "types": [

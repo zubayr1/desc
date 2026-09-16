@@ -84,4 +84,39 @@ describe("moderator pricing", () => {
       assert.include(e.toString(), "ModeratorNotRecognized");
     }
   });
+
+  // --- Slippage guard: the initiator agreed to a price; a rise since fails ---
+
+  it("rejects when the moderator raised its price after the quote", async () => {
+    const world = await setupWorld(); // quoted at 1%
+    const quoted = usdc(10); // 1% of 1000 — what the initiator saw
+    await moderation.methods
+      .updateModeratorPricing(200, new BN(0), 0) // now 2%
+      .accountsPartial({ authority: world.moderator.publicKey, moderator: world.moderatorPda })
+      .signers([world.moderator])
+      .rpc();
+    try {
+      await createEscrow({ world, amount: usdc(1000), maxModeratorFee: quoted });
+      assert.fail("expected ModeratorFeeAboveMax");
+    } catch (e) {
+      assert.include(e.toString(), "ModeratorFeeAboveMax");
+    }
+  });
+
+  it("accepts a price exactly at the agreed maximum", async () => {
+    const s = await createEscrow({ amount: usdc(1000), maxModeratorFee: usdc(10) });
+    const acc = await program.account.escrow.fetch(s.escrow);
+    assert.ok(acc.moderatorSurcharge.eq(usdc(10)));
+  });
+
+  it("a zero maximum cannot make a moderator work for free", async () => {
+    // The old bug, re-attempted through the new argument: 0 is a limit, not a
+    // fee, so it refuses the escrow instead of creating an unpaid one.
+    try {
+      await createEscrow({ amount: usdc(1000), maxModeratorFee: new BN(0) });
+      assert.fail("expected ModeratorFeeAboveMax");
+    } catch (e) {
+      assert.include(e.toString(), "ModeratorFeeAboveMax");
+    }
+  });
 });

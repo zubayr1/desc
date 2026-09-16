@@ -23,6 +23,8 @@ export interface BuildCreateEscrowParams {
   /** The chosen moderator's PDA. The program reads its price from this account;
    *  the surcharge is never an argument. Null for a no-mod contract. */
   moderator: PublicKey | null;
+  /** Slippage guard, base units: the program refuses a moderator priced above it. */
+  maxModeratorFee: string;
 }
 
 /** Build the unsigned `create_escrow` transaction (initiator = fee payer + signer). */
@@ -39,7 +41,8 @@ export async function buildCreateEscrow(
       p.contractIdBytes,
       new BN(p.amount),
       new BN(p.deadlineUnix),
-      p.noMod
+      p.noMod,
+      new BN(p.maxModeratorFee)
     )
     .accountsPartial({
       initiator: p.initiator,

@@ -210,6 +210,11 @@ export interface CreateContractRequest {
   /** Wallet of the chosen moderator. Its price is read on-chain — the client
    *  never sends a fee. Optional while V1 has a single active moderator. */
   moderator?: Address;
+  /** The most the initiator agrees to pay the moderator — the fee they were
+   *  shown, in base units. A LIMIT, not the fee: if the moderator's price rose
+   *  since, creation fails instead of charging more. Defaults to the current
+   *  quote when omitted. */
+  maxModeratorFee?: TokenAmount;
   deadline: Timestamp;
   /** The initiator's age recipient, derived client-side from a wallet signature.
    *  Optional — if absent, the deliverable is sealed to the moderators only. */

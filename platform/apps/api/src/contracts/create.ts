@@ -79,6 +79,17 @@ export async function createContract(
     : "0";
   const moderatorCount = quote ? 1 : 0;
 
+  // The fee the initiator agreed to. Without one, use the price right now — the
+  // guard then only covers the gap between this request and the tx landing.
+  const maxModeratorFee = req.maxModeratorFee ?? moderatorSurcharge;
+  if (BigInt(moderatorSurcharge) > BigInt(maxModeratorFee)) {
+    // Friendly early-fail; the program enforces it (ModeratorFeeAboveMax).
+    throw Object.assign(
+      new Error("the moderator's price changed since it was quoted — review the new total"),
+      { statusCode: 409 }
+    );
+  }
+
   const criteria = req.acceptanceCriteria.map((c, i) => ({
     id: `c${i + 1}`,
     description: c.description,
@@ -94,6 +105,7 @@ export async function createContract(
     deadlineUnix: Math.floor(deadline.getTime() / 1000),
     noMod,
     moderator: quote?.pda ?? null,
+    maxModeratorFee,
   });
 
   const [row] = await db

@@ -371,6 +371,9 @@ export async function createEscrow(opts?: {
   /** Absolute deadline in CHAIN time. Use with `chainUnixTs()` for deadline
    *  tests; `deadlineOffset` is wall-relative and only safe for far futures. */
   deadlineAbsolute?: number;
+  /** The most the initiator agrees to pay the moderator. Defaults to the world
+   *  moderator's current price, i.e. the fee they were quoted. */
+  maxModeratorFee?: BN;
   /** Initiator opts out of moderation — no moderator account, no surcharge. */
   noMod?: boolean;
 }): Promise<EscrowSetup> {
@@ -409,7 +412,7 @@ export async function createEscrow(opts?: {
   );
 
   await program.methods
-    .createEscrow(cid, amount, deadline, noMod)
+    .createEscrow(cid, amount, deadline, noMod, opts?.maxModeratorFee ?? surcharge)
     .accountsPartial({
       initiator: initiator.publicKey,
       config: world.config,

@@ -85,6 +85,14 @@ export function NewContract() {
     fees.moderators.find((m) => m.wallet === modWallet) ??
     (fees.moderators.length === 1 ? fees.moderators[0] : undefined);
   const needsModerator = !noMod && !moderator;
+  // The same fee in base units, with the program's integer math — so the limit
+  // we send equals what the program computes, not a float that is 1 unit short.
+  const amountBase = BigInt(Math.round(amountNum * 1_000_000));
+  const surchargeBase =
+    noMod || !moderator
+      ? 0n
+      : (amountBase * BigInt(moderator.baseBps)) / 10_000n +
+        BigInt(moderator.feePerKb) * BigInt(moderator.maxBundleKb);
   const surcharge =
     noMod || !moderator
       ? 0
@@ -142,6 +150,8 @@ export function NewContract() {
         // No fee is sent: the program reads the chosen moderator's price itself.
         noMod,
         moderator: noMod ? undefined : moderator?.wallet,
+        // What the initiator is looking at. A price rise since → creation fails.
+        maxModeratorFee: surchargeBase.toString(),
         deadline: new Date(deadline).toISOString(),
         initiatorRecipient,
       };

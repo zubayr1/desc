@@ -68,6 +68,7 @@ impl<'info> CreateEscrow<'info> {
         amount: u64,
         deadline: i64,
         no_mod: bool,
+        max_moderator_fee: u64,
         bumps: &CreateEscrowBumps,
     ) -> Result<()> {
         self.config.check_version()?;
@@ -103,6 +104,16 @@ impl<'info> CreateEscrow<'info> {
         };
         let moderator_surcharge =
             Escrow::moderation_ceiling(amount, base_bps, fee_per_kb, max_bundle_kb)?;
+
+        // Slippage guard. The initiator agreed to a price when it was quoted; the
+        // moderator can change its price before this transaction lands. Refuse
+        // rather than charge more than they agreed to. This is a LIMIT, not the
+        // fee — passing 0 cannot make a moderator work for free, it only makes a
+        // moderated escrow impossible to create.
+        require!(
+            moderator_surcharge <= max_moderator_fee,
+            EscrowError::ModeratorFeeAboveMax
+        );
 
         let now = Clock::get()?.unix_timestamp;
         require!(deadline > now, EscrowError::InvalidDeadline);

@@ -40,4 +40,6 @@ pub enum EscrowError {
     SizePricingNotEnabled,
     #[msg("Verdict is not from the moderator assigned to this escrow")]
     NotAssignedModerator,
+    #[msg("Moderator's price is above the maximum the initiator agreed to")]
+    ModeratorFeeAboveMax,
 }

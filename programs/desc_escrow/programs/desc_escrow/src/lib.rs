@@ -56,12 +56,14 @@ pub mod desc_escrow {
         amount: u64,
         deadline: i64,
         no_mod: bool,
+        max_moderator_fee: u64,
     ) -> Result<()> {
         ctx.accounts.create_escrow(
             contract_id,
             amount,
             deadline,
             no_mod,
+            max_moderator_fee,
             &ctx.bumps,
         )
     }

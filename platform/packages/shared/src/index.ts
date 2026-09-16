@@ -39,12 +39,6 @@ export const DEFAULT_PROTOCOL_FEE_MIN = 1_000_000;
  *  the fee floor would be a punitive share of the contract — at 2% + a $1 floor
  *  the two meet here. The on-chain Config is the source of truth. */
 export const DEFAULT_MIN_AMOUNT = 50_000_000;
-/** Moderator surcharge in basis points (1%), paid to the judging moderator on
- *  ANY verdict. Unlike the protocol fee this is a server-side rule, not an
- *  on-chain Config field — the client's value in a create request is ignored. */
-export const MODERATOR_SURCHARGE_BPS = 100;
-/** Moderators per contract in V1. */
-export const MODERATOR_COUNT = 1;
 
 // ---------------------------------------------------------------------------
 // Enums / unions

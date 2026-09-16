@@ -105,7 +105,7 @@ export type DescModeration = {
     {
       "name": "registerModerator",
       "docs": [
-        "Admin registers a moderator (wallet + on-chain recipient + label)."
+        "Admin registers a moderator (wallet + on-chain recipient + label + price)."
       ],
       "discriminator": [
         159,
@@ -191,6 +191,18 @@ export type DescModeration = {
         {
           "name": "label",
           "type": "string"
+        },
+        {
+          "name": "baseBps",
+          "type": "u16"
+        },
+        {
+          "name": "feePerKb",
+          "type": "u64"
+        },
+        {
+          "name": "maxBundleKb",
+          "type": "u32"
         }
       ]
     },
@@ -376,6 +388,71 @@ export type DescModeration = {
           }
         }
       ]
+    },
+    {
+      "name": "updateModeratorPricing",
+      "docs": [
+        "A moderator sets its own price. Live escrows keep the price they snapshotted."
+      ],
+      "discriminator": [
+        232,
+        234,
+        39,
+        19,
+        159,
+        232,
+        226,
+        124
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "moderator"
+          ]
+        },
+        {
+          "name": "moderator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  111,
+                  100,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "baseBps",
+          "type": "u16"
+        },
+        {
+          "name": "feePerKb",
+          "type": "u64"
+        },
+        {
+          "name": "maxBundleKb",
+          "type": "u32"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -447,6 +524,16 @@ export type DescModeration = {
       "code": 6002,
       "name": "invalidMinVerdicts",
       "msg": "V1 supports only min_verdicts == 1"
+    },
+    {
+      "code": 6003,
+      "name": "baseBpsTooHigh",
+      "msg": "Moderator base fee exceeds the maximum allowed"
+    },
+    {
+      "code": 6004,
+      "name": "sizePricingWithoutLimit",
+      "msg": "A per-KB price needs a maximum bundle size"
     }
   ],
   "types": [
@@ -490,12 +577,12 @@ export type DescModeration = {
           {
             "name": "settlementAuthority",
             "docs": [
-              "Key authorized to call `release` / `refund` on an escrow.",
+              "Key authorized to record a verdict on an escrow.",
               "",
-              "V1: the platform backend key, acting on the off-chain aggregated verdict.",
-              "V2: swapped (via `update_config`) to a PDA of the `desc_moderation`",
-              "program, so on-chain moderator consensus settles escrows via CPI. The",
-              "escrow accounts never change — this indirection is the V1->V2 seam."
+              "`bootstrap` points this at the `desc_moderation` verdict-authority PDA,",
+              "so a registered moderator settles by CPI and no platform keypair can.",
+              "It is a field rather than a seed so it stays rotatable — that is the",
+              "seam V2 uses to widen the pool from one moderator to a staked set."
             ],
             "type": "pubkey"
           },
@@ -525,6 +612,29 @@ export type DescModeration = {
             "type": "u8"
           },
           {
+            "name": "protocolFeeMin",
+            "docs": [
+              "Minimum protocol fee in token base units. The fee charged is",
+              "`max(protocol_fee_bps of amount, protocol_fee_min)` — a floor so tiny",
+              "contracts still cover the roughly-fixed cost to serve them. Zero disables",
+              "the floor (old configs, whose `reserved` was zeroed, read 0 → no floor)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "minAmount",
+            "docs": [
+              "Smallest contract `amount` the protocol will escrow, in token base units.",
+              "",
+              "Pairs with `protocol_fee_min`: below the crossover point the floor is a",
+              "rising share of a shrinking contract, so a minimum keeps the effective",
+              "fee rate sane (at 200 bps + a $1 floor, $50 is where they meet). Zero",
+              "disables the minimum — including for configs created before this field",
+              "existed, whose `reserved` was zeroed."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding. Carve new fields from here."
@@ -532,7 +642,7 @@ export type DescModeration = {
             "type": {
               "array": [
                 "u8",
-                64
+                48
               ]
             }
           }
@@ -619,14 +729,24 @@ export type DescModeration = {
           {
             "name": "moderatorSurcharge",
             "docs": [
-              "Total surcharge flowing to moderator operators."
+              "What the moderators earn on this contract, in total.",
+              "",
+              "Priced PER MODERATOR, not as a pot to divide: every moderator runs the",
+              "whole check — decrypt, rebuild, judge every criterion — so each is paid a",
+              "full fee. A contract with `n` moderators costs the initiator `n ×` the",
+              "per-moderator rate, and the alternative (one fee split `n` ways) is",
+              "rejected: it would pay the fifth moderator a fifth as much for identical",
+              "work, and no staked outside operator would take the job.",
+              "",
+              "V1 runs a single moderator, so this is that one fee and `release` pays it",
+              "whole to `moderator`. Dividing it across a k-of-n set is V2 work."
             ],
             "type": "u64"
           },
           {
             "name": "moderatorCount",
             "docs": [
-              "Number of moderators, set by the protocol from contract value."
+              "Number of moderators on this contract. Always 1 in V1 (0 when `no_mod`)."
             ],
             "type": "u8"
           },
@@ -720,11 +840,67 @@ export type DescModeration = {
           {
             "name": "moderator",
             "docs": [
-              "The moderator that recorded the verdict (set by `record_verdict`; zeroed",
-              "until then). Receives the `moderator_surcharge` (its reward) on settle —",
-              "on `release` (Pass) or `refund` (Fail). Carved from `reserved`."
+              "The moderator ASSIGNED to this escrow, bound at `create_escrow` — the one",
+              "whose price was snapshotted, and the only one `record_verdict` accepts.",
+              "It is paid the surcharge on settle (`release` / `refund`).",
+              "`Pubkey::default()` on a no-mod escrow."
             ],
             "type": "pubkey"
+          },
+          {
+            "name": "verificationFee",
+            "docs": [
+              "The non-refundable slice of `protocol_fee`, snapshotted at creation from",
+              "`Config::protocol_fee_min`.",
+              "",
+              "Cost recovery for the verification itself: charged to the treasury",
+              "whenever a moderator actually rendered a verdict — on `release` (Pass, as",
+              "part of the full fee) and on `refund` (Fail, this slice only). The rest of",
+              "`protocol_fee` goes back to the initiator on a Fail, so the protocol never",
+              "*profits* from a failed deal but is never paid to *pass* one either.",
+              "",
+              "Zero when no floor is configured, and for escrows created before this",
+              "field existed (their `reserved` was zeroed) — both mean \"charge nothing on",
+              "a Fail\", i.e. the old fee-on-Pass-only behaviour. Carved from `reserved`.",
+              "",
+              "Invariant: `verification_fee <= protocol_fee`, since",
+              "`protocol_fee = max(bps_fee, protocol_fee_min)`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "noMod",
+            "docs": [
+              "This escrow runs WITHOUT verification: the initiator opted out of",
+              "moderation at creation, accepting the risk. `submit` then records a Pass",
+              "straight away — there is no moderator, no surcharge, and no verification",
+              "fee. Immutable once set; both parties can see it.",
+              "",
+              "Zero (false) for escrows created before this field existed, which is the",
+              "moderated behaviour. Carved from `reserved`."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "baseBps",
+            "docs": [
+              "Share of `amount` the moderator charges, in basis points."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "feePerKb",
+            "docs": [
+              "Per-KB of deliverable text. Always 0 until size pricing ships."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "maxBundleKb",
+            "docs": [
+              "Largest deliverable accepted, in KB. 0 = no limit."
+            ],
+            "type": "u32"
           },
           {
             "name": "reserved",
@@ -736,7 +912,7 @@ export type DescModeration = {
             "type": {
               "array": [
                 "u8",
-                96
+                73
               ]
             }
           }
@@ -932,6 +1108,28 @@ export type DescModeration = {
             "type": "u8"
           },
           {
+            "name": "baseBps",
+            "docs": [
+              "Share of the contract amount, in basis points (100 = 1%)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "feePerKb",
+            "docs": [
+              "Per-KB of deliverable text. V2 — must be 0 until size pricing ships."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "maxBundleKb",
+            "docs": [
+              "Largest deliverable this moderator will judge, in KB. 0 = no limit.",
+              "V2 — must be 0 until size pricing ships."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding (V2: stake, reputation, …). Keep it LAST."
@@ -939,7 +1137,7 @@ export type DescModeration = {
             "type": {
               "array": [
                 "u8",
-                64
+                50
               ]
             }
           }

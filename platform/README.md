@@ -182,10 +182,12 @@ with their **own non-custodial wallets**; there is **no settlement keypair**. Do
 **before** recording any verdict (the next section).
 
 - **States:** `ModerationConfig [b"config", admin]`, `Moderator [b"moderator", authority]`
-  (the mod's wallet + its `age` recipient, stored on-chain).
+  (the mod's wallet, its `age` recipient and **its own price**, stored on-chain).
 - **Instructions:** `initialize`, `register_moderator` (admin), `set_moderator_active`
-  (the mod itself), `submit_verdict` (mod → CPI `desc_escrow::record_verdict`, signed by
-  the `[b"authority", config]` PDA, which is the escrow's `settlement_authority`).
+  and `update_moderator_pricing` (the mod itself), `submit_verdict` (mod → CPI
+  `desc_escrow::record_verdict`, signed by the `[b"authority", config]` PDA, which is
+  the escrow's `settlement_authority`). Only the mod **assigned when the escrow was
+  created** can submit its verdict.
 
 **A) build + deploy — in the program workspace `programs/desc_moderation`:**
 ```bash
@@ -203,7 +205,7 @@ pnpm scripts; they do **not** exist in the program workspace):
 cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
 pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
                                       # set as settlement_authority can now sign)
-pnpm moderator-register "Mod A"       # provision + fund + register on-chain
+pnpm moderator-register "Mod A" --base-bps 100   # provision + fund + register, priced at 1%
 ```
 
 > **Register the moderator BEFORE any deliverable is uploaded.** The committer's
@@ -240,16 +242,19 @@ cd platform/apps/api
 pnpm mod-run <contractId|linkToken> pass        # or:  fail --note "criteria X not met"
 ```
 Full pipeline: open+verify the sealed bundle (decrypt with the mod's identity → rebuild →
-hash-match vs chain) → `runCheck` (V1 stub = your `pass`/`fail`) → `submit_verdict` signed
-by the mod's wallet. **PASS** unlocks *Release*; **FAIL** unlocks *Reclaim deposit*. `<ref>`
+hash-match vs chain) → `runCheck` (your `pass`/`fail`, or the AI with `DESC_JUDGE=claude`) →
+`submit_verdict` signed by the mod's wallet. **PASS** unlocks *Release*; **FAIL** unlocks *Reclaim deposit*. `<ref>`
 is the `/contracts/<uuid>` uuid or the `/c/<token>` link token.
 
 > Uses `./moderators/<slug>-{wallet.json,identity.key}` from `moderator-register`. One mod
-> provisioned → auto-selected; multiple → pass `--mod <slug>`.
+> provisioned → auto-selected; multiple → pass `--mod <slug>`. It must be the mod the
+> contract was **created with**, or the verdict fails with `NotAssignedModerator`.
+> `mod-watch` doesn't filter by assigned mod yet, so run it with **one** mod.
 
-### Check the moderator's 1% reward
+### Check the moderator's fee
 
-The mod earns a **1% surcharge** (in USDC) on **any verdict** — paid when the deal **settles**,
+The mod earns **its own price** (`--base-bps`, e.g. 1%) in USDC on **any verdict** — paid when
+the deal **settles**,
 not at verdict time: on `release` (PASS) or `refund` (FAIL). A ghost-timeout (no verdict) pays
 nothing. Verify it entirely on-chain — no UI:
 
@@ -263,14 +268,16 @@ MOD=$(solana-keygen pubkey ./moderators/mod-a-wallet.json)
 spl-token balance <USDC_MINT> --owner $MOD --url localhost
 
 # create → accept → submit → pnpm mod-run <ref> pass → Release (in the UI or via the contract page)
-# then check again — it jumps by 1% of the contract amount:
+# then check again — it jumps by the mod's price (1% at --base-bps 100):
 spl-token balance <USDC_MINT> --owner $MOD --url localhost
 ```
 
 - `<USDC_MINT>` is the value from `pnpm bootstrap` (also `apps/api/.env`).
 - The reward lands on **Release/Reclaim**, so run that step first, then re-check the balance.
-- The initiator funds **amount + 3%** at create (2% protocol fee + 1% moderator surcharge);
-  `./fund-wallets.sh <USDC_MINT>` mints plenty.
+- The initiator funds **amount + protocol fee + the mod's price** at create (2% + 1% at
+  `--base-bps 100`); `./fund-wallets.sh <USDC_MINT>` mints plenty.
+- The form quotes the price from `GET /config/fees` and sends it as `maxModeratorFee`. If
+  the mod raised its price since, creation fails instead of charging more.
 
 ### Admin console — read-only oversight
 ```bash
@@ -291,17 +298,17 @@ the api — the `/admin/*` read routes are fail-closed) to view all contracts + 
 Deliverables are sealed to the moderators' public keys (multi-recipient `age`
 envelope), so the registry holds **who** they're encrypted to. The registry is now
 **on-chain** — the `Moderator` accounts in the `desc_moderation` program (the chain is
-the source of truth). `GET /config/moderators` reads them live. *(The old Postgres
-`moderators` table is vestigial.)*
+the source of truth). `GET /config/moderators` reads recipients live, and
+`GET /config/fees` lists active mods with their prices.
 
 ### Register a moderator
 ```bash
-pnpm --filter api moderator-register "Mod A"
+pnpm --filter api moderator-register "Mod A" --base-bps 100
 ```
 This provisions the mod's **wallet** keypair + **age identity** (saved under
 `./moderators/`, gitignored), **funds** the wallet (SOL for gas + a USDC account for
-the 1% reward), and calls **`register_moderator`** on-chain (admin-signed) — writing the
-recipient into the `Moderator` account.
+its fee), and calls **`register_moderator`** on-chain (admin-signed) — writing the
+recipient and **price** into the `Moderator` account. Flags: `apps/api/scripts/README.md`.
 
 - **Prereq:** validator up, both programs deployed, `pnpm moderation-init` done, and
   `USDC_MINT` set (`pnpm bootstrap`).
@@ -331,6 +338,21 @@ wallet) — the admin can't. (A CLI for that lands with the mod runner.)
 3. As wallet B → **Submit deliverable** (pick a folder → sealed + encrypted to the mods) → `submitted`.
 4. **Record verdict**: `pnpm --filter api mod-run <contractId|linkToken> pass`.
 5. Refresh → **Release** → `settled`. ✅
+
+---
+
+## Program tests
+
+```bash
+cd programs/desc_moderation && anchor build     # FIRST — escrow tests load this .so
+cd ../desc_escrow && ./run-tests.sh             # each file on a fresh validator
+```
+
+Escrow tests need `desc_moderation` on the validator (`[[test.genesis]]` in
+`Anchor.toml`): a moderated escrow reads a real `Moderator` account, and verdicts
+arrive by CPI from that program. Rebuild it after any change to either program.
+`run-tests.sh` runs one validator per file — a single `anchor test` over all files
+overloads the local validator.
 
 ---
 

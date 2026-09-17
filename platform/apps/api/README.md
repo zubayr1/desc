@@ -13,7 +13,7 @@ orchestrates the AI service, and is the only thing that writes to the chain.
   (`draft | pending_acceptance → cancelled`).
 - **Shareable links** — generate the link token the initiator sends the committer; resolve it on open (no account needed).
 - **Helper AI orchestration** — call `services/ai` to draft acceptance criteria during drafting.
-- **Escrow / chain** — build + submit Solana txns to `program` (fund, lock, release, refund); track confirmations. Pick moderator count from contract value; compute 2% fee + per-moderator surcharge.
+- **Escrow / chain** — build + submit Solana txns to `program` (fund, lock, release, refund); track confirmations. The protocol fee is derived on-chain from `Config`; the moderator fee is the chosen moderator's own on-chain price — the api only quotes it (`GET /config/fees`) and never sends a fee.
 - **Moderator orchestration** — on submission, **randomly assign** N moderators, fan out verify requests to `ai`, collect verdicts.
 - **Verdict aggregator** — consensus → trigger on-chain settle/refund; no consensus → flag `disputed`.
 - **Admin endpoints** — serve the dispute queue + accept manual resolutions from `admin`.

@@ -1,11 +1,19 @@
 import { assert } from "chai";
-import { program, createEscrow, setupWorld, tokenBalance, usdc, BN } from "./helpers";
+import {
+  program,
+  createEscrow,
+  setupWorld,
+  tokenBalance,
+  usdc,
+  BN,
+} from "./helpers";
 
 describe("create_escrow", () => {
   it("funds the vault and initializes escrow state", async () => {
     const amount = usdc(1000);
-    const surcharge = usdc(30);
-    const s = await createEscrow({ amount, surcharge });
+    const s = await createEscrow({ amount });
+    // The world's moderator charges 100 bps: 1% of 1000.
+    const surcharge = usdc(10);
     const total = amount.add(s.fee).add(surcharge);
 
     assert.equal((await tokenBalance(s.vault)).toString(), total.toString());
@@ -17,7 +25,9 @@ describe("create_escrow", () => {
     assert.ok(acc.amount.eq(amount));
     assert.ok(acc.protocolFee.eq(s.fee)); // 2% snapshot
     assert.ok(acc.moderatorSurcharge.eq(surcharge));
-    assert.equal(acc.moderatorCount, 3);
+    assert.equal(acc.moderatorCount, 1);
+    // Bound at creation, not at verdict time.
+    assert.ok(acc.moderator.equals(s.world.moderator.publicKey));
     assert.ok(acc.config.equals(s.world.config));
     assert.isNull(acc.outcome);
   });
@@ -25,21 +35,21 @@ describe("create_escrow", () => {
   it("applies the fee floor when the bps fee is below it", async () => {
     const world = await setupWorld(200, usdc(1).toNumber()); // $1 floor
     // 10 USDC at 2% = 0.2 USDC -> floored to 1 USDC.
-    const s = await createEscrow({ world, amount: usdc(10), surcharge: usdc(0) });
+    const s = await createEscrow({ world, amount: usdc(10) });
 
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.ok(acc.protocolFee.eq(usdc(1)));
     assert.ok(acc.verificationFee.eq(usdc(1)));
     assert.equal(
       (await tokenBalance(s.vault)).toString(),
-      usdc(10).add(usdc(1)).toString()
+      usdc(10).add(usdc(1)).add(s.surcharge).toString()
     );
   });
 
   it("uses the bps fee when it exceeds the floor", async () => {
     const world = await setupWorld(200, usdc(1).toNumber());
     // 1000 USDC at 2% = 20 USDC, well above the floor.
-    const s = await createEscrow({ world, amount: usdc(1000), surcharge: usdc(0) });
+    const s = await createEscrow({ world, amount: usdc(1000) });
 
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.ok(acc.protocolFee.eq(usdc(20)));
@@ -48,7 +58,7 @@ describe("create_escrow", () => {
   });
 
   it("charges no floor and no verification fee when none is configured", async () => {
-    const s = await createEscrow({ amount: usdc(10), surcharge: usdc(0) });
+    const s = await createEscrow({ amount: usdc(10) });
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.ok(acc.protocolFee.eq(usdc(10).mul(new BN(200)).div(new BN(10_000))));
     assert.ok(acc.verificationFee.eq(new BN(0)));
@@ -66,7 +76,7 @@ describe("create_escrow", () => {
 
   it("accepts an amount exactly at the minimum", async () => {
     const world = await setupWorld(200, usdc(1).toNumber(), usdc(50).toNumber());
-    const s = await createEscrow({ world, amount: usdc(50), surcharge: usdc(0) });
+    const s = await createEscrow({ world, amount: usdc(50) });
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.ok(acc.amount.eq(usdc(50)));
     // $50 at 2% is exactly the $1 floor — the crossover point.

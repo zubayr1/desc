@@ -33,7 +33,7 @@ V1 wedge: **Solana bounty-style dev work** with objectively-checkable deliverabl
 | Piece | Responsibility |
 |---|---|
 | `programs/desc_escrow` | On-chain escrow: deposit, accept, submit, record verdict, release, refund, cancel. Holds funds — neither party does. |
-| `programs/desc_moderation` | Moderator registry. Each moderator is a PDA with its own wallet; it signs a verdict and CPIs into the escrow. It is the escrow's `settlement_authority`, so **no platform keypair can settle**. |
+| `programs/desc_moderation` | Moderator registry. Each moderator is a PDA with its own wallet and its **own price**; it signs a verdict and CPIs into the escrow. It is the escrow's `settlement_authority`, so **no platform keypair can settle**. |
 | `apps/web` | Public product: draft contract, review & accept (from a shareable link), submit a sealed deliverable, view verdict & settlement, dashboard. Talks only to `api`. |
 | `apps/api` | Owns the DB + off-chain contract metadata, generates shareable links, and **builds unsigned transactions for the user to sign**. It holds no signing key and cannot move funds. |
 | `apps/admin` | Read-only oversight for the team. It does **not** record verdicts — moderators do. Separate auth from `web`. |
@@ -69,7 +69,8 @@ funded → cancelled                        (before anyone accepts)
 ## V1 commitments
 
 - USDC settlement, no native token.
-- Pricing: `max(2%, $1)` protocol fee + 1% per moderator; $50 minimum contract.
+- Pricing: `max(2%, $1)` protocol fee + the chosen moderator's own price (1%
+  today, capped at 5%); $50 minimum contract.
   Nothing is charged if the deal is cancelled or never delivered.
 - Objectively-verifiable deliverables only (`mergeable`, `deployable`,
   `tests_pass`, `spec_met`).

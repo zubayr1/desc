@@ -6,6 +6,7 @@ import {
   submitEscrow,
   recordVerdict,
   newFundedKeypair,
+  addModerator,
 } from "./helpers";
 
 async function toSubmitted() {
@@ -31,8 +32,8 @@ describe("record_verdict", () => {
     await recordVerdict(s, "fail");
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.property(acc.outcome, "fail");
-    // The moderator that judged is bound on-chain — it's who the surcharge
-    // is later paid to, on a Fail as well as a Pass.
+    // The assigned moderator (bound at creation) is who the surcharge is paid
+    // to, on a Fail as well as a Pass.
     assert.ok(acc.moderator.equals(s.world.moderator.publicKey));
   });
 
@@ -74,6 +75,17 @@ describe("record_verdict", () => {
       assert.fail("expected InvalidStatus");
     } catch (e) {
       assert.include(e.toString(), "InvalidStatus");
+    }
+  });
+
+  it("rejects a verdict from a registered moderator that was not assigned", async () => {
+    const { s } = await toSubmitted();
+    const other = await addModerator(s.world); // real, active, same platform
+    try {
+      await recordVerdict(s, "pass", Array(32).fill(3), other.wallet);
+      assert.fail("expected NotAssignedModerator");
+    } catch (e) {
+      assert.include(e.toString(), "NotAssignedModerator");
     }
   });
 });

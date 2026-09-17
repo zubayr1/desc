@@ -32,4 +32,14 @@ pub enum EscrowError {
     ModeratorConfigMismatch,
     #[msg("Account was written by a newer program version than this one understands")]
     UnsupportedVersion,
+    #[msg("Account is not a moderator registered with this escrow's settlement authority")]
+    ModeratorNotRecognized,
+    #[msg("Moderator is paused and takes no new work")]
+    ModeratorInactive,
+    #[msg("Size-based moderator pricing is not enabled yet")]
+    SizePricingNotEnabled,
+    #[msg("Verdict is not from the moderator assigned to this escrow")]
+    NotAssignedModerator,
+    #[msg("Moderator's price is above the maximum the initiator agreed to")]
+    ModeratorFeeAboveMax,
 }

@@ -17,11 +17,14 @@ export interface BuildCreateEscrowParams {
   escrow: PublicKey;
   vault: PublicKey;
   amount: string; // base units
-  moderatorCount: number;
-  moderatorSurcharge: string; // base units
   deadlineUnix: number;
-  /** Initiator opted out of moderation — the program checks count/surcharge are 0. */
+  /** Initiator opted out of moderation — then `moderator` must be null. */
   noMod: boolean;
+  /** The chosen moderator's PDA. The program reads its price from this account;
+   *  the surcharge is never an argument. Null for a no-mod contract. */
+  moderator: PublicKey | null;
+  /** Slippage guard, base units: the program refuses a moderator priced above it. */
+  maxModeratorFee: string;
 }
 
 /** Build the unsigned `create_escrow` transaction (initiator = fee payer + signer). */
@@ -37,10 +40,9 @@ export async function buildCreateEscrow(
     .createEscrow(
       p.contractIdBytes,
       new BN(p.amount),
-      p.moderatorCount,
-      new BN(p.moderatorSurcharge),
       new BN(p.deadlineUnix),
-      p.noMod
+      p.noMod,
+      new BN(p.maxModeratorFee)
     )
     .accountsPartial({
       initiator: p.initiator,
@@ -49,6 +51,7 @@ export async function buildCreateEscrow(
       escrow: p.escrow,
       vault: p.vault,
       initiatorTokenAccount,
+      moderator: p.moderator,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })

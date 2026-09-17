@@ -6,7 +6,6 @@ import type {
   CreateContractRequest,
   CreateContractResponse,
 } from "@repo/shared";
-import { MODERATOR_SURCHARGE_BPS, MODERATOR_COUNT } from "@repo/shared";
 import { db } from "../db/client";
 import { contracts } from "../db/schema";
 import {
@@ -18,6 +17,7 @@ import {
   readEscrow,
 } from "../solana/program";
 import { buildCreateEscrow } from "../solana/instructions/createEscrow";
+import { moderationCeiling, resolveModerator } from "../solana/moderation";
 import { submitSignedTx } from "../solana/rpc";
 import { generateLinkToken } from "../links/token";
 import { toContract } from "./mapper";
@@ -61,13 +61,34 @@ export async function createContract(
   // moderator has rendered a verdict. Same snapshot the program stores.
   const verificationFee = noMod ? "0" : feeMin.toString();
 
-  // V1: the moderator earns its surcharge, computed server-side (never trusted
-  // from the client). `GET /config/fees` serves the same constants so the form
-  // can quote the exact total the wallet will be asked to sign.
-  const moderatorSurcharge = noMod
-    ? "0"
-    : ((BigInt(req.amount) * BigInt(MODERATOR_SURCHARGE_BPS)) / 10_000n).toString();
-  const moderatorCount = noMod ? 0 : MODERATOR_COUNT;
+  // The moderator's fee is its OWN on-chain price, which the program reads from
+  // the Moderator account at create_escrow. We compute the same number only to
+  // store it — the chain decides what is actually charged.
+  const quote = noMod
+    ? null
+    : await resolveModerator(req.moderator ? new PublicKey(req.moderator) : undefined);
+  if (quote && (quote.feePerKb > 0n || quote.maxBundleKb > 0)) {
+    // Friendly early-fail; the program refuses this too (SizePricingNotEnabled).
+    throw Object.assign(
+      new Error("this moderator uses size-based pricing, which is not enabled yet"),
+      { statusCode: 400 }
+    );
+  }
+  const moderatorSurcharge = quote
+    ? moderationCeiling(BigInt(req.amount), quote).toString()
+    : "0";
+  const moderatorCount = quote ? 1 : 0;
+
+  // The fee the initiator agreed to. Without one, use the price right now — the
+  // guard then only covers the gap between this request and the tx landing.
+  const maxModeratorFee = req.maxModeratorFee ?? moderatorSurcharge;
+  if (BigInt(moderatorSurcharge) > BigInt(maxModeratorFee)) {
+    // Friendly early-fail; the program enforces it (ModeratorFeeAboveMax).
+    throw Object.assign(
+      new Error("the moderator's price changed since it was quoted — review the new total"),
+      { statusCode: 409 }
+    );
+  }
 
   const criteria = req.acceptanceCriteria.map((c, i) => ({
     id: `c${i + 1}`,
@@ -81,10 +102,10 @@ export async function createContract(
     escrow,
     vault,
     amount: req.amount,
-    moderatorCount,
-    moderatorSurcharge,
     deadlineUnix: Math.floor(deadline.getTime() / 1000),
     noMod,
+    moderator: quote?.pda ?? null,
+    maxModeratorFee,
   });
 
   const [row] = await db

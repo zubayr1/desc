@@ -236,6 +236,15 @@ export type DescEscrow = {
           "writable": true
         },
         {
+          "name": "moderator",
+          "docs": [
+            "The moderator the initiator picked (a `desc_moderation::Moderator`).",
+            "Required when moderated, omitted for no-mod. Read raw and verified in",
+            "`ModeratorPrice::load` — escrow cannot import that account type."
+          ],
+          "optional": true
+        },
+        {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -259,20 +268,16 @@ export type DescEscrow = {
           "type": "u64"
         },
         {
-          "name": "moderatorCount",
-          "type": "u8"
-        },
-        {
-          "name": "moderatorSurcharge",
-          "type": "u64"
-        },
-        {
           "name": "deadline",
           "type": "i64"
         },
         {
           "name": "noMod",
           "type": "bool"
+        },
+        {
+          "name": "maxModeratorFee",
+          "type": "u64"
         }
       ]
     },
@@ -939,6 +944,36 @@ export type DescEscrow = {
       "code": 6012,
       "name": "moderatorConfigMismatch",
       "msg": "Moderator count and surcharge do not match the escrow's moderation mode"
+    },
+    {
+      "code": 6013,
+      "name": "unsupportedVersion",
+      "msg": "Account was written by a newer program version than this one understands"
+    },
+    {
+      "code": 6014,
+      "name": "moderatorNotRecognized",
+      "msg": "Account is not a moderator registered with this escrow's settlement authority"
+    },
+    {
+      "code": 6015,
+      "name": "moderatorInactive",
+      "msg": "Moderator is paused and takes no new work"
+    },
+    {
+      "code": 6016,
+      "name": "sizePricingNotEnabled",
+      "msg": "Size-based moderator pricing is not enabled yet"
+    },
+    {
+      "code": 6017,
+      "name": "notAssignedModerator",
+      "msg": "Verdict is not from the moderator assigned to this escrow"
+    },
+    {
+      "code": 6018,
+      "name": "moderatorFeeAboveMax",
+      "msg": "Moderator's price is above the maximum the initiator agreed to"
     }
   ],
   "types": [
@@ -982,12 +1017,12 @@ export type DescEscrow = {
           {
             "name": "settlementAuthority",
             "docs": [
-              "Key authorized to call `release` / `refund` on an escrow.",
+              "Key authorized to record a verdict on an escrow.",
               "",
-              "V1: the platform backend key, acting on the off-chain aggregated verdict.",
-              "V2: swapped (via `update_config`) to a PDA of the `desc_moderation`",
-              "program, so on-chain moderator consensus settles escrows via CPI. The",
-              "escrow accounts never change — this indirection is the V1->V2 seam."
+              "`bootstrap` points this at the `desc_moderation` verdict-authority PDA,",
+              "so a registered moderator settles by CPI and no platform keypair can.",
+              "It is a field rather than a seed so it stays rotatable — that is the",
+              "seam V2 uses to widen the pool from one moderator to a staked set."
             ],
             "type": "pubkey"
           },
@@ -1134,14 +1169,24 @@ export type DescEscrow = {
           {
             "name": "moderatorSurcharge",
             "docs": [
-              "Total surcharge flowing to moderator operators."
+              "What the moderators earn on this contract, in total.",
+              "",
+              "Priced PER MODERATOR, not as a pot to divide: every moderator runs the",
+              "whole check — decrypt, rebuild, judge every criterion — so each is paid a",
+              "full fee. A contract with `n` moderators costs the initiator `n ×` the",
+              "per-moderator rate, and the alternative (one fee split `n` ways) is",
+              "rejected: it would pay the fifth moderator a fifth as much for identical",
+              "work, and no staked outside operator would take the job.",
+              "",
+              "V1 runs a single moderator, so this is that one fee and `release` pays it",
+              "whole to `moderator`. Dividing it across a k-of-n set is V2 work."
             ],
             "type": "u64"
           },
           {
             "name": "moderatorCount",
             "docs": [
-              "Number of moderators, set by the protocol from contract value."
+              "Number of moderators on this contract. Always 1 in V1 (0 when `no_mod`)."
             ],
             "type": "u8"
           },
@@ -1235,9 +1280,10 @@ export type DescEscrow = {
           {
             "name": "moderator",
             "docs": [
-              "The moderator that recorded the verdict (set by `record_verdict`; zeroed",
-              "until then). Receives the `moderator_surcharge` (its reward) on settle —",
-              "on `release` (Pass) or `refund` (Fail). Carved from `reserved`."
+              "The moderator ASSIGNED to this escrow, bound at `create_escrow` — the one",
+              "whose price was snapshotted, and the only one `record_verdict` accepts.",
+              "It is paid the surcharge on settle (`release` / `refund`).",
+              "`Pubkey::default()` on a no-mod escrow."
             ],
             "type": "pubkey"
           },
@@ -1276,6 +1322,27 @@ export type DescEscrow = {
             "type": "bool"
           },
           {
+            "name": "baseBps",
+            "docs": [
+              "Share of `amount` the moderator charges, in basis points."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "feePerKb",
+            "docs": [
+              "Per-KB of deliverable text. Always 0 until size pricing ships."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "maxBundleKb",
+            "docs": [
+              "Largest deliverable accepted, in KB. 0 = no limit."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "reserved",
             "docs": [
               "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
@@ -1285,7 +1352,7 @@ export type DescEscrow = {
             "type": {
               "array": [
                 "u8",
-                87
+                73
               ]
             }
           }

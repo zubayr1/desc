@@ -114,9 +114,10 @@ pub struct Escrow {
     pub bump: u8,
     pub vault_bump: u8,
 
-    /// The moderator that recorded the verdict (set by `record_verdict`; zeroed
-    /// until then). Receives the `moderator_surcharge` (its reward) on settle —
-    /// on `release` (Pass) or `refund` (Fail). Carved from `reserved`.
+    /// The moderator ASSIGNED to this escrow, bound at `create_escrow` — the one
+    /// whose price was snapshotted, and the only one `record_verdict` accepts.
+    /// It is paid the surcharge on settle (`release` / `refund`).
+    /// `Pubkey::default()` on a no-mod escrow.
     pub moderator: Pubkey,
 
     /// The non-refundable slice of `protocol_fee`, snapshotted at creation from
@@ -145,10 +146,27 @@ pub struct Escrow {
     /// moderated behaviour. Carved from `reserved`.
     pub no_mod: bool,
 
+    // --- The assigned moderator's price, snapshotted at creation ------------
+    // Copied from the moderator's own account so a later price change cannot
+    // alter a deal already struck. `moderator_surcharge` is the resulting
+    // CEILING the initiator deposited:
+    //
+    //   ceiling = amount * base_bps / 10_000  +  fee_per_kb * max_bundle_kb
+    //
+    // V2 charges the real fee from the delivered size and refunds the rest;
+    // until then size pricing is rejected at creation, so ceiling == fee.
+    // All zero for a no-mod escrow. Carved from `reserved`.
+    /// Share of `amount` the moderator charges, in basis points.
+    pub base_bps: u16,
+    /// Per-KB of deliverable text. Always 0 until size pricing ships.
+    pub fee_per_kb: u64,
+    /// Largest deliverable accepted, in KB. 0 = no limit.
+    pub max_bundle_kb: u32,
+
     /// Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,
     /// `dispute_account`) can be added without a risky `realloc`. Carve new
     /// fields from here; keep this the LAST field.
-    pub reserved: [u8; 87],
+    pub reserved: [u8; 73],
 }
 
 impl Escrow {
@@ -177,6 +195,24 @@ impl Escrow {
             EscrowError::UnsupportedVersion
         );
         Ok(())
+    }
+
+    /// The most a moderator can charge on this escrow: what the initiator must
+    /// lock up front. With size pricing disabled (V1) this is exactly the fee.
+    pub fn moderation_ceiling(
+        amount: u64,
+        base_bps: u16,
+        fee_per_kb: u64,
+        max_bundle_kb: u32,
+    ) -> Result<u64> {
+        let base = (amount as u128)
+            .checked_mul(base_bps as u128)
+            .and_then(|v| v.checked_div(10_000));
+        let size = (fee_per_kb as u128).checked_mul(max_bundle_kb as u128);
+        base.zip(size)
+            .and_then(|(b, z)| b.checked_add(z))
+            .and_then(|v| u64::try_from(v).ok())
+            .ok_or(error!(EscrowError::MathOverflow))
     }
 
     /// Seed prefix; full seeds = [SEED_PREFIX, initiator, contract_id].

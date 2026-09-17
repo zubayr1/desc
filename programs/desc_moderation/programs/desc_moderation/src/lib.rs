@@ -23,15 +23,36 @@ pub mod desc_moderation {
             .initialize(escrow_program, min_verdicts, &ctx.bumps)
     }
 
-    /// Admin registers a moderator (wallet + on-chain recipient + label).
+    /// Admin registers a moderator (wallet + on-chain recipient + label + price).
     pub fn register_moderator(
         ctx: Context<RegisterModerator>,
         authority: Pubkey,
         recipient: String,
         label: String,
+        base_bps: u16,
+        fee_per_kb: u64,
+        max_bundle_kb: u32,
+    ) -> Result<()> {
+        ctx.accounts.register_moderator(
+            authority,
+            recipient,
+            label,
+            base_bps,
+            fee_per_kb,
+            max_bundle_kb,
+            &ctx.bumps,
+        )
+    }
+
+    /// A moderator sets its own price. Live escrows keep the price they snapshotted.
+    pub fn update_moderator_pricing(
+        ctx: Context<UpdateModeratorPricing>,
+        base_bps: u16,
+        fee_per_kb: u64,
+        max_bundle_kb: u32,
     ) -> Result<()> {
         ctx.accounts
-            .register_moderator(authority, recipient, label, &ctx.bumps)
+            .update_moderator_pricing(base_bps, fee_per_kb, max_bundle_kb)
     }
 
     /// A moderator pauses/resumes itself.

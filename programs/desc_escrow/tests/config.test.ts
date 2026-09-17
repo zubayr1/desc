@@ -17,7 +17,7 @@ describe("config", () => {
 
     assert.equal(cfg.version, 1);
     assert.ok(cfg.authority.equals(world.authority.publicKey));
-    assert.ok(cfg.settlementAuthority.equals(world.settlementAuthority.publicKey));
+    assert.ok(cfg.settlementAuthority.equals(world.settlementAuthority));
     assert.ok(cfg.treasury.equals(world.treasury));
     assert.equal(cfg.protocolFeeBps, 200);
     assert.equal(cfg.protocolFeeMin.toNumber(), 0); // no floor by default
@@ -62,7 +62,7 @@ describe("config", () => {
     assert.equal(cfg.paused, true);
     assert.ok(cfg.treasury.equals(newTreasury.publicKey));
     // settlement_authority was passed null -> unchanged
-    assert.ok(cfg.settlementAuthority.equals(world.settlementAuthority.publicKey));
+    assert.ok(cfg.settlementAuthority.equals(world.settlementAuthority));
   });
 
   it("rejects an update from a non-authority", async () => {

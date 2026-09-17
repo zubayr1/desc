@@ -8,4 +8,8 @@ pub enum ModerationError {
     StringTooLong,
     #[msg("V1 supports only min_verdicts == 1")]
     InvalidMinVerdicts,
+    #[msg("Moderator base fee exceeds the maximum allowed")]
+    BaseBpsTooHigh,
+    #[msg("A per-KB price needs a maximum bundle size")]
+    SizePricingWithoutLimit,
 }

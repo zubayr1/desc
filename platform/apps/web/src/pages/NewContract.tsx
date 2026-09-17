@@ -11,8 +11,6 @@ import {
   DEFAULT_PROTOCOL_FEE_BPS,
   DEFAULT_PROTOCOL_FEE_MIN,
   DEFAULT_MIN_AMOUNT,
-  MODERATOR_SURCHARGE_BPS,
-  MODERATOR_COUNT,
   type Contract,
   type FeeConfig,
   type CreateContractRequest,
@@ -29,8 +27,9 @@ const FALLBACK_FEES: FeeConfig = {
   protocolFeeBps: DEFAULT_PROTOCOL_FEE_BPS,
   protocolFeeMin: String(DEFAULT_PROTOCOL_FEE_MIN),
   minAmount: String(DEFAULT_MIN_AMOUNT),
-  moderatorSurchargeBps: MODERATOR_SURCHARGE_BPS,
-  moderatorCount: MODERATOR_COUNT,
+  // No fallback moderator: a moderator's price is its own, on-chain. Guessing
+  // one here would quote a number the wallet is never asked to sign.
+  moderators: [],
 };
 
 const toUsdc = (baseUnits: string) => Number(baseUnits) / 1_000_000;
@@ -57,10 +56,11 @@ export function NewContract() {
   const [amount, setAmount] = useState("");
   const [deadline, setDeadline] = useState("");
   const [noMod, setNoMod] = useState(false);
+  const [modWallet, setModWallet] = useState("");
   const [created, setCreated] = useState<Contract | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const { data: fees = FALLBACK_FEES } = useQuery({
+  const { data: fees = FALLBACK_FEES, isSuccess: feesLoaded } = useQuery({
     queryKey: ["feeConfig"],
     queryFn: getFeeConfig,
     staleTime: 5 * 60 * 1000,
@@ -79,7 +79,25 @@ export function NewContract() {
       : 0;
   // No moderator, no moderator fee — and no verification fee either, since
   // nothing is ever checked. The protocol fee still applies.
-  const surcharge = noMod ? 0 : (amountNum * fees.moderatorSurchargeBps) / 10_000;
+  // The moderator's fee is ITS price, read from its on-chain account — the same
+  // numbers create_escrow reads. With one moderator it is picked for you.
+  const moderator =
+    fees.moderators.find((m) => m.wallet === modWallet) ??
+    (fees.moderators.length === 1 ? fees.moderators[0] : undefined);
+  const needsModerator = !noMod && !moderator;
+  // The same fee in base units, with the program's integer math — so the limit
+  // we send equals what the program computes, not a float that is 1 unit short.
+  const amountBase = BigInt(Math.round(amountNum * 1_000_000));
+  const surchargeBase =
+    noMod || !moderator
+      ? 0n
+      : (amountBase * BigInt(moderator.baseBps)) / 10_000n +
+        BigInt(moderator.feePerKb) * BigInt(moderator.maxBundleKb);
+  const surcharge =
+    noMod || !moderator
+      ? 0
+      : (amountNum * moderator.baseBps) / 10_000 +
+        toUsdc(moderator.feePerKb) * moderator.maxBundleKb;
   const total = amountNum + fee + surcharge;
 
   // Kept only when a moderator actually rendered a verdict (Pass or Fail); the
@@ -105,6 +123,7 @@ export function NewContract() {
     brief.trim() &&
     amountNum >= minAmount &&
     deadlineOk &&
+    !needsModerator &&
     validCriteria.length > 0;
 
   const createMut = useMutation({
@@ -128,10 +147,11 @@ export function NewContract() {
         deliverableType: type,
         acceptanceCriteria: validCriteria.map((description) => ({ description })),
         amount: String(Math.round(amountNum * 1_000_000)),
-        // All three are recomputed server-side from the live config; sent for shape.
-        moderatorCount: noMod ? 0 : fees.moderatorCount,
-        moderatorSurcharge: String(Math.round(surcharge * 1_000_000)),
+        // No fee is sent: the program reads the chosen moderator's price itself.
         noMod,
+        moderator: noMod ? undefined : moderator?.wallet,
+        // What the initiator is looking at. A price rise since → creation fails.
+        maxModeratorFee: surchargeBase.toString(),
         deadline: new Date(deadline).toISOString(),
         initiatorRecipient,
       };
@@ -287,6 +307,33 @@ export function NewContract() {
             )}
           </FormField>
         </div>
+
+        {/* Who verifies. Shown as a choice only when there is one to make; the
+            price next to each name is that moderator's own on-chain quote. */}
+        {!noMod && fees.moderators.length > 1 && (
+          <FormField label="Moderator">
+            <select
+              className="inp"
+              value={moderator?.wallet ?? ""}
+              onChange={(e) => setModWallet(e.target.value)}
+            >
+              <option value="" disabled>
+                Choose who verifies the work
+              </option>
+              {fees.moderators.map((m) => (
+                <option key={m.wallet} value={m.wallet}>
+                  {m.label} — {(m.baseBps / 100).toFixed(2)}%
+                </option>
+              ))}
+            </select>
+          </FormField>
+        )}
+        {!noMod && feesLoaded && fees.moderators.length === 0 && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
+            No moderator is available right now. Try again later, or skip
+            verification below.
+          </div>
+        )}
 
         {/* Opting out of verification. Deliberately plain about who carries the
             risk — the committer can see this mode on the contract too. */}

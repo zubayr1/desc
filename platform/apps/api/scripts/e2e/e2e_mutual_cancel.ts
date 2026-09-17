@@ -32,7 +32,7 @@ const AUTHORITY_PATH = expand(
 const loadKeypair = (p: string) =>
   Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
 
-const TOTAL = 1_050_000_000;
+const TOTAL = 1_070_000_000; // amount 1000 + fee 20 + moderator price (up to 5% = 50)
 
 async function postJson(path: string, body: unknown) {
   const res = await fetch(`${BASE}${path}`, {
@@ -70,8 +70,6 @@ async function main() {
     deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "n/a" }],
     amount: "1000000000",
-    moderatorCount: 3,
-    moderatorSurcharge: "30000000",
     deadline: new Date(Date.now() + 3600_000).toISOString(),
   })) as { id: string; unsignedTx: string };
 

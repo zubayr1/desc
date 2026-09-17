@@ -2,9 +2,9 @@
  * Step 4 — onboard a moderator (on-chain).
  *
  *   1. provision the mod's WALLET keypair + age identity (saved to files)
- *   2. fund the wallet: SOL (gas) + a USDC token account (to receive the 1% reward)
- *   3. register_moderator(wallet, recipient, label) — admin-signed; writes the
- *      `Moderator` account on-chain (the recipient now lives on-chain)
+ *   2. fund the wallet: SOL (gas) + a USDC token account (to receive its fee)
+ *   3. register_moderator(wallet, recipient, label, price) — admin-signed; writes
+ *      the `Moderator` account on-chain (recipient and price now live on-chain)
  *
  * Hand the two files to that mod's runner: `wallet.json` is its signer (signs
  * `submit_verdict`), `identity.key` is its decrypt key. Both are gitignored.
@@ -13,12 +13,22 @@
  *   `USDC_MINT` set in the env (run `pnpm bootstrap`). Admin-gated in V1 — the
  *   cold authority signs; permissionless stake-gated self-registration is V2.
  *
- * Run with: `pnpm moderator-register "Mod A"`.
+ * Run with: `pnpm moderator-register "Mod A" --base-bps 100`.
+ *
+ * Price flags (the moderator's own quote; escrow snapshots it at creation):
+ *   --base-bps <n>        REQUIRED. Share of the contract amount (100 = 1%, max 500).
+ *                         No default on purpose — a moderator's price is a decision,
+ *                         not something to inherit silently.
+ *   --fee-per-kb <n>      Per-KB of deliverable text, base units. Default 0.
+ *   --max-bundle-kb <n>   Largest deliverable accepted, KB. Default 0 (no limit).
+ *   Size pricing (the last two) is V2: escrow refuses a non-zero value today.
  */
 import "dotenv/config";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+// `BN` isn't a statically-detectable named export under ESM — pull it off default.
+const { BN } = anchorPkg;
 import { getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
 import {
   Connection,
@@ -39,7 +49,26 @@ const AUTHORITY_PATH = expand(
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
 const GAS_SOL = 0.05; // a tiny buffer — thousands of verdict txns
 
-const label = process.argv[2] ?? "Moderator";
+const argv = process.argv.slice(2);
+const flag = (name: string) => {
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv[i + 1] : undefined;
+};
+/** A non-negative integer flag, or `fallback` when the flag is absent. */
+const intFlag = (name: string, fallback?: number): number => {
+  const raw = flag(name);
+  if (raw === undefined) {
+    if (fallback === undefined) throw new Error(`${name} is required`);
+    return fallback;
+  }
+  if (!/^\d+$/.test(raw)) throw new Error(`${name} must be a non-negative integer, got "${raw}"`);
+  return Number(raw);
+};
+
+// The label is the first argument that is neither a flag nor a flag's value.
+const label =
+  argv.find((a, i) => !a.startsWith("--") && !(i > 0 && argv[i - 1].startsWith("--"))) ??
+  "Moderator";
 const slug =
   label
     .toLowerCase()
@@ -51,6 +80,10 @@ function loadKeypair(path: string): Keypair {
 }
 
 async function main() {
+  const baseBps = intFlag("--base-bps");
+  const feePerKb = intFlag("--fee-per-kb", 0);
+  const maxBundleKb = intFlag("--max-bundle-kb", 0);
+
   const usdcMintStr = process.env.USDC_MINT;
   if (!usdcMintStr) throw new Error("USDC_MINT not set — run `pnpm bootstrap` first.");
   const usdcMint = new PublicKey(usdcMintStr);
@@ -96,7 +129,14 @@ async function main() {
   );
 
   await program.methods
-    .registerModerator(wallet.publicKey, recipient, label)
+    .registerModerator(
+      wallet.publicKey,
+      recipient,
+      label,
+      baseBps,
+      new BN(feePerKb),
+      maxBundleKb
+    )
     .accountsPartial({
       admin: admin.publicKey,
       config,
@@ -110,6 +150,11 @@ async function main() {
   console.log("  wallet (signer) :", wallet.publicKey.toBase58(), `→ ${walletPath}`);
   console.log("  USDC account    :", usdcAta.address.toBase58());
   console.log("  recipient (age) :", recipient);
+  console.log(
+    "  price           :",
+    `${(baseBps / 100).toFixed(2)}% of amount` +
+      (feePerKb ? ` + ${feePerKb}/KB (max ${maxBundleKb} KB)` : "")
+  );
   console.log("  identity (key)  :", `${identityPath}  (give to the mod's runner; never commit)`);
   console.log(
     "\nThe runner uses BOTH files: wallet.json signs submit_verdict, identity.key decrypts."

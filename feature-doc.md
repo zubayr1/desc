@@ -80,7 +80,7 @@ Settled in **USDC**. SOL is only transaction fees and refundable rent.
 | Parameter | Value | Where it lives |
 |---|---|---|
 | Protocol fee | `max(2%, $1)` | on-chain `Config` |
-| Moderator fee | 1% | server-side rule |
+| Moderator fee | set by each moderator (1% today, max 5%) | on-chain `Moderator` account |
 | Smallest contract | $50 | on-chain `Config` |
 | Verification fee | $1 (= the floor) | snapshotted per escrow |
 
@@ -88,8 +88,8 @@ Settled in **USDC**. SOL is only transaction fees and refundable rent.
 
 | Outcome | Protocol | Moderator | Initiator |
 |---|---|---|---|
-| **Pass** | full fee | 1% | — (committer paid in full) |
-| **Fail** | $1 only | 1% | everything else back |
+| **Pass** | full fee | its price | — (committer paid in full) |
+| **Fail** | $1 only | its price | everything else back |
 | **Ghost timeout** | nothing | nothing | everything back |
 | **Cancel / mutual cancel** | nothing | nothing | everything back |
 
@@ -211,7 +211,7 @@ cheaper version of a moderated deal.
 
 | Layer | |
 |---|---|
-| Program | `no_mod` on the escrow, carved from `reserved`. `submit` records the Pass itself. `release`'s moderator account is optional. Creation rejects a no-mod escrow that still pays a moderator, and a moderated one with no moderators. |
+| Program | `no_mod` on the escrow, carved from `reserved`. `submit` records the Pass itself. `release`'s moderator account is optional. Creation rejects a no-mod escrow that names a moderator, and a moderated one without one. |
 | API | `noMod` on the create request; surcharge, count and verification fee all forced to 0 server-side. The submit transaction carries `submit` + `release` together, so it lands on `settled`. |
 | Web | Opt-out checkbox with a risk warning, fee panel drops the moderator row, and the contract page shows an amber banner to **both** parties. |
 
@@ -272,6 +272,21 @@ platform sees no plaintext and no verdict, so it stays a queue and a blob store.
 Auth is a wallet signature checked against `moderatorPda`; no API keys. `mod-run`
 becomes a client of it, which is also the test: if our own moderator needs
 nothing private, nobody's does.
+
+**Moderator pricing — decided, partly built.** Each moderator sets its own
+price on its `Moderator` account; escrow reads it at creation, so no caller
+supplies the fee.
+
+- Built: `base_bps` (share of amount), mod bound at creation, only it may judge,
+  `max_moderator_fee` slippage guard (price rose since the quote → creation fails).
+- V2 — size pricing: `fee_per_kb` × deliverable size. The initiator locks a
+  **ceiling** (`fee_per_kb × max_bundle_kb`); settlement charges the real size and
+  refunds the rest. Committer declares size at submit, the mod checks it against
+  the real bundle, oversize is rejected at upload. Text only.
+- V2 — several mods per escrow: a per-escrow moderation account holding each
+  mod's price and verdict. `max_moderator_fee ≥ Σ ceilings`; each mod paid its own.
+- Open: initiator-picked mods invite collusion once registration is open. Either
+  the committer sees and accepts the mod, or assignment is random — not both.
 
 Everything below is expansion, not core — do it after the above:
 

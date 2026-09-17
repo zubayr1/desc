@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
 import { DescEscrow } from "../target/types/desc_escrow";
+import { DescModeration } from "../../desc_moderation/target/types/desc_moderation";
 import {
   Keypair,
   PublicKey,
@@ -18,6 +19,13 @@ import {
 export const provider = anchor.AnchorProvider.env();
 anchor.setProvider(provider);
 export const program = anchor.workspace.descEscrow as Program<DescEscrow>;
+
+// desc_moderation lives in a sibling workspace, so it is not on
+// `anchor.workspace` — build its client from its IDL. The program itself is
+// loaded onto the test validator via `[[test.genesis]]` in Anchor.toml.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const moderationIdl = require("../../desc_moderation/target/idl/desc_moderation.json");
+export const moderation = new Program<DescModeration>(moderationIdl, provider);
 export const connection = provider.connection;
 
 export const USDC_DECIMALS = 6;
@@ -62,6 +70,28 @@ export function vaultPda(escrow: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), escrow.toBuffer()],
     program.programId
+  )[0];
+}
+
+export function moderationConfigPda(admin: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("config"), admin.toBuffer()],
+    moderation.programId
+  )[0];
+}
+
+/** `[b"authority", moderation_config]` — the escrow's settlement authority. */
+export function verdictAuthorityPda(modConfig: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("authority"), modConfig.toBuffer()],
+    moderation.programId
+  )[0];
+}
+
+export function moderatorPda(wallet: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("moderator"), wallet.toBuffer()],
+    moderation.programId
   )[0];
 }
 
@@ -122,7 +152,11 @@ export async function accountExists(pubkey: PublicKey): Promise<boolean> {
 
 export interface World {
   authority: Keypair;
-  settlementAuthority: Keypair;
+  /** The `desc_moderation` verdict-authority PDA — a real PDA, not a keypair, so
+   *  only a registered moderator can settle, by CPI. */
+  settlementAuthority: PublicKey;
+  /** This world's `desc_moderation` config (admin = `authority`). */
+  modConfig: PublicKey;
   mintAuthority: Keypair;
   mint: PublicKey;
   treasuryOwner: Keypair;
@@ -134,19 +168,38 @@ export interface World {
   feeMin: number;
   /** Smallest accepted contract amount, base units. Defaults to 0 (no minimum). */
   minAmount: number;
-  /** Stands in for the judging moderator — `record_verdict` binds it and it
-   *  receives the surcharge on settle. */
+  /** The world's registered moderator: assigned at `create_escrow`, signs
+   *  `submit_verdict`, and receives the surcharge on settle. */
   moderator: Keypair;
+  moderatorPda: PublicKey;
   moderatorAta: PublicKey;
+  /** The moderator's own price, in bps of the contract amount. */
+  modBps: number;
 }
 
 export async function setupWorld(
   feeBps = 200,
   feeMin = 0,
-  minAmount = 0
+  minAmount = 0,
+  modBps = 100
 ): Promise<World> {
   const authority = await newFundedKeypair();
-  const settlementAuthority = await newFundedKeypair();
+
+  // The moderation side: its config, whose verdict PDA becomes the escrow's
+  // settlement authority — exactly how `bootstrap` wires production.
+  const modConfig = moderationConfigPda(authority.publicKey);
+  const settlementAuthority = verdictAuthorityPda(modConfig);
+  await moderation.methods
+    .initialize(program.programId, 1)
+    .accountsPartial({
+      admin: authority.publicKey,
+      config: modConfig,
+      authority: settlementAuthority,
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([authority])
+    .rpc();
+
   const mintAuthority = await newFundedKeypair();
   const mint = await createUsdcMint(mintAuthority);
   const treasuryOwner = Keypair.generate();
@@ -158,7 +211,7 @@ export async function setupWorld(
     mintAuthority
   );
   const config = configPda(authority.publicKey);
-  const moderator = Keypair.generate();
+  const moderator = await newFundedKeypair(1); // signs submit_verdict
   const moderatorAta = await fundedAta(
     mintAuthority,
     mint,
@@ -169,7 +222,7 @@ export async function setupWorld(
 
   await program.methods
     .initializeConfig(
-      settlementAuthority.publicKey,
+      settlementAuthority,
       treasury,
       feeBps,
       new BN(feeMin),
@@ -183,9 +236,14 @@ export async function setupWorld(
     .signers([authority])
     .rpc();
 
+  const moderatorPdaKey = await registerModeratorIn(authority, modConfig, moderator, modBps);
+
   return {
     authority,
     settlementAuthority,
+    modConfig,
+    moderatorPda: moderatorPdaKey,
+    modBps,
     mintAuthority,
     mint,
     treasuryOwner,
@@ -197,6 +255,53 @@ export async function setupWorld(
     moderator,
     moderatorAta,
   };
+}
+
+/** Register `wallet` as a moderator under `modConfig` with its own price. */
+async function registerModeratorIn(
+  admin: Keypair,
+  modConfig: PublicKey,
+  wallet: Keypair,
+  baseBps: number,
+  feePerKb = 0,
+  maxBundleKb = 0
+): Promise<PublicKey> {
+  const pda = moderatorPda(wallet.publicKey);
+  await moderation.methods
+    .registerModerator(
+      wallet.publicKey,
+      "age1testrecipient",
+      "Test Mod",
+      baseBps,
+      new BN(feePerKb),
+      maxBundleKb
+    )
+    .accountsPartial({
+      admin: admin.publicKey,
+      config: modConfig,
+      moderator: pda,
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([admin])
+    .rpc();
+  return pda;
+}
+
+/** An extra moderator in `world` — e.g. to prove only the ASSIGNED one may judge. */
+export async function addModerator(
+  world: World,
+  opts?: { baseBps?: number; feePerKb?: number; maxBundleKb?: number }
+): Promise<{ wallet: Keypair; pda: PublicKey }> {
+  const wallet = await newFundedKeypair(1);
+  const pda = await registerModeratorIn(
+    world.authority,
+    world.modConfig,
+    wallet,
+    opts?.baseBps ?? world.modBps,
+    opts?.feePerKb ?? 0,
+    opts?.maxBundleKb ?? 0
+  );
+  return { wallet, pda };
 }
 
 // ---------------------------------------------------------------------------
@@ -259,21 +364,29 @@ let labelCounter = 0;
 export async function createEscrow(opts?: {
   world?: World;
   amount?: BN;
-  surcharge?: BN;
-  moderatorCount?: number;
+  /** Override the Moderator account passed to create_escrow. Defaults to the
+   *  world's moderator (or none for no-mod). `null` passes no account. */
+  moderator?: PublicKey | null;
   deadlineOffset?: number;
   /** Absolute deadline in CHAIN time. Use with `chainUnixTs()` for deadline
    *  tests; `deadlineOffset` is wall-relative and only safe for far futures. */
   deadlineAbsolute?: number;
-  /** Initiator opts out of moderation. Defaults the count and surcharge to 0,
-   *  which is what the program requires of a no-mod escrow. */
+  /** The most the initiator agrees to pay the moderator. Defaults to the world
+   *  moderator's current price, i.e. the fee they were quoted. */
+  maxModeratorFee?: BN;
+  /** Initiator opts out of moderation — no moderator account, no surcharge. */
   noMod?: boolean;
 }): Promise<EscrowSetup> {
   const world = opts?.world ?? (await setupWorld());
   const amount = opts?.amount ?? usdc(1000);
   const noMod = opts?.noMod ?? false;
-  const surcharge = opts?.surcharge ?? (noMod ? usdc(0) : usdc(30));
-  const moderatorCount = opts?.moderatorCount ?? (noMod ? 0 : 3);
+  const moderatorAccount =
+    opts?.moderator !== undefined ? opts.moderator : noMod ? null : world.moderatorPda;
+  // Mirrors the program: the surcharge is the moderator's own price.
+  const surcharge = noMod
+    ? usdc(0)
+    : amount.mul(new BN(world.modBps)).div(new BN(10_000));
+  const moderatorCount = noMod ? 0 : 1;
   const deadlineOffset = opts?.deadlineOffset ?? 3600;
 
   const initiator = await newFundedKeypair();
@@ -299,7 +412,7 @@ export async function createEscrow(opts?: {
   );
 
   await program.methods
-    .createEscrow(cid, amount, moderatorCount, surcharge, deadline, noMod)
+    .createEscrow(cid, amount, deadline, noMod, opts?.maxModeratorFee ?? surcharge)
     .accountsPartial({
       initiator: initiator.publicKey,
       config: world.config,
@@ -307,6 +420,7 @@ export async function createEscrow(opts?: {
       escrow,
       vault,
       initiatorTokenAccount: initiatorAta,
+      moderator: moderatorAccount,
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
@@ -354,22 +468,32 @@ export async function submitEscrow(
     .rpc();
 }
 
+/**
+ * Record a verdict the way production does: a registered moderator signs
+ * `desc_moderation::submit_verdict`, which CPIs into escrow's `record_verdict`
+ * as the verdict-authority PDA. Defaults to the world's (assigned) moderator.
+ */
 export async function recordVerdict(
   s: EscrowSetup,
   outcome: "pass" | "fail",
-  hash: number[] = Array(32).fill(9)
+  hash: number[] = Array(32).fill(9),
+  by: Keypair = s.world.moderator
 ) {
   // anchor's generated enum type is a discriminated union; the ternary widens
   // it, so hand it over untyped (as the other test call sites do).
   const o: any = outcome === "pass" ? { pass: {} } : { fail: {} };
-  await program.methods
-    .recordVerdict(o, hash, s.world.moderator.publicKey)
+  await moderation.methods
+    .submitVerdict(o, hash)
     .accountsPartial({
-      settlementAuthority: s.world.settlementAuthority.publicKey,
-      config: s.world.config,
+      authority: by.publicKey,
+      config: s.world.modConfig,
+      verdictAuthority: s.world.settlementAuthority,
+      moderator: moderatorPda(by.publicKey),
+      escrowConfig: s.world.config,
       escrow: s.escrow,
+      descEscrowProgram: program.programId,
     })
-    .signers([s.world.settlementAuthority])
+    .signers([by])
     .rpc();
 }
 

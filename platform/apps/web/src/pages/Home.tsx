@@ -22,8 +22,9 @@ import {
   DEFAULT_PROTOCOL_FEE_BPS,
   DEFAULT_PROTOCOL_FEE_MIN,
   DEFAULT_MIN_AMOUNT,
-  MODERATOR_SURCHARGE_BPS,
 } from "@repo/shared";
+import { useQuery } from "@tanstack/react-query";
+import { getFeeConfig } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Reveal } from "@/components/landing/Reveal";
 import { FlowDiagram } from "@/components/landing/FlowDiagram";
@@ -31,8 +32,10 @@ import { FlowDiagram } from "@/components/landing/FlowDiagram";
 // Marketing copy reads the same constants the form and the program do, so the
 // pricing on the landing page can't drift from what a wallet is actually asked
 // to sign. (The on-chain Config stays the source of truth at contract time.)
+// The moderator fee is NOT a protocol constant — each moderator sets its own,
+// on-chain — so the landing page quotes the cheapest live one rather than a
+// number the protocol doesn't actually enforce.
 const PROTOCOL_PCT = DEFAULT_PROTOCOL_FEE_BPS / 100;
-const MODERATOR_PCT = MODERATOR_SURCHARGE_BPS / 100;
 const FEE_FLOOR = DEFAULT_PROTOCOL_FEE_MIN / 1_000_000;
 const MIN_CONTRACT = DEFAULT_MIN_AMOUNT / 1_000_000;
 
@@ -85,6 +88,18 @@ function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; 
 }
 
 export function Home() {
+  // Cheapest active moderator's rate, e.g. "1%". Undefined until it loads (or if
+  // none is registered) — the copy then names the fee without inventing a number.
+  const { data: fees } = useQuery({
+    queryKey: ["feeConfig"],
+    queryFn: getFeeConfig,
+    staleTime: 5 * 60 * 1000,
+  });
+  const cheapestBps = fees?.moderators.length
+    ? Math.min(...fees.moderators.map((m) => m.baseBps))
+    : undefined;
+  const modPct = cheapestBps === undefined ? undefined : cheapestBps / 100;
+
   return (
     <div className="space-y-28 pb-16">
       {/* ── Hero ─────────────────────────────────────────────── */}
@@ -239,7 +254,7 @@ export function Home() {
           <div className="text-5xl font-semibold tracking-tight">
             {PROTOCOL_PCT}%
             <span className="ml-1 text-lg font-normal text-zinc-500">
-              + {MODERATOR_PCT}% moderator
+              + {modPct === undefined ? "" : `from ${modPct}% `}moderator
             </span>
           </div>
 
@@ -253,7 +268,8 @@ export function Home() {
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-zinc-400">Moderator fee</dt>
               <dd className="text-zinc-300">
-                {MODERATOR_PCT}%, to whoever verifies the work
+                Set by the moderator you pick
+                {modPct === undefined ? "" : ` — from ${modPct}%`}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
@@ -272,8 +288,8 @@ export function Home() {
                 <Undo2 className="mt-0.5 size-4 shrink-0 text-zinc-500" />
                 <span>
                   <span className="text-zinc-300">Fails verification</span> —
-                  refunded, less ${FEE_FLOOR.toFixed(2)} + {MODERATOR_PCT}% for
-                  the check
+                  refunded, less ${FEE_FLOOR.toFixed(2)} + the moderator fee
+                  for the check
                 </span>
               </li>
               <li className="flex items-start gap-2.5">

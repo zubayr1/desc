@@ -26,7 +26,9 @@
 import "dotenv/config";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor";
+import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+// `BN` isn't a statically-detectable named export under ESM — pull it off default.
+const { BN } = anchorPkg;
 import { getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
 import {
   Connection,

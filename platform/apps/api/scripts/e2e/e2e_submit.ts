@@ -18,7 +18,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
-import { deliverBundle, getJson } from "./_shared";
+import { deliverBundle, getJson, pickModerator } from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -72,6 +72,7 @@ async function main() {
     deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: "1000000000",
+    moderator: await pickModerator(),
     deadline: new Date(Date.now() + 3600_000).toISOString(),
   })) as { id: string; unsignedTx: string };
   const funded = (await signAndSubmit(

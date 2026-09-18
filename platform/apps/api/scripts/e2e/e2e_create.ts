@@ -15,6 +15,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, mintTo } from "@solana/spl-token";
+import { pickModerator } from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -55,6 +56,7 @@ async function main() {
       { description: "All vesting tests pass in CI" },
     ],
     amount: "1000000000",
+    moderator: await pickModerator(),
     deadline: new Date(Date.now() + 3600_000).toISOString(),
   };
   const createRes = await fetch(`${BASE}/contracts`, {

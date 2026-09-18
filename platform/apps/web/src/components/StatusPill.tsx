@@ -11,15 +11,17 @@ const META: Record<ContractStatus, { label: string; varName: string }> = {
 
 export function StatusPill({ status }: { status: ContractStatus }) {
   const m = META[status];
+  const c = `var(${m.varName})`;
   return (
-    <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-zinc-200">
-      <span
-        className="size-2 rounded-full"
-        style={{
-          background: `var(${m.varName})`,
-          boxShadow: `0 0 8px var(${m.varName})`,
-        }}
-      />
+    <span
+      className="inline-flex shrink-0 items-center gap-2 rounded-full px-2.5 py-1 font-mono text-[0.7rem] font-medium uppercase tracking-wide"
+      style={{
+        color: c,
+        background: `color-mix(in oklab, ${c} 12%, transparent)`,
+        border: `1px solid color-mix(in oklab, ${c} 35%, transparent)`,
+      }}
+    >
+      <span className="size-1.5 rounded-full" style={{ background: c, boxShadow: `0 0 8px ${c}` }} />
       {m.label}
     </span>
   );

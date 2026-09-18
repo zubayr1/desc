@@ -1,9 +1,9 @@
 import { PublicKey } from "@solana/web3.js";
-import type { Contract, ContractStatus } from "@repo/shared";
+import type { Contract, ContractPage, ContractStatus } from "@repo/shared";
 import type { ContractRow } from "../db/schema";
 import { readEscrow, readEscrows, type OnChainEscrow } from "../solana/program";
 import { toContract } from "./mapper";
-import { getRow, getRowByLink, getRows, writeCache } from "./repo";
+import { getRow, getRowByLink, getRows, getRowsPage, writeCache } from "./repo";
 
 /** Final states — never change, so never re-read them. */
 const TERMINAL: ReadonlySet<ContractStatus> = new Set([
@@ -74,19 +74,14 @@ export async function reconcileRows(
   return { fresh, updated };
 }
 
-export async function listContracts(opts: {
-  initiator?: string;
-  status?: ContractStatus;
-}): Promise<Contract[]> {
-  const rows = await getRows(opts);
+/** Merge rows with live chain state, falling back to the cache if RPC is down. */
+async function withChainState(rows: ContractRow[]): Promise<Contract[]> {
   let fresh = new Map<string, OnChainEscrow>();
-
   try {
     ({ fresh } = await reconcileRows(rows));
   } catch {
     // RPC unreachable — fall through to the cached state below.
   }
-
   return rows.map((row) =>
     toContract(
       row,
@@ -97,4 +92,28 @@ export async function listContracts(opts: {
       }
     )
   );
+}
+
+/** One page for the dashboard — only the rows being shown are checked on-chain. */
+export async function listContracts(opts: {
+  initiator?: string;
+  status?: ContractStatus;
+  page: number;
+  pageSize: number;
+}): Promise<ContractPage> {
+  const { rows, total } = await getRowsPage(
+    { initiator: opts.initiator, status: opts.status },
+    { limit: opts.pageSize, offset: (opts.page - 1) * opts.pageSize }
+  );
+  return {
+    items: await withChainState(rows),
+    total,
+    page: opts.page,
+    pageSize: opts.pageSize,
+  };
+}
+
+/** Every contract, unpaged — the admin console's oversight list. */
+export async function listAllContracts(): Promise<Contract[]> {
+  return withChainState(await getRows({}));
 }

@@ -247,6 +247,14 @@ export interface ModeratorOffer {
   maxBundleKb: number;
 }
 
+/** One page of `GET /contracts`. `total` counts every match, not just this page. */
+export interface ContractPage {
+  items: Contract[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 /** Response to `POST /contracts` — the unsigned tx for the wallet to sign. */
 export interface CreateContractResponse {
   id: string;

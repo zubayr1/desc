@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull } from "drizzle-orm";
 import type { ContractStatus } from "@repo/shared";
 import { db } from "../db/client";
 import { contracts, type ContractRow } from "../db/schema";
@@ -22,18 +22,43 @@ export async function getRowByLink(token: string): Promise<ContractRow> {
 }
 
 /** Funded+ contract rows (cached `status` is set), filtered + newest first. */
+function listFilter(opts: { initiator?: string; status?: ContractStatus }) {
+  const conds = [isNotNull(contracts.status)];
+  if (opts.initiator) conds.push(eq(contracts.initiator, opts.initiator));
+  if (opts.status) conds.push(eq(contracts.status, opts.status));
+  return and(...conds);
+}
+
+/** Every matching row — the reconciler's view. The list route pages instead. */
 export async function getRows(opts: {
   initiator?: string;
   status?: ContractStatus;
 }): Promise<ContractRow[]> {
-  const conds = [isNotNull(contracts.status)];
-  if (opts.initiator) conds.push(eq(contracts.initiator, opts.initiator));
-  if (opts.status) conds.push(eq(contracts.status, opts.status));
   return db
     .select()
     .from(contracts)
-    .where(and(...conds))
+    .where(listFilter(opts))
     .orderBy(desc(contracts.createdAt));
+}
+
+/** One page of matching rows, newest first, plus the total across all pages. */
+export async function getRowsPage(
+  opts: { initiator?: string; status?: ContractStatus },
+  page: { limit: number; offset: number }
+): Promise<{ rows: ContractRow[]; total: number }> {
+  const where = listFilter(opts);
+  const [rows, [{ n }]] = await Promise.all([
+    db
+      .select()
+      .from(contracts)
+      .where(where)
+      // id breaks ties so a page boundary never repeats or skips a row
+      .orderBy(desc(contracts.createdAt), desc(contracts.id))
+      .limit(page.limit)
+      .offset(page.offset),
+    db.select({ n: count() }).from(contracts).where(where),
+  ]);
+  return { rows, total: Number(n) };
 }
 
 /** Write-through cache fields, set on every flow after reading the escrow. */

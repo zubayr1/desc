@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { env } from "../config/env";
-import { listContracts } from "../contracts/service";
+import { listAllContracts } from "../contracts/service";
 
 /**
  * Bearer-token gate for /admin/*. Fail-closed: if ADMIN_TOKEN isn't configured,
@@ -20,6 +20,6 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
 export function registerAdminRoutes(app: FastifyInstance) {
   // Read-only oversight: all contracts merged with live chain state.
   app.get("/admin/contracts", { preHandler: requireAdmin }, async () =>
-    listContracts({})
+    listAllContracts()
   );
 }

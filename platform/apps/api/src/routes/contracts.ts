@@ -111,17 +111,30 @@ export function registerContractRoutes(app: FastifyInstance) {
     return submitMutualCancel(id, signedTx);
   });
 
-  // List (read model) — filter by initiator and/or status.
+  // List (read model) — filter by initiator and/or status, one page at a time.
   app.get("/contracts", async (req) => {
-    const { initiator, status } = req.query as {
+    const { initiator, status, page, pageSize } = req.query as {
       initiator?: string;
       status?: string;
+      page?: string;
+      pageSize?: string;
     };
     const validStatus =
       status && (CONTRACT_STATUSES as readonly string[]).includes(status)
         ? (status as ContractStatus)
         : undefined;
-    return listContracts({ initiator, status: validStatus });
+    // Bad or missing numbers fall back to sane values rather than erroring:
+    // a list is never worth a 400.
+    const int = (v: string | undefined, dflt: number) => {
+      const n = Number.parseInt(v ?? "", 10);
+      return Number.isFinite(n) ? n : dflt;
+    };
+    return listContracts({
+      initiator,
+      status: validStatus,
+      page: Math.max(1, int(page, 1)),
+      pageSize: Math.min(50, Math.max(1, int(pageSize, 5))),
+    });
   });
 
   // Merged read (DB metadata + live chain state).

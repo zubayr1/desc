@@ -92,6 +92,10 @@ reprints these (incl. the current `USDC_MINT`).
 pnpm db:push
 ```
 
+Re-run it after pulling schema changes — e.g. the `moderator` and
+`moderator_recipient` columns that record which moderator a contract was assigned.
+Contracts created before that have no assigned moderator and are skipped by `mod-watch`.
+
 ### 6. API
 ```bash
 # in apps/api
@@ -205,7 +209,8 @@ pnpm scripts; they do **not** exist in the program workspace):
 cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
 pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
                                       # set as settlement_authority can now sign)
-pnpm moderator-register "Mod A" --base-bps 100   # provision + fund + register, priced at 1%
+pnpm moderator-register "Mod A — Claude Opus" --base-bps 100                            # 1%, Opus (default)
+pnpm moderator-register "Mod B — Claude Haiku" --base-bps 50 --model claude-haiku-4-5  # 0.5%, Haiku
 ```
 
 > **Register the moderator BEFORE any deliverable is uploaded.** The committer's
@@ -213,12 +218,19 @@ pnpm moderator-register "Mod A" --base-bps 100   # provision + fund + register, 
 > mod registered afterwards holds no key that can open it, and fails at decrypt
 > rather than telling you it was late.
 
-**C) run the moderator — a second terminal, same package:**
+Each moderator has its own price (on-chain) and its own model (saved next to its
+keys as `<slug>-config.json`). The initiator picks one per contract; the committer's
+delivery is sealed to **that moderator only**, and only it can record the verdict.
+
+**C) run the moderators — one terminal each, same package:**
 ```bash
-DESC_JUDGE=claude pnpm mod-watch      # polls for submitted contracts, AI judges each
+DESC_JUDGE=claude pnpm mod-watch --mod mod-a-claude-opus
+DESC_JUDGE=claude pnpm mod-watch --mod mod-b-claude-haiku
 ```
-Leave it running while you test. `--once` does a single sweep and exits; drop
+Each watcher claims only the contracts assigned to its moderator. `--mod` is the slug
+of the label (lowercased, dashes). `--once` does a single sweep and exits; drop
 `DESC_JUDGE=claude` and it expects you to settle contracts by hand instead.
+`DESC_JUDGE_MODEL=<id>` overrides a moderator's saved model for a one-off run.
 
 To judge one specific contract without the watcher:
 ```bash
@@ -249,7 +261,7 @@ is the `/contracts/<uuid>` uuid or the `/c/<token>` link token.
 > Uses `./moderators/<slug>-{wallet.json,identity.key}` from `moderator-register`. One mod
 > provisioned → auto-selected; multiple → pass `--mod <slug>`. It must be the mod the
 > contract was **created with**, or the verdict fails with `NotAssignedModerator`.
-> `mod-watch` doesn't filter by assigned mod yet, so run it with **one** mod.
+> `mod-watch` already claims only its own moderator's contracts.
 
 ### Check the moderator's fee
 
@@ -303,7 +315,7 @@ the source of truth). `GET /config/moderators` reads recipients live, and
 
 ### Register a moderator
 ```bash
-pnpm --filter api moderator-register "Mod A" --base-bps 100
+pnpm --filter api moderator-register "Mod A — Claude Opus" --base-bps 100
 ```
 This provisions the mod's **wallet** keypair + **age identity** (saved under
 `./moderators/`, gitignored), **funds** the wallet (SOL for gas + a USDC account for
@@ -315,7 +327,8 @@ recipient and **price** into the `Moderator` account. Flags: `apps/api/scripts/R
 - **Hand the two files to that mod's runner:** `*-wallet.json` signs `submit_verdict`,
   `*-identity.key` decrypts deliverables. Never commit them.
 - **Scalable by design:** run it once per moderator (admin-gated in V1; permissionless +
-  stake in V2). Deliverables encrypt to **all active** recipients; any one mod can decrypt.
+  stake in V2). Each delivery is sealed to the **one** moderator assigned to that contract
+  (plus the initiator) — other moderators cannot open it.
 
 ### Inspect / manage
 ```bash

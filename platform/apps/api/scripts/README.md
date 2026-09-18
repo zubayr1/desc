@@ -91,7 +91,8 @@ Provisions a moderator's wallet + `age` identity (under `./moderators/`), funds
 it, and registers it on-chain **with its own price**.
 
 ```bash
-pnpm moderator-register "Mod A" --base-bps 100
+pnpm moderator-register "Mod A — Claude Opus" --base-bps 100
+pnpm moderator-register "Mod B — Claude Haiku" --base-bps 50 --model claude-haiku-4-5
 ```
 
 | Flag | Default | Meaning |
@@ -99,6 +100,7 @@ pnpm moderator-register "Mod A" --base-bps 100
 | `--base-bps <n>` | **required** | share of the contract amount (100 = 1%, max 500) |
 | `--fee-per-kb <n>` | 0 | V2 size pricing — escrow rejects non-zero today |
 | `--max-bundle-kb <n>` | 0 (no limit) | V2 size pricing — escrow rejects non-zero today |
+| `--model <id>` | `claude-opus-5` | the Claude model this moderator judges with — saved off-chain as `<slug>-config.json`, read by `mod-run` |
 
 A moderator changes its own price later with `update_moderator_pricing` (signed
 by its wallet). Escrows already created keep the price they snapshotted.
@@ -110,10 +112,10 @@ by its wallet). Escrows already created keep the price they snapshotted.
 Drive the running api against localnet, one flow per file.
 
 **Prereq (all):** validator with **both** programs, `pnpm bootstrap`,
-`pnpm moderation-init`, `pnpm moderator-register "Mod A" --base-bps 100`,
-`pnpm db:push`, and the api running (`pnpm dev`). Exactly **one** active
-moderator — with several, create needs a `moderator` and the scripts don't send
-one.
+`pnpm moderation-init`, at least one `pnpm moderator-register …`, `pnpm db:push`,
+and the api running (`pnpm dev`). With several moderators, each contract is
+created with the **cheapest** active one, and the verdict is signed by whichever
+moderator the escrow was assigned — its wallet must be in `./moderators/`.
 
 | Command | File | Flow |
 |---|---|---|

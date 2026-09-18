@@ -1,148 +1,99 @@
 import { Link } from "react-router-dom";
-import {
-  ArrowRight,
-  Ban,
-  CheckCircle2,
-  Cpu,
-  EyeOff,
-  FileText,
-  Link2,
-  Lock,
-  Network,
-  PenTool,
-  Plus,
-  ScanLine,
-  Scale,
-  Undo2,
-  UploadCloud,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
-import {
-  DEFAULT_PROTOCOL_FEE_BPS,
-  DEFAULT_PROTOCOL_FEE_MIN,
-  DEFAULT_MIN_AMOUNT,
-} from "@repo/shared";
-import { useQuery } from "@tanstack/react-query";
-import { getFeeConfig } from "@/lib/api";
+import { ArrowRight, Copy, ExternalLink, Plus } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Reveal } from "@/components/landing/Reveal";
+import { WhyDesc } from "@/components/landing/WhyDesc";
 import { FlowDiagram } from "@/components/landing/FlowDiagram";
-
-// Marketing copy reads the same constants the form and the program do, so the
-// pricing on the landing page can't drift from what a wallet is actually asked
-// to sign. (The on-chain Config stays the source of truth at contract time.)
-// The moderator fee is NOT a protocol constant — each moderator sets its own,
-// on-chain — so the landing page quotes the cheapest live one rather than a
-// number the protocol doesn't actually enforce.
-const PROTOCOL_PCT = DEFAULT_PROTOCOL_FEE_BPS / 100;
-const FEE_FLOOR = DEFAULT_PROTOCOL_FEE_MIN / 1_000_000;
-const MIN_CONTRACT = DEFAULT_MIN_AMOUNT / 1_000_000;
-
-const STEPS: { n: string; icon: LucideIcon; t: string; d: string }[] = [
-  { n: "01", icon: FileText, t: "Draft", d: "Initiator writes the brief + checkable criteria" },
-  { n: "02", icon: Wallet, t: "Fund", d: "USDC locked in the on-chain escrow" },
-  { n: "03", icon: Link2, t: "Accept", d: "Committer opens the link and accepts" },
-  { n: "04", icon: UploadCloud, t: "Submit", d: "Work sealed + encrypted to the moderators" },
-  { n: "05", icon: Cpu, t: "Verify", d: "AI moderator checks it against the criteria" },
-  { n: "06", icon: CheckCircle2, t: "Settle", d: "Released on pass, refunded on fail" },
-];
-
-const MOD: { icon: LucideIcon; t: string; d: string }[] = [
-  {
-    icon: Lock,
-    t: "Sealed",
-    d: "The deliverable is encrypted in your browser to the moderators only. The platform stores ciphertext it can't read.",
-  },
-  {
-    icon: ScanLine,
-    t: "Checked",
-    d: "The moderator decrypts, confirms the bytes match the on-chain hash, then runs your acceptance criteria.",
-  },
-  {
-    icon: PenTool,
-    t: "Signed",
-    d: "It signs the verdict with its own non-custodial wallet — on-chain, with no central key that can adjudicate.",
-  },
-];
-
-const GUARANTEES: { icon: LucideIcon; t: string; d: string }[] = [
-  { icon: Lock, t: "Escrowed, not entrusted", d: "Funds held by the protocol — never the other party." },
-  { icon: EyeOff, t: "Confidential by default", d: "Your deliverable stays sealed until payment; the server is blind." },
-  { icon: Scale, t: "Settles on the verdict", d: "Released or refunded automatically — code, not goodwill." },
-  { icon: Network, t: "On-chain + neutral", d: "Every step is verifiable on Solana. desc is the layer, not a side." },
-];
-
-function SectionHead({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: string }) {
-  return (
-    <Reveal className="mx-auto mb-12 max-w-2xl text-center">
-      <div className="text-xs font-medium uppercase tracking-[0.22em] text-accent-2">
-        {eyebrow}
-      </div>
-      <h2 className="mt-3 text-3xl font-semibold tracking-tight text-balance md:text-4xl">
-        {title}
-      </h2>
-      {sub && <p className="mx-auto mt-3 max-w-xl text-zinc-400">{sub}</p>}
-    </Reveal>
-  );
-}
+import { Outcomes } from "@/components/landing/Outcomes";
+import { SectionHead } from "@/components/SectionHead";
+import { useFees } from "@/lib/fees";
+import { ESCROW_PROGRAM_ID, MODERATION_PROGRAM_ID, clusterLabel, explorerUrl } from "@/lib/chain";
+import { short } from "@/lib/utils";
 
 export function Home() {
-  // Cheapest active moderator's rate, e.g. "1%". Undefined until it loads (or if
-  // none is registered) — the copy then names the fee without inventing a number.
-  const { data: fees } = useQuery({
-    queryKey: ["feeConfig"],
-    queryFn: getFeeConfig,
-    staleTime: 5 * 60 * 1000,
-  });
-  const cheapestBps = fees?.moderators.length
-    ? Math.min(...fees.moderators.map((m) => m.baseBps))
-    : undefined;
-  const modPct = cheapestBps === undefined ? undefined : cheapestBps / 100;
+  const { protocolPct, feeFloor, cheapestModPct } = useFees();
 
   return (
-    <div className="space-y-28 pb-16">
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="pt-6 text-center md:pt-12">
-        <Reveal>
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
-            <span className="size-1.5 animate-pulse rounded-full bg-st-settled" />
-            On-chain USDC escrow · AI-verified settlement
-          </span>
-        </Reveal>
-        <Reveal delay={70}>
-          <h1 className="mx-auto mt-6 max-w-3xl text-5xl font-semibold leading-[1.04] tracking-tight text-balance md:text-6xl">
-            Wrap your deal in a <span className="text-gradient">layer of trust.</span>
-          </h1>
-        </Reveal>
-        <Reveal delay={130}>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-zinc-400">
-            Two parties who don't fully trust each other, one escrow that settles on{" "}
-            <span className="text-zinc-200">AI-verified proof</span> — not promises.
-          </p>
-        </Reveal>
-        <Reveal delay={190}>
-          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link to="/new">
-              <Button variant="accent">
-                <Plus className="size-4" /> Create a contract
-              </Button>
-            </Link>
-            <Link to="/contracts">
-              <Button variant="outline">
-                View my contracts <ArrowRight className="size-4" />
-              </Button>
-            </Link>
-          </div>
+    <div className="space-y-28 pb-10">
+      {/* ── Hero ───────────────────────────────────────────── */}
+      <section className="grid items-center gap-12 pt-4 md:pt-10 lg:grid-cols-[1.05fr_.95fr]">
+        <div>
+          <Reveal>
+            <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 font-mono text-xs text-lilac">
+              ◆ Escrow on Solana · judged by AI
+            </span>
+          </Reveal>
+          <Reveal delay={60}>
+            <h1 className="mt-6 text-5xl font-semibold leading-none tracking-[-0.05em] text-balance md:text-[4.3rem]">
+              You already made the deal. <span className="text-gradient">Now make it safe.</span>
+            </h1>
+          </Reveal>
+          <Reveal delay={120}>
+            <p className="mt-6 max-w-xl text-lg text-muted">
+              Lock USDC in a Solana program. An AI moderator checks the{" "}
+              <b className="font-medium text-ink">delivered files</b> against the criteria you both agreed. The
+              program pays out on that verdict — <b className="font-medium text-ink">no one else can move the money</b>.
+            </p>
+          </Reveal>
+          <Reveal delay={180}>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link to="/new">
+                <Button variant="accent" className="px-5 py-3">
+                  <Plus className="size-4" /> Create a contract
+                </Button>
+              </Link>
+              <Link to="/how-it-works">
+                <Button variant="outline" className="px-5 py-3">
+                  How it works <ArrowRight className="size-4" />
+                </Button>
+              </Link>
+            </div>
+          </Reveal>
+          <Reveal delay={240}>
+            <dl className="mt-10 flex flex-wrap gap-x-9 gap-y-4 font-mono text-xs text-muted">
+              <div className="flex flex-col-reverse">
+                <dt>protocol fee, min ${feeFloor.toFixed(0)}</dt>
+                <dd className="font-sans text-lg font-semibold text-ink">{protocolPct}%</dd>
+              </div>
+              <div className="flex flex-col-reverse">
+                <dt>moderator, you choose</dt>
+                <dd className="font-sans text-lg font-semibold text-ink">
+                  {cheapestModPct === undefined ? "Set by each" : `from ${cheapestModPct}%`}
+                </dd>
+              </div>
+              <div className="flex flex-col-reverse">
+                <dt>if it's never delivered</dt>
+                <dd className="font-sans text-lg font-semibold text-ink">No fee</dd>
+              </div>
+            </dl>
+          </Reveal>
+        </div>
+        <Reveal delay={150}>
+          <WhyDesc />
         </Reveal>
       </section>
 
-      {/* ── Flow diagram ─────────────────────────────────────── */}
+      {/* ── Real, verifiable program addresses ─────────────── */}
+      <Reveal>
+        <div className="glass flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="size-2 rounded-full bg-accent-2 shadow-[0_0_10px_var(--color-accent-2)]" />
+            Live on Solana <b className="font-medium">{clusterLabel}</b>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <ProgramId label="Escrow program" id={ESCROW_PROGRAM_ID} />
+            <ProgramId label="Moderation program" id={MODERATION_PROGRAM_ID} />
+          </div>
+        </div>
+      </Reveal>
+
+      {/* ── How a deal runs ────────────────────────────────── */}
       <section>
         <SectionHead
-          eyebrow="How it works"
-          title="A neutral layer between two parties"
-          sub="No marketplace, no middleman taking sides — just a trust layer that holds the money and lets proof decide."
+          eyebrow="How a deal runs"
+          title="Two strangers, one program in the middle"
+          sub="Money and work both go in. Only the verdict decides which way the money comes out."
         />
         <Reveal>
           <div className="glass p-6 md:p-10">
@@ -151,189 +102,63 @@ export function Home() {
         </Reveal>
       </section>
 
-      {/* ── Lifecycle ────────────────────────────────────────── */}
+      {/* ── Outcomes ───────────────────────────────────────── */}
       <section>
         <SectionHead
-          eyebrow="The flow"
-          title="Six steps, fully on-chain"
-          sub="From a handshake to a settled deal — every transition is a verifiable on-chain event."
+          eyebrow="Where the money goes"
+          title="Every ending is decided in advance"
+          sub="Nothing is charged for a deal that never happens, and the protocol never profits from one that fails."
         />
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {STEPS.map((s, i) => (
-            <Reveal as="li" key={s.n} delay={i * 70}>
-              <div className="group glass relative h-full overflow-hidden p-4 transition duration-300 hover:-translate-y-1.5 hover:border-accent/20 hover:shadow-[0_14px_40px_-22px_rgba(139,92,255,0.2)]">
-                {/* soft accent glow from the top, on hover */}
-                <span
-                  className="pointer-events-none absolute inset-0 z-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                  style={{
-                    background:
-                      "radial-gradient(130px 80px at 50% 0%, color-mix(in oklab, var(--color-accent) 10%, transparent), transparent 72%)",
-                  }}
-                />
-                {/* accent line draws across the bottom, on hover */}
-                <span
-                  className="absolute inset-x-0 bottom-0 z-0 h-[2px] origin-left scale-x-0 transition-transform duration-300 group-hover:scale-x-100"
-                  style={{
-                    background: "linear-gradient(90deg, var(--color-accent), var(--color-accent-2))",
-                  }}
-                />
-                <div className="relative z-10">
-                  <div className="flex items-center justify-between">
-                    <span className="grid size-8 place-items-center rounded-lg bg-white/5 text-accent-2 transition duration-300 group-hover:scale-110 group-hover:bg-accent/12">
-                      <s.icon className="size-4 transition-transform duration-300 group-hover:-rotate-6" />
-                    </span>
-                    <span className="font-mono text-xs text-zinc-600 transition-colors duration-300 group-hover:text-accent-2">
-                      {s.n}
-                    </span>
-                  </div>
-                  <div className="mt-3 text-sm font-medium text-zinc-100">{s.t}</div>
-                  <div className="mt-1 text-xs leading-snug text-zinc-500 transition-colors duration-300 group-hover:text-zinc-300">
-                    {s.d}
-                  </div>
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </ul>
-      </section>
-
-      {/* ── AI moderation ────────────────────────────────────── */}
-      <section>
-        <SectionHead
-          eyebrow="AI moderation"
-          title="Verified by AI, not vibes"
-          sub="The moderator is an automated service with its own wallet — it judges the work and signs the verdict itself. Anyone can bring their own."
-        />
-        <div className="grid gap-3 md:grid-cols-3">
-          {MOD.map((m, i) => (
-            <Reveal key={m.t} delay={i * 90}>
-              <div className="glass glass-hover h-full p-6">
-                <span className="grid size-10 place-items-center rounded-xl btn-accent text-white">
-                  <m.icon className="size-5" />
-                </span>
-                <div className="mt-4 text-base font-semibold text-zinc-100">{m.t}</div>
-                <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{m.d}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-        <Reveal delay={120} className="mx-auto mt-6 max-w-2xl text-center text-sm text-zinc-500">
-          The deliverable hash is anchored on-chain, so the moderator proves it judged the{" "}
-          <span className="text-zinc-300">exact bytes</span> you committed — nothing swapped after the fact.
+        <Reveal>
+          <Outcomes />
         </Reveal>
       </section>
 
-      {/* ── Guarantees ───────────────────────────────────────── */}
-      <section>
-        <SectionHead eyebrow="Why desc" title="Guarantees, not goodwill" />
-        <div className="grid gap-3 sm:grid-cols-2">
-          {GUARANTEES.map((g, i) => (
-            <Reveal key={g.t} delay={i * 80}>
-              <div className="glass glass-hover flex h-full items-start gap-4 p-5">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/5 text-accent-2">
-                  <g.icon className="size-5" />
-                </span>
-                <div>
-                  <div className="text-sm font-semibold text-zinc-100">{g.t}</div>
-                  <p className="mt-1 text-sm text-zinc-400">{g.d}</p>
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Pricing ──────────────────────────────────────────── */}
-      <section>
-        <SectionHead
-          eyebrow="Pricing"
-          title="Priced per deal, no surprises"
-          sub="No subscriptions, no listing fees, and no profit when a deal falls through."
-        />
-        <Reveal className="glass mx-auto max-w-md p-8 text-center">
-          <div className="text-5xl font-semibold tracking-tight">
-            {PROTOCOL_PCT}%
-            <span className="ml-1 text-lg font-normal text-zinc-500">
-              + {modPct === undefined ? "" : `from ${modPct}% `}moderator
-            </span>
-          </div>
-
-          <dl className="mt-6 space-y-2 text-left text-sm">
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-zinc-400">Protocol fee</dt>
-              <dd className="text-zinc-300">
-                {PROTOCOL_PCT}% of the contract, minimum ${FEE_FLOOR.toFixed(2)}
-              </dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-zinc-400">Moderator fee</dt>
-              <dd className="text-zinc-300">
-                Set by the moderator you pick
-                {modPct === undefined ? "" : ` — from ${modPct}%`}
-              </dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-zinc-400">Smallest contract</dt>
-              <dd className="text-zinc-300">${MIN_CONTRACT} USDC</dd>
-            </div>
-          </dl>
-
-          {/* The failure cases, scannable — same shape as the fee rows above. */}
-          <div className="mt-5 border-t border-white/5 pt-5 text-left">
-            <div className="mb-2.5 text-xs uppercase tracking-wider text-zinc-500">
-              If it doesn't work out
-            </div>
-            <ul className="space-y-2 text-sm text-zinc-400">
-              <li className="flex items-start gap-2.5">
-                <Undo2 className="mt-0.5 size-4 shrink-0 text-zinc-500" />
-                <span>
-                  <span className="text-zinc-300">Fails verification</span> —
-                  refunded, less ${FEE_FLOOR.toFixed(2)} + the moderator fee
-                  for the check
-                </span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <Ban className="mt-0.5 size-4 shrink-0 text-zinc-500" />
-                <span>
-                  <span className="text-zinc-300">Cancelled or never delivered</span>{" "}
-                  — you pay nothing
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <p className="mt-5 text-xs text-zinc-500">Settled in USDC, on-chain.</p>
-          <Link to="/new" className="mt-6 inline-block">
-            <Button variant="accent">
-              <Plus className="size-4" /> Create a contract
+      {/* ── CTA ────────────────────────────────────────────── */}
+      <Reveal>
+        <section className="glass relative overflow-hidden px-6 py-14 text-center md:py-20">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{ background: "radial-gradient(40rem 18rem at 50% 0%, rgba(139,92,255,.18), transparent 70%)" }}
+          />
+          <h2 className="relative text-3xl font-semibold tracking-[-0.045em] text-balance md:text-5xl">
+            Stop going first. <span className="text-gradient">Let the program hold it.</span>
+          </h2>
+          <p className="relative mx-auto mt-4 max-w-md text-muted">
+            Write the criteria, lock the payment, and send the link.
+          </p>
+          <Link to="/new" className="relative mt-8 inline-block">
+            <Button variant="accent" className="px-6 py-3">
+              Create a contract <ArrowRight className="size-4" />
             </Button>
           </Link>
-        </Reveal>
-      </section>
-
-      {/* ── Final CTA ────────────────────────────────────────── */}
-      <Reveal>
-        <section className="glass relative overflow-hidden p-10 text-center md:p-16">
-          <h2 className="text-3xl font-semibold tracking-tight text-balance md:text-4xl">
-            Ready to make your deal <span className="text-gradient">safe</span>?
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-zinc-400">
-            Draft a contract, share the link, and let the proof settle it.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link to="/new">
-              <Button variant="accent">
-                <Plus className="size-4" /> Create a contract
-              </Button>
-            </Link>
-            <Link to="/contracts">
-              <Button variant="outline">
-                View my contracts <ArrowRight className="size-4" />
-              </Button>
-            </Link>
-          </div>
         </section>
       </Reveal>
     </div>
+  );
+}
+
+function ProgramId({ label, id }: { label: string; id: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-black/30 py-1.5 pl-3 pr-1.5 font-mono text-xs text-muted">
+      {label}
+      <a href={explorerUrl(id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent-2 hover:underline">
+        {short(id)} <ExternalLink className="size-3" />
+      </a>
+      <button
+        type="button"
+        aria-label={`Copy ${label} address`}
+        className="grid size-6 place-items-center rounded-md hover:bg-white/10"
+        onClick={() => {
+          void navigator.clipboard.writeText(id);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        }}
+      >
+        {copied ? <span className="text-pass">✓</span> : <Copy className="size-3" />}
+      </button>
+    </span>
   );
 }

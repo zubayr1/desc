@@ -20,7 +20,7 @@
  */
 import "dotenv/config";
 import { spawn } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Keypair } from "@solana/web3.js";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
@@ -67,7 +67,14 @@ async function main() {
   ).publicKey;
 
   const source = dbWorkSource();
-  const judgeName = process.env.DESC_JUDGE === "claude" ? "claude" : "manual";
+  const configPath = `${MOD_DIR}/${slug}-config.json`;
+  const model =
+    process.env.DESC_JUDGE_MODEL ??
+    (existsSync(configPath)
+      ? (JSON.parse(readFileSync(configPath, "utf8")) as { model?: string }).model
+      : undefined) ??
+    "claude-opus-5";
+  const judgeName = process.env.DESC_JUDGE === "claude" ? `claude (${model})` : "manual";
 
   console.log(`mod-watch: ${slug} (${moderator.toBase58()})`);
   console.log(`  source: ${source.name}`);

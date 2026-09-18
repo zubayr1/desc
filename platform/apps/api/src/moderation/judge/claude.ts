@@ -33,7 +33,18 @@ export const PRICING: Record<string, { in: number; out: number }> = {
   "claude-haiku-4-5": { in: 1, out: 5 },
 };
 
-const MODEL = process.env.DESC_JUDGE_MODEL ?? "claude-opus-5";
+/**
+ * The model this moderator runs. Read when the judge is BUILT, not at import:
+ * `mod-run` sets it from the moderator's own config after startup, so two
+ * moderators on one machine can run two different models.
+ */
+const judgeModel = () => process.env.DESC_JUDGE_MODEL ?? "claude-opus-5";
+
+/** Price a model, matching dated ids (claude-haiku-4-5-20251001) to their family. */
+function pricingFor(model: string) {
+  const key = Object.keys(PRICING).find((k) => model === k || model.startsWith(`${k}-`));
+  return PRICING[key ?? "claude-opus-5"];
+}
 
 /**
  * Hard ceiling on how much deliverable we will read.
@@ -81,6 +92,7 @@ function render(file: InputFile): string {
 }
 
 export function claudeJudge(): Judge {
+  const MODEL = judgeModel();
   return {
     name: `claude:${MODEL}`,
 
@@ -144,7 +156,7 @@ export function claudeJudge(): Judge {
         return { description: c.description, met: got.met, reason: got.reason };
       });
 
-      const price = PRICING[MODEL] ?? PRICING["claude-opus-5"];
+      const price = pricingFor(MODEL);
       const usage: Usage = {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,

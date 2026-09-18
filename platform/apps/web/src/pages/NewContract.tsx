@@ -17,6 +17,7 @@ import {
   type DeliverableType,
 } from "@repo/shared";
 import { Card } from "@/components/ui/Card";
+import { ModeratorPicker } from "@/components/ModeratorPicker";
 import { Button } from "@/components/ui/Button";
 import { createAndFund, getFeeConfig } from "@/lib/api";
 import { deriveDeliverableKey } from "@/lib/deliverableKey";
@@ -37,9 +38,7 @@ const toUsdc = (baseUnits: string) => Number(baseUnits) / 1_000_000;
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 text-xs uppercase tracking-wider text-zinc-500">
-        {label}
-      </div>
+      <div className="label mb-2">{label}</div>
       {children}
     </div>
   );
@@ -164,34 +163,38 @@ export function NewContract() {
   if (created) {
     const link = `${window.location.origin}/c/${created.linkToken}`;
     return (
-      <div className="mx-auto max-w-2xl">
-        <Card>
-          <div className="flex items-center gap-2 text-st-settled">
-            <Check className="size-5" />
-            <h1 className="text-xl font-semibold">Contract funded</h1>
-          </div>
-          <p className="mt-2 text-sm text-zinc-400">
-            Send this link to your committer — they review the terms, connect a
-            wallet, and accept.
-          </p>
-          <div className="mt-4 flex items-center gap-2">
-            <div className="glass flex-1 truncate px-3.5 py-2.5 font-mono text-sm text-zinc-300">
-              {link}
+      <div className="mx-auto max-w-2xl pt-6">
+        <Card className="p-7">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-full bg-pass/15 text-pass shadow-[0_0_24px_rgba(56,211,159,.35)]">
+              <Check className="size-5" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-[-0.04em]">Contract funded</h1>
+              <p className="text-sm text-muted">The money is in the program. Now send the link.</p>
             </div>
+          </div>
+          <div className="label mt-6">Share with your committer</div>
+          <div className="mt-2 flex items-center gap-2">
+            <div className="inp flex-1 truncate font-mono text-zinc-300">{link}</div>
             <Button
               variant="outline"
               className="px-3"
+              aria-label="Copy link"
               onClick={() => {
                 void navigator.clipboard.writeText(link);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               }}
             >
-              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+              {copied ? <Check className="size-4 text-pass" /> : <Copy className="size-4" />}
             </Button>
           </div>
+          <p className="mt-2 text-xs text-muted">
+            They review the terms, connect a wallet, and accept — no account needed.
+          </p>
           <Link to={`/contracts/${created.id}`}>
-            <Button variant="accent" className="mt-5 w-full">
+            <Button variant="accent" className="mt-6 w-full py-3">
               View contract <ArrowRight className="size-4" />
             </Button>
           </Link>
@@ -202,259 +205,258 @@ export function NewContract() {
 
   // ── Form ───────────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">New contract</h1>
+    <div className="pt-2">
+      <div className="mb-8">
+        <div className="label">New contract</div>
+        <h1 className="mt-2 text-4xl font-semibold tracking-[-0.045em]">Make the deal safe</h1>
+        <p className="mt-2 text-muted">Write what "done" means, lock the payment, and share the link.</p>
+      </div>
 
-      <Card className="space-y-5">
-        <FormField label="Title">
-          <input
-            className="inp"
-            placeholder="Implement token vesting program"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </FormField>
-
-        <FormField label="Brief">
-          <textarea
-            rows={3}
-            className="inp resize-none"
-            placeholder="Describe the work and what 'done' looks like…"
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-          />
-        </FormField>
-
-        <FormField label="Deliverable type">
-          <select
-            className="inp"
-            value={type}
-            onChange={(e) => setType(e.target.value as DeliverableType)}
-          >
-            {DELIVERABLE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1.5 text-xs text-zinc-500">
-            {TYPE_HINTS[type]} The moderator only sees the files you submit — pick a
-            type checkable from the bundle alone.
-          </p>
-        </FormField>
-
-        <FormField label="Acceptance criteria">
-          <div className="space-y-2">
-            {criteria.map((c, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input
-                  className="inp"
-                  placeholder="e.g. PR merged into main"
-                  value={c}
-                  onChange={(e) =>
-                    setCriteria((cs) =>
-                      cs.map((x, j) => (j === i ? e.target.value : x))
-                    )
-                  }
-                />
-                {criteria.length > 1 && (
-                  <button
-                    onClick={() =>
-                      setCriteria((cs) => cs.filter((_, j) => j !== i))
-                    }
-                    className="text-zinc-600 hover:text-zinc-300"
-                  >
-                    <X className="size-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              onClick={() => setCriteria((cs) => [...cs, ""])}
-              className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-zinc-200"
-            >
-              <Plus className="size-4" /> add criterion
-            </button>
-          </div>
-        </FormField>
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Amount (USDC)">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <Card className="space-y-6 p-6 md:p-7">
+          <FormField label="Title">
             <input
+              id="title"
               className="inp"
-              inputMode="decimal"
-              placeholder="1000"
-              value={amount}
-              onChange={(e) => {
-                const v = e.target.value;
-                // digits with an optional single decimal point only
-                if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
-              }}
+              placeholder="Implement token vesting program"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
             />
           </FormField>
-          <FormField label="Deadline">
-            <input
-              type="date"
-              className="inp"
-              min={minDeadline}
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-            />
-            {deadlinePast && (
-              <p className="mt-1.5 text-xs text-amber-300">
-                Pick a future date — the escrow would be rejected on signing.
-              </p>
-            )}
-          </FormField>
-        </div>
 
-        {/* Who verifies. Shown as a choice only when there is one to make; the
-            price next to each name is that moderator's own on-chain quote. */}
-        {!noMod && fees.moderators.length > 1 && (
-          <FormField label="Moderator">
+          <FormField label="Brief">
+            <textarea
+              id="brief"
+              rows={3}
+              className="inp resize-none"
+              placeholder="Describe the work and what 'done' looks like…"
+              value={brief}
+              onChange={(e) => setBrief(e.target.value)}
+            />
+          </FormField>
+
+          <FormField label="Deliverable type">
             <select
+              id="type"
               className="inp"
-              value={moderator?.wallet ?? ""}
-              onChange={(e) => setModWallet(e.target.value)}
+              value={type}
+              onChange={(e) => setType(e.target.value as DeliverableType)}
             >
-              <option value="" disabled>
-                Choose who verifies the work
-              </option>
-              {fees.moderators.map((m) => (
-                <option key={m.wallet} value={m.wallet}>
-                  {m.label} — {(m.baseBps / 100).toFixed(2)}%
+              {DELIVERABLE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_LABELS[t]}
                 </option>
               ))}
             </select>
+            <p className="mt-1.5 text-xs text-muted">
+              {TYPE_HINTS[type]} The moderator only sees the files you submit — pick a
+              type checkable from the bundle alone.
+            </p>
           </FormField>
-        )}
-        {!noMod && feesLoaded && fees.moderators.length === 0 && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
-            No moderator is available right now. Try again later, or skip
-            verification below.
+
+          <FormField label="Acceptance criteria — what the moderator checks">
+            <div className="space-y-2">
+              {criteria.map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-6 shrink-0 text-right font-mono text-xs text-accent">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <input
+                    id={`criterion-${i}`}
+                    className="inp"
+                    placeholder="e.g. All tests in /tests pass"
+                    value={c}
+                    onChange={(e) =>
+                      setCriteria((cs) => cs.map((x, j) => (j === i ? e.target.value : x)))
+                    }
+                  />
+                  {criteria.length > 1 && (
+                    <button
+                      aria-label={`Remove criterion ${i + 1}`}
+                      onClick={() => setCriteria((cs) => cs.filter((_, j) => j !== i))}
+                      className="text-zinc-600 hover:text-zinc-300"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => setCriteria((cs) => [...cs, ""])}
+                className="ml-8 inline-flex items-center gap-1.5 text-sm text-lilac hover:text-ink"
+              >
+                <Plus className="size-4" /> Add criterion
+              </button>
+            </div>
+          </FormField>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Amount (USDC)">
+              <input
+                id="amount"
+                className="inp"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // digits with an optional single decimal point only
+                  if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
+                }}
+              />
+            </FormField>
+            <FormField label="Deadline">
+              <input
+                id="deadline"
+                type="date"
+                className="inp"
+                min={minDeadline}
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+              />
+              {deadlinePast && (
+                <p className="mt-1.5 text-xs text-amber-300">
+                  Pick a future date — the escrow would be rejected on signing.
+                </p>
+              )}
+            </FormField>
           </div>
-        )}
 
-        {/* Opting out of verification. Deliberately plain about who carries the
-            risk — the committer can see this mode on the contract too. */}
-        <div className="glass p-4">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              className="mt-0.5 size-4 shrink-0 accent-[var(--color-accent)]"
-              checked={noMod}
-              onChange={(e) => setNoMod(e.target.checked)}
-            />
-            <span className="text-sm">
-              <span className="text-zinc-200">Skip verification</span>
-              <span className="mt-1 block text-xs text-zinc-500">
-                No moderator checks the work. You pay no moderator fee.
-              </span>
-            </span>
-          </label>
+          {!noMod && (
+            <FormField label="Moderator — who judges the work">
+              {feesLoaded && fees.moderators.length === 0 ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
+                  No moderator is available right now. Try again later, or skip
+                  verification below.
+                </div>
+              ) : (
+                <ModeratorPicker
+                  moderators={fees.moderators}
+                  selected={moderator ? [moderator.wallet] : []}
+                  onChange={(ws) => setModWallet(ws[0] ?? "")}
+                  max={1}
+                  amount={amountNum}
+                />
+              )}
+            </FormField>
+          )}
 
-          {noMod && (
-            <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              <span>
-                The deliverable is accepted and paid out automatically the moment
-                it's submitted. Nobody checks it against your criteria, and there
-                is no refund if the work is wrong.{" "}
-                <span className="text-amber-200">
-                  You are trusting the committer completely.
+          {/* Opting out of verification. Deliberately plain about who carries the
+              risk — the committer can see this mode on the contract too. */}
+          <div className="rounded-xl border border-white/[0.07] bg-black/20 p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 shrink-0 accent-[var(--color-accent)]"
+                checked={noMod}
+                onChange={(e) => setNoMod(e.target.checked)}
+              />
+              <span className="text-sm">
+                <span className="text-zinc-200">Skip verification</span>
+                <span className="mt-1 block text-xs text-muted">
+                  No moderator checks the work. You pay no moderator fee.
                 </span>
               </span>
-            </div>
-          )}
-        </div>
+            </label>
 
-        {belowMin && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
-            Minimum contract is {minAmount} USDC. Below that the{" "}
-            {feeFloor.toFixed(2)} fee floor would be an unreasonable share of the
-            deal.
-          </div>
-        )}
-
-        {/* Every line here is derived from the live on-chain config, so the total
-            matches what the wallet asks the initiator to sign. */}
-        <div className="glass p-4 text-sm">
-          <div className="space-y-1.5 text-zinc-400">
-            <div className="flex items-center justify-between">
-              <span>Payout to committer</span>
-              <span className="font-mono text-zinc-200">
-                {amountNum.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>Protocol fee</span>
-              <span className="font-mono text-zinc-200">{fee.toFixed(2)}</span>
-            </div>
-            {!noMod && (
-              <div className="flex items-center justify-between">
-                <span>Moderator fee</span>
-                <span className="font-mono text-zinc-200">
-                  {surcharge.toFixed(2)}
+            {noMod && (
+              <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  The deliverable is accepted and paid out automatically the moment
+                  it's submitted. Nobody checks it against your criteria, and there
+                  is no refund if the work is wrong.{" "}
+                  <span className="text-amber-200">You are trusting the committer completely.</span>
                 </span>
               </div>
             )}
           </div>
-          <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2.5">
-            <span className="text-zinc-300">You deposit</span>
-            <span className="font-mono text-base font-semibold">
-              {total.toFixed(2)} USDC
+
+          {belowMin && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
+              Minimum contract is {minAmount} USDC. Below that the{" "}
+              {feeFloor.toFixed(2)} fee floor would be an unreasonable share of the
+              deal.
+            </div>
+          )}
+        </Card>
+
+        {/* Every line here is derived from the live on-chain config, so the total
+            matches what the wallet asks the initiator to sign. */}
+        <Card className="space-y-4 p-6 lg:sticky lg:top-24">
+          <div className="text-xl font-semibold tracking-[-0.035em]">You deposit</div>
+          <dl className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-muted">Payout to committer</dt>
+              <dd className="font-mono tabular-nums">{amountNum.toFixed(2)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted">Protocol fee</dt>
+              <dd className="font-mono tabular-nums">{fee.toFixed(2)}</dd>
+            </div>
+            {!noMod && (
+              <div className="flex justify-between gap-3">
+                <dt className="truncate text-muted">Moderator{moderator ? ` · ${moderator.label}` : ""}</dt>
+                <dd className="font-mono tabular-nums">{surcharge.toFixed(2)}</dd>
+              </div>
+            )}
+          </dl>
+          <div className="flex items-baseline justify-between border-t border-white/[0.08] pt-4">
+            <span className="text-muted">Total</span>
+            <span className="text-3xl font-semibold tracking-[-0.045em] tabular-nums">
+              {total.toFixed(2)} <span className="font-mono text-sm font-normal text-muted">USDC</span>
             </span>
           </div>
+
           {/* The verification fee is the only thing the protocol keeps when a deal
               doesn't pass — cost recovery for the check that ran, never margin.
               With no moderator there is no failure branch at all. */}
-          <p className="mt-2.5 border-t border-white/5 pt-2.5 text-xs text-zinc-500">
+          <p className="text-xs leading-relaxed text-muted">
             {noMod ? (
               <>
-                There is no failing this contract — submission pays out. You are
-                only refunded if you cancel before it's accepted, or the committer
-                never delivers by the deadline.
+                There is no failing this contract — submission pays out. You are only
+                refunded if you cancel before it's accepted, or the committer never
+                delivers by the deadline.
               </>
             ) : (
               <>
-                If the work fails verification you get {refundedOnFail.toFixed(2)}{" "}
-                back. We keep only the {verificationFee.toFixed(2)} verification
-                fee, and the moderator keeps its {surcharge.toFixed(2)} for doing
-                the check. Nothing at all is charged if you cancel or the committer
-                never delivers — and we refund the verification fee if we got the
-                call wrong.
+                If the work fails verification you get {refundedOnFail.toFixed(2)} back — we
+                keep only the {verificationFee.toFixed(2)} check fee and the moderator keeps
+                its {surcharge.toFixed(2)}. If it's never delivered, nothing is charged.
               </>
             )}
           </p>
-        </div>
 
-        {createMut.error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
-            {createMut.error.message}
-          </div>
-        )}
+          {createMut.error && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
+              {createMut.error.message}
+            </div>
+          )}
 
-        {!connected ? (
-          <Button variant="accent" className="w-full" onClick={() => setVisible(true)}>
-            Connect wallet to continue
-          </Button>
-        ) : (
-          <Button
-            variant="accent"
-            className="w-full"
-            disabled={!valid || createMut.isPending}
-            onClick={() => createMut.mutate()}
-          >
-            {createMut.isPending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" /> Funding…
-              </>
-            ) : (
-              "Fund & create"
-            )}
-          </Button>
-        )}
-      </Card>
+          {!connected ? (
+            <Button variant="accent" className="w-full py-3" onClick={() => setVisible(true)}>
+              Connect wallet to continue
+            </Button>
+          ) : (
+            <Button
+              variant="accent"
+              className="w-full py-3"
+              disabled={!valid || createMut.isPending}
+              onClick={() => createMut.mutate()}
+            >
+              {createMut.isPending ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" /> Funding…
+                </>
+              ) : total > 0 ? (
+                `Lock ${total.toFixed(2)} USDC`
+              ) : (
+                "Lock USDC"
+              )}
+            </Button>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

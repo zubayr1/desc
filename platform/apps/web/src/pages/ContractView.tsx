@@ -116,7 +116,7 @@ function VerifiedDownload({ c }: { c: Contract }) {
   return (
     <div className="glass p-4">
       <div className="text-sm font-medium text-zinc-100">Your verified deliverable</div>
-      <p className="mt-1 mb-3 text-xs text-zinc-500">
+      <p className="mt-1 mb-3 text-xs text-muted">
         Re-derive your key (one signature) to download the exact files the moderator
         verified — checked against the on-chain hash.
       </p>
@@ -164,7 +164,7 @@ function Field({
 }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wider text-zinc-500">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-muted">{label}</div>
       <div className={cn("mt-1 text-sm text-zinc-200", mono && "font-mono")}>
         {value}
       </div>
@@ -290,7 +290,7 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
                 <FileCheck2 className="size-4" /> {bundle.accepted.length} files ·{" "}
                 {fmtSize(bundle.totalSize)}
               </div>
-              <div className="mb-3 break-all font-mono text-xs text-zinc-500">
+              <div className="mb-3 break-all font-mono text-xs text-muted">
                 root {short(bundle.root ?? "")}
               </div>
             </>
@@ -301,7 +301,7 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
           )}
 
           {bundle.rejected.length > 0 && (
-            <ul className="mb-3 space-y-1 font-mono text-xs text-zinc-500">
+            <ul className="mb-3 space-y-1 font-mono text-xs text-muted">
               {bundle.rejected.map((r, i) => (
                 <li key={i} className="flex items-center gap-2">
                   <FileX2 className="size-3.5 shrink-0 text-red-400/80" />
@@ -584,7 +584,7 @@ export function ContractView() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-20 text-zinc-500">
+      <div className="flex justify-center py-20 text-muted">
         <Loader2 className="size-6 animate-spin" />
       </div>
     );
@@ -607,11 +607,11 @@ export function ContractView() {
   const hasModFee = BigInt(contract.moderatorSurcharge) > 0n;
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-3xl">
       {!byLink && (
         <Link
           to="/contracts"
-          className="mb-5 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-300"
+          className="mb-5 inline-flex items-center gap-2 text-sm text-muted transition hover:text-zinc-300"
         >
           <ArrowLeft className="size-4" /> Back
         </Link>
@@ -619,7 +619,7 @@ export function ContractView() {
 
       <Card>
         <div className="flex items-start justify-between gap-4">
-          <h1 className="text-2xl font-semibold tracking-tight">{contract.title}</h1>
+          <h1 className="text-3xl font-semibold tracking-[-0.04em]">{contract.title}</h1>
           <StatusPill status={contract.status} />
         </div>
         <p className="mt-3 text-zinc-400">{contract.brief}</p>
@@ -648,7 +648,7 @@ export function ContractView() {
         </div>
 
         {isInitiator && (
-          <p className="mt-4 text-xs text-zinc-500">
+          <p className="mt-4 text-xs text-muted">
             {usd(contract.amount)} to the committer · {usd(contract.protocolFee)}{" "}
             protocol fee
             {hasModFee && <> · {usd(contract.moderatorSurcharge)} moderator fee</>}
@@ -656,7 +656,7 @@ export function ContractView() {
         )}
 
         <div className="mt-6">
-          <div className="mb-2 text-xs uppercase tracking-wider text-zinc-500">
+          <div className="mb-2 text-xs uppercase tracking-wider text-muted">
             Acceptance criteria
           </div>
           <ul className="space-y-2">
@@ -688,11 +688,11 @@ export function ContractView() {
 
         {contract.deliverable && (
           <div className="mt-6">
-            <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-500">
+            <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-muted">
               <Lock className="size-3.5" /> Deliverable — sealed to{" "}
               {contract.noMod ? "the initiator" : "the moderators"}
             </div>
-            <div className="break-all font-mono text-xs text-zinc-500">
+            <div className="break-all font-mono text-xs text-muted">
               hash {short(contract.deliverable.deliverableHash)} · root{" "}
               {short(contract.deliverable.root)}
             </div>

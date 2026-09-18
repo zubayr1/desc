@@ -16,4 +16,4 @@ export {
   submitDeliverable,
   getDeliverableCiphertext,
 } from "./deliverable";
-export { getContract, getContractByLink, listContracts } from "./read";
+export { getContract, getContractByLink, listContracts, listAllContracts } from "./read";

@@ -1,17 +1,23 @@
 @import "tailwindcss";
 
-/* ── Design tokens ─────────────────────────────────────────────── */
+/* ── Design tokens ─────────────────────────────────────────────
+   Aurora glass: near-black ground, violet → cyan accent, frosted panels.
+   Dark-only by design (the product never had a light mode). */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
 
-  /* near-black canvas */
-  --color-bg: #07070b;
-  --color-bg-soft: #0d0d14;
+  --color-bg: #030305;
+  --color-bg-soft: #08080d;
+  --color-ink: #ecebf5;
+  --color-muted: #7d7b93;
 
-  /* neon accent: violet → cyan */
   --color-accent: #8b5cff;
   --color-accent-2: #36e0d3;
+  --color-lilac: #c9b8ff;
+
+  --color-pass: #38d39f;
+  --color-fail: #ff8a8a;
 
   /* status hues */
   --color-st-funded: #4a9eff;
@@ -22,7 +28,6 @@
   --color-st-cancelled: #8a8a99;
 }
 
-/* ── Base ──────────────────────────────────────────────────────── */
 html {
   color-scheme: dark;
 }
@@ -31,51 +36,65 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--color-bg);
-  color: #e7e7ef;
+  color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  /* faint accent glows behind everything */
-  background-image:
-    radial-gradient(60rem 60rem at 80% -10%, color-mix(in oklab, var(--color-accent) 16%, transparent), transparent 60%),
-    radial-gradient(50rem 50rem at -10% 110%, color-mix(in oklab, var(--color-accent-2) 12%, transparent), transparent 55%);
-  background-attachment: fixed;
 }
 
-/* ── Base ──────────────────────────────────────────────────────── */
 @layer base {
   button:not(:disabled) {
     cursor: pointer;
   }
-  /* native <select> dropdown options default to white — match the dark theme */
+  /* native <select> options default to white — match the dark theme */
   option {
-    background: #0d0d14;
-    color: #e7e7ef;
+    background: #08080d;
+    color: #ecebf5;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent-2);
+    outline-offset: 2px;
   }
 }
 
-/* ── Reusable bits ─────────────────────────────────────────────── */
 @layer components {
   /* frosted glass panel */
   .glass {
-    @apply rounded-2xl border border-white/10 bg-white/[0.035] backdrop-blur-xl;
+    @apply rounded-2xl border border-white/[0.07] bg-white/[0.022] backdrop-blur-xl;
   }
   .glass-hover {
-    @apply transition-colors hover:border-white/20 hover:bg-white/[0.06];
+    @apply transition-colors hover:border-white/[0.14] hover:bg-white/[0.04];
   }
-  /* the one neon primary action */
+  /* the one glowing primary action */
   .btn-accent {
-    background-image: linear-gradient(120deg, var(--color-accent), var(--color-accent-2));
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset,
-      0 8px 30px -8px color-mix(in oklab, var(--color-accent) 70%, transparent);
+    background-image: linear-gradient(135deg, var(--color-accent), #6a7dff 55%, var(--color-accent-2));
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.14) inset,
+      0 10px 40px -10px rgba(139, 92, 255, 0.65);
+  }
+  .btn-accent:hover {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.22) inset,
+      0 14px 50px -8px rgba(54, 224, 211, 0.5);
   }
   .text-gradient {
-    background: linear-gradient(120deg, #fff, #c9c4ff 60%, var(--color-accent-2));
+    background: linear-gradient(100deg, #b69cff 0%, var(--color-accent) 30%, var(--color-accent-2) 90%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
   .inp {
-    @apply w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-white/25;
+    @apply w-full rounded-xl border border-white/[0.08] bg-black/35 px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-zinc-600;
+  }
+  .inp:focus {
+    border-color: rgba(139, 92, 255, 0.7);
+    box-shadow: 0 0 0 4px rgba(139, 92, 255, 0.15);
+  }
+  /* small uppercase label, used for form fields and section eyebrows */
+  .label {
+    @apply font-mono text-[0.68rem] font-medium uppercase tracking-[0.14em] text-muted;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-zinc-200;
   }
 }
 
@@ -83,11 +102,11 @@ body {
   background: color-mix(in oklab, var(--color-accent) 45%, transparent);
 }
 
-/* ── Landing: scroll-reveal + ambient motion ───────────────────── */
+/* ── Motion ──────────────────────────────────────────────────── */
 @layer components {
   .reveal {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(18px);
     transition:
       opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
       transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
@@ -96,51 +115,28 @@ body {
     opacity: 1;
     transform: none;
   }
-  /* hairline gradient divider */
-  .rule {
-    height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      color-mix(in oklab, var(--color-accent) 40%, transparent),
-      transparent
-    );
-  }
 }
 
 @keyframes float-y {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
-}
-@keyframes pulse-ring {
-  0% { transform: scale(0.7); opacity: 0.55; }
-  100% { transform: scale(2.3); opacity: 0; }
-}
-/* particle travelling along a horizontal rail (reverse the direction for the
-   opposite flow via animation-direction: reverse) */
-@keyframes flow-x {
-  0% { left: -4%; opacity: 0; }
-  12% { opacity: 1; }
-  88% { opacity: 1; }
-  100% { left: 104%; opacity: 0; }
-}
-@keyframes scan-y {
-  0%, 100% { transform: translateY(-130%); opacity: 0.15; }
-  50% { transform: translateY(130%); opacity: 0.9; }
+  50% { transform: translateY(-8px); }
 }
 @keyframes spin-slow {
   to { transform: rotate(360deg); }
 }
-@keyframes glow-pulse {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.95; }
+/* particles travelling along a rail toward the centre */
+@keyframes to-right {
+  from { left: 0; opacity: 0; }
+  15%, 85% { opacity: 1; }
+  to { left: calc(100% - 7px); opacity: 0; }
 }
-@keyframes bob {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-5px) rotate(2deg); }
+@keyframes to-left {
+  from { left: calc(100% - 7px); opacity: 0; }
+  15%, 85% { opacity: 1; }
+  to { left: 0; opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .reveal { opacity: 1; transform: none; transition: none; }
-  [style*="animation"] { animation: none !important; }
+  *, *::before, *::after { animation: none !important; }
 }

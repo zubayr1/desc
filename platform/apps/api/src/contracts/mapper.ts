@@ -38,6 +38,8 @@ export function toContract(row: ContractRow, state: EscrowState): Contract {
     vaultAddress: row.vaultAddress,
     linkToken: row.linkToken,
     initiatorRecipient: row.initiatorRecipient,
+    moderator: row.moderator,
+    moderatorRecipient: row.moderatorRecipient,
     outcome: state.outcome,
     deliverable:
       row.deliverableSubmittedAt && row.deliverableHash

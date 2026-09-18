@@ -129,6 +129,8 @@ export async function createContract(
       deadline,
       linkToken: null,
       initiatorRecipient: req.initiatorRecipient ?? null,
+      moderator: quote?.authority.toBase58() ?? null,
+      moderatorRecipient: quote?.recipient ?? null,
     })
     .returning();
 

@@ -1,11 +1,12 @@
 /**
- * Today's work source: our own database, every contract awaiting a verdict.
+ * Today's work source: our own database, the contracts awaiting a verdict that
+ * were assigned to the calling moderator.
  *
- * Correct only while we run the single moderator ourselves. It deliberately
- * IGNORES the moderator argument — there is no assignment yet, so every mod
- * would see every contract. That is exactly the shortcut the V2 queue endpoint
- * removes, and the reason this lives behind `WorkSource` rather than inline in
- * the watcher.
+ * Scoped by moderator because assignment is real now: the escrow binds one
+ * moderator at creation and rejects a verdict from any other. Claiming another
+ * moderator's contract would only fail at `record_verdict` and get marked
+ * failed — so each watcher sees exactly its own queue. Reading our database
+ * directly is still the V1 shortcut the V2 queue endpoint replaces.
  */
 import { and, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import type { PublicKey } from "@solana/web3.js";
@@ -25,11 +26,9 @@ const LEASE_MS = Number(process.env.MOD_CLAIM_LEASE_MS ?? 10 * 60_000);
 
 export function dbWorkSource(): WorkSource {
   return {
-    name: "local-db (all submitted contracts)",
+    name: "local-db (contracts assigned to this moderator)",
 
     async claim(moderator: PublicKey): Promise<WorkItem[]> {
-      void moderator; // no per-mod assignment exists yet — see the file comment
-
       const leaseCutoff = new Date(Date.now() - LEASE_MS);
 
       // ONE statement: select and claim together. Splitting this into a read
@@ -50,6 +49,9 @@ export function dbWorkSource(): WorkSource {
             isNull(contracts.outcome),
             // Nothing to judge until the ciphertext is actually uploaded.
             isNotNull(contracts.deliverableStorageKey),
+            // Only this moderator's work. Rows created before assignment was
+            // stored have no moderator and are left alone.
+            eq(contracts.moderator, moderator.toBase58()),
             or(
               // Never picked up.
               isNull(contracts.moderationState),

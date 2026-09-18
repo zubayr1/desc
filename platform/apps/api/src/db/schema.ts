@@ -67,6 +67,14 @@ export const contracts = pgTable(
     // exact verified bytes. Null if the initiator didn't enrol a key.
     initiatorRecipient: text("initiator_recipient"),
 
+    // The moderator assigned at creation — the escrow binds the same wallet
+    // on-chain, and only it may record the verdict. Its age recipient is kept
+    // alongside so the committer seals the delivery to THIS moderator only:
+    // with several moderators registered, sealing to all of them would let a
+    // moderator read work it was never assigned. Null for no-mod contracts.
+    moderator: text("moderator"),
+    moderatorRecipient: text("moderator_recipient"),
+
     // Deliverable bundle — sealed (ciphertext in storage). Server keeps only the
     // anchors; the file list lives inside the ciphertext. submittedAt on confirm.
     deliverableHash: text("deliverable_hash"), // sha256(manifest), on-chain anchor

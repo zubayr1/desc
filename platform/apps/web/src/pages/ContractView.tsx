@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
 import { deriveDeliverableKey } from "@/lib/deliverableKey";
 import { cn, short, usd } from "@/lib/utils";
+import { useFees } from "@/lib/fees";
 import type { BundleBlob, BundleResult, Contract, InputFile } from "@repo/shared";
 import {
   buildBundle,
@@ -223,14 +224,18 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
         }
         all = [c.initiatorRecipient];
       } else {
-        const { recipients } = await api.get<{ recipients: string[] }>(
-          "/config/moderators"
-        );
-        // Seal to the moderators AND (if enrolled) the initiator, so a Pass
-        // delivers the exact verified bytes — not a side-channel copy.
-        all = c.initiatorRecipient ? [...recipients, c.initiatorRecipient] : recipients;
+        // Seal to the ONE moderator assigned to this contract — never to every
+        // registered moderator, or a moderator could read work it was never
+        // given. Contracts created before assignment was stored fall back to
+        // the active set, which is what they were sealed to back then.
+        const mods = c.moderatorRecipient
+          ? [c.moderatorRecipient]
+          : (await api.get<{ recipients: string[] }>("/config/moderators")).recipients;
+        // …and (if enrolled) the initiator, so a Pass delivers the exact
+        // verified bytes — not a side-channel copy.
+        all = c.initiatorRecipient ? [...mods, c.initiatorRecipient] : mods;
         if (!all.length) {
-          throw new Error("no moderators configured — run moderator-register on the api");
+          throw new Error("no moderator to seal to — run moderator-register on the api");
         }
       }
       const ciphertext = await encryptToRecipients(bundle.blob, all);
@@ -571,6 +576,7 @@ export function ContractView() {
   const { publicKey } = useWallet();
 
   const me = publicKey?.toBase58();
+  const { fees } = useFees();
   const queryKey = ["contract", byLink ? "link" : "id", id];
   const {
     data: contract,
@@ -639,8 +645,13 @@ export function ContractView() {
             value={TYPE_LABEL[contract.deliverableType] ?? contract.deliverableType}
           />
           <Field
-            label="Verification"
-            value={contract.noMod ? "None" : "Moderator"}
+            label="Judged by"
+            value={
+              contract.noMod
+                ? "Nobody — no verification"
+                : (fees.moderators.find((m) => m.wallet === contract.moderator)?.label ??
+                  (contract.moderator ? short(contract.moderator) : "Moderator"))
+            }
           />
           {contract.committer && (
             <Field label="Committer" value={short(contract.committer)} mono />

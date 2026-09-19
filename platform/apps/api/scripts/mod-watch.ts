@@ -20,10 +20,11 @@
  */
 import "dotenv/config";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Keypair } from "@solana/web3.js";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
+import { moderatorModel } from "../src/moderation/moderatorModel";
 import type { WorkItem } from "../src/moderation/watch/source";
 
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
@@ -67,14 +68,16 @@ async function main() {
   ).publicKey;
 
   const source = dbWorkSource();
-  const configPath = `${MOD_DIR}/${slug}-config.json`;
-  const model =
-    process.env.DESC_JUDGE_MODEL ??
-    (existsSync(configPath)
-      ? (JSON.parse(readFileSync(configPath, "utf8")) as { model?: string }).model
-      : undefined) ??
-    "claude-opus-5";
-  const judgeName = process.env.DESC_JUDGE === "claude" ? `claude (${model})` : "manual";
+  const isAi = process.env.DESC_JUDGE === "claude" || process.env.DESC_JUDGE === "claude-api";
+  // Fail at startup, not on the first contract: a moderator with no model set
+  // must not start judging at all.
+  const model = isAi ? moderatorModel(slug) : "";
+  const judgeName =
+    process.env.DESC_JUDGE === "claude"
+      ? `claude (${model}) — Claude subscription`
+      : process.env.DESC_JUDGE === "claude-api"
+        ? `claude-api (${model}) — billed as API usage`
+        : "manual";
 
   console.log(`mod-watch: ${slug} (${moderator.toBase58()})`);
   console.log(`  source: ${source.name}`);

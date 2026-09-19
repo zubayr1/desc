@@ -105,9 +105,10 @@ export async function deliverBundle(
     }
     recipients = [contract.initiatorRecipient];
   } else {
-    const { recipients: mods } = await getJson<{ recipients: string[] }>(
-      "/config/moderators"
-    );
+    // The assigned moderator only — the same rule the browser follows.
+    const mods = contract.moderatorRecipient
+      ? [contract.moderatorRecipient]
+      : (await getJson<{ recipients: string[] }>("/config/moderators")).recipients;
     const initiatorKey = contract.initiatorRecipient;
     recipients = initiatorKey ? [...mods, initiatorKey] : mods;
     if (!recipients.length) {
@@ -134,14 +135,36 @@ export async function deliverBundle(
   return { status: out.status, deliverableHash };
 }
 
-/** Resolve the single provisioned moderator, or fail with a useful message. */
-function resolveModSlug(): string {
+/**
+ * The moderator a new e2e contract is created with: the cheapest active one,
+ * exactly as the app would list it. The api refuses to guess when several are
+ * active, so the scripts choose explicitly.
+ */
+export async function pickModerator(): Promise<string> {
+  const { moderators } = await getJson<{ moderators: { wallet: string; baseBps: number }[] }>(
+    "/config/fees"
+  );
+  if (!moderators.length) {
+    throw new Error("no active moderator — run `pnpm moderator-register` first");
+  }
+  return [...moderators].sort((a, b) => a.baseBps - b.baseBps)[0].wallet;
+}
+
+/**
+ * The local keypair of the moderator ASSIGNED to this escrow. Only it can
+ * record the verdict, so with several moderators provisioned we match the
+ * escrow's bound moderator against the wallets on disk.
+ */
+function assignedModKeypair(assigned: PublicKey): Keypair {
   const wallets = readdirSync(MOD_DIR).filter((f) => f.endsWith("-wallet.json"));
-  if (wallets.length === 1) return wallets[0].replace(/-wallet\.json$/, "");
+  for (const f of wallets) {
+    const kp = loadKeypair(`${MOD_DIR}/${f}`);
+    if (kp.publicKey.equals(assigned)) return kp;
+  }
   throw new Error(
     wallets.length === 0
       ? `no mod wallets in ${MOD_DIR} — run \`pnpm moderator-register\` first`
-      : `multiple mods in ${MOD_DIR}; e2e expects exactly one`
+      : `the assigned moderator ${assigned.toBase58()} has no wallet in ${MOD_DIR}`
   );
 }
 
@@ -153,10 +176,16 @@ export async function recordVerdict(
   escrowAddress: string,
   outcome: "pass" | "fail"
 ): Promise<void> {
-  const slug = resolveModSlug();
-  const modKeypair = loadKeypair(`${MOD_DIR}/${slug}-wallet.json`);
-
   const connection = new Connection(RPC, "confirmed");
+  // Read the escrow first: it names the moderator that must sign.
+  const reader = new Program<DescEscrow>(
+    escrowIdl as DescEscrow,
+    new AnchorProvider(connection, new Wallet(Keypair.generate()), { commitment: "confirmed" })
+  );
+  const escrow = new PublicKey(escrowAddress);
+  const acc = await reader.account.escrow.fetch(escrow);
+  const modKeypair = assignedModKeypair(acc.moderator as PublicKey);
+
   const provider = new AnchorProvider(connection, new Wallet(modKeypair), {
     commitment: "confirmed",
   });
@@ -165,9 +194,6 @@ export async function recordVerdict(
     provider
   );
   const escrowProgram = new Program<DescEscrow>(escrowIdl as DescEscrow, provider);
-
-  const escrow = new PublicKey(escrowAddress);
-  const acc = await escrowProgram.account.escrow.fetch(escrow);
   const deliverableHash = Buffer.from(acc.deliverableHash as number[]).toString("hex");
 
   const verdictHash = createHash("sha256")

@@ -279,6 +279,9 @@ supplies the fee.
 
 - Built: `base_bps` (share of amount), mod bound at creation, only it may judge,
   `max_moderator_fee` slippage guard (price rose since the quote → creation fails).
+- Built: two platform moderators on different models and prices — Claude Opus 5
+  and Claude Haiku 4.5 — with the initiator choosing one. The delivery is sealed
+  to the assigned moderator only, and each `mod-watch` claims only its own work.
 - V2 — size pricing: `fee_per_kb` × deliverable size. The initiator locks a
   **ceiling** (`fee_per_kb × max_bundle_kb`); settlement charges the real size and
   refunds the rest. Committer declares size at submit, the mod checks it against

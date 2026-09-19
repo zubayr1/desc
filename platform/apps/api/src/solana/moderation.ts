@@ -81,6 +81,8 @@ export interface ModeratorQuote {
   baseBps: number;
   feePerKb: bigint;
   maxBundleKb: number;
+  /** Its public age recipient — what the committer seals this contract's delivery to. */
+  recipient: string;
 }
 
 /**
@@ -114,6 +116,7 @@ export async function resolveModerator(requested?: PublicKey): Promise<Moderator
     baseBps: pick.account.baseBps,
     feePerKb: BigInt(pick.account.feePerKb.toString()),
     maxBundleKb: pick.account.maxBundleKb,
+    recipient: pick.account.recipient,
   };
 }
 

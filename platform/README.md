@@ -92,6 +92,10 @@ reprints these (incl. the current `USDC_MINT`).
 pnpm db:push
 ```
 
+Re-run it after pulling schema changes — e.g. the `moderator` and
+`moderator_recipient` columns that record which moderator a contract was assigned.
+Contracts created before that have no assigned moderator and are skipped by `mod-watch`.
+
 ### 6. API
 ```bash
 # in apps/api
@@ -205,20 +209,29 @@ pnpm scripts; they do **not** exist in the program workspace):
 cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
 pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
                                       # set as settlement_authority can now sign)
-pnpm moderator-register "Mod A" --base-bps 100   # provision + fund + register, priced at 1%
+pnpm moderator-register "Mod A — Claude Opus" --base-bps 100                            # 1%, Opus (default)
+pnpm moderator-register "Mod B — Claude Haiku" --base-bps 50 --model claude-haiku-4-5  # 0.5%, Haiku
 ```
 
-> **Register the moderator BEFORE any deliverable is uploaded.** The committer's
-> browser seals the bundle to whichever moderators are active at upload time. A
-> mod registered afterwards holds no key that can open it, and fails at decrypt
-> rather than telling you it was late.
+> **Register moderators BEFORE creating contracts.** A contract is bound to one
+> moderator when it's created, and the committer seals the delivery to that
+> moderator's key. A moderator registered later can't be picked for existing
+> contracts, and **re-registering** a moderator (new wallet, new key) orphans
+> every contract assigned to the old one — they fail at decrypt.
 
-**C) run the moderator — a second terminal, same package:**
+Each moderator has its own price (on-chain) and its own model (saved next to its
+keys as `<slug>-config.json`). The initiator picks one per contract; the committer's
+delivery is sealed to **that moderator only**, and only it can record the verdict.
+
+**C) run the moderators — one terminal each, same package:**
 ```bash
-DESC_JUDGE=claude pnpm mod-watch      # polls for submitted contracts, AI judges each
+DESC_JUDGE=claude pnpm mod-watch --mod mod-a-claude-opus
+DESC_JUDGE=claude pnpm mod-watch --mod mod-b-claude-haiku
 ```
-Leave it running while you test. `--once` does a single sweep and exits; drop
+Each watcher claims only the contracts assigned to its moderator. `--mod` is the slug
+of the label (lowercased, dashes). `--once` does a single sweep and exits; drop
 `DESC_JUDGE=claude` and it expects you to settle contracts by hand instead.
+`DESC_JUDGE_MODEL=<id>` overrides a moderator's saved model for a one-off run.
 
 To judge one specific contract without the watcher:
 ```bash
@@ -249,33 +262,38 @@ is the `/contracts/<uuid>` uuid or the `/c/<token>` link token.
 > Uses `./moderators/<slug>-{wallet.json,identity.key}` from `moderator-register`. One mod
 > provisioned → auto-selected; multiple → pass `--mod <slug>`. It must be the mod the
 > contract was **created with**, or the verdict fails with `NotAssignedModerator`.
-> `mod-watch` doesn't filter by assigned mod yet, so run it with **one** mod.
+> `mod-watch` already claims only its own moderator's contracts.
 
 ### Check the moderator's fee
 
-The mod earns **its own price** (`--base-bps`, e.g. 1%) in USDC on **any verdict** — paid when
-the deal **settles**,
-not at verdict time: on `release` (PASS) or `refund` (FAIL). A ghost-timeout (no verdict) pays
-nothing. Verify it entirely on-chain — no UI:
+Each mod earns **its own price** (`--base-bps`) in USDC on **any verdict** — paid when the
+deal **settles**, not at verdict time: on `release` (PASS) or `refund` (FAIL). Only the mod
+**assigned to that contract** is paid. A ghost-timeout (no verdict) pays nothing. Verify it
+entirely on-chain — no UI:
 
 ```bash
 cd platform/apps/api        # the ./moderators/ files live here (moderator-register's cwd)
 
-# the mod's wallet pubkey (from its keypair file)
-MOD=$(solana-keygen pubkey ./moderators/mod-a-wallet.json)
+# each mod's wallet — the file is <slug>-wallet.json, slug = label lowercased with dashes
+MOD_A=$(solana-keygen pubkey ./moderators/mod-a-claude-opus-wallet.json)
+MOD_B=$(solana-keygen pubkey ./moderators/mod-b-claude-haiku-wallet.json)
+ls ./moderators/*-wallet.json   # if your labels differ, the slugs are here
 
-# before settling — should be 0 (or empty)
-spl-token balance <USDC_MINT> --owner $MOD --url localhost
+# before settling
+spl-token balance <USDC_MINT> --owner $MOD_A --url localhost
+spl-token balance <USDC_MINT> --owner $MOD_B --url localhost
 
-# create → accept → submit → pnpm mod-run <ref> pass → Release (in the UI or via the contract page)
-# then check again — it jumps by the mod's price (1% at --base-bps 100):
-spl-token balance <USDC_MINT> --owner $MOD --url localhost
+# create a contract with one of them → accept → submit → its mod-watch judges → Release
+# then check again — ONLY the assigned mod's balance moves, by its price
+# (1% for Mod A at --base-bps 100, 0.5% for Mod B at --base-bps 50)
+spl-token balance <USDC_MINT> --owner $MOD_A --url localhost
+spl-token balance <USDC_MINT> --owner $MOD_B --url localhost
 ```
 
 - `<USDC_MINT>` is the value from `pnpm bootstrap` (also `apps/api/.env`).
-- The reward lands on **Release/Reclaim**, so run that step first, then re-check the balance.
-- The initiator funds **amount + protocol fee + the mod's price** at create (2% + 1% at
-  `--base-bps 100`); `./fund-wallets.sh <USDC_MINT>` mints plenty.
+- The fee lands on **Release/Reclaim**, so run that step first, then re-check the balance.
+- The initiator funds **amount + protocol fee + the chosen mod's price** at create;
+  `./fund-wallets.sh <USDC_MINT>` mints plenty.
 - The form quotes the price from `GET /config/fees` and sends it as `maxModeratorFee`. If
   the mod raised its price since, creation fails instead of charging more.
 
@@ -303,7 +321,7 @@ the source of truth). `GET /config/moderators` reads recipients live, and
 
 ### Register a moderator
 ```bash
-pnpm --filter api moderator-register "Mod A" --base-bps 100
+pnpm --filter api moderator-register "Mod A — Claude Opus" --base-bps 100
 ```
 This provisions the mod's **wallet** keypair + **age identity** (saved under
 `./moderators/`, gitignored), **funds** the wallet (SOL for gas + a USDC account for
@@ -315,7 +333,8 @@ recipient and **price** into the `Moderator` account. Flags: `apps/api/scripts/R
 - **Hand the two files to that mod's runner:** `*-wallet.json` signs `submit_verdict`,
   `*-identity.key` decrypts deliverables. Never commit them.
 - **Scalable by design:** run it once per moderator (admin-gated in V1; permissionless +
-  stake in V2). Deliverables encrypt to **all active** recipients; any one mod can decrypt.
+  stake in V2). Each delivery is sealed to the **one** moderator assigned to that contract
+  (plus the initiator) — other moderators cannot open it.
 
 ### Inspect / manage
 ```bash

@@ -19,7 +19,7 @@
  */
 import "dotenv/config";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -91,6 +91,14 @@ async function main() {
     Uint8Array.from(JSON.parse(readFileSync(`${MOD_DIR}/${s}-wallet.json`, "utf8")))
   );
   const identity = readFileSync(`${MOD_DIR}/${s}-identity.key`, "utf8").trim();
+
+  // This moderator's model, saved by moderator-register. An explicit
+  // DESC_JUDGE_MODEL still wins, so one-off experiments need no file edit.
+  const configPath = `${MOD_DIR}/${s}-config.json`;
+  if (!process.env.DESC_JUDGE_MODEL && existsSync(configPath)) {
+    const { model } = JSON.parse(readFileSync(configPath, "utf8")) as { model?: string };
+    if (model) process.env.DESC_JUDGE_MODEL = model;
+  }
 
   // resolve the contract (uuid or link token)
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref!);

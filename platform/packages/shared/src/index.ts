@@ -181,6 +181,12 @@ export interface Contract {
    *  committer seals the deliverable to this too, so a Pass delivers the exact
    *  verified bytes. Null if the initiator didn't enrol an encryption key. */
   initiatorRecipient: string | null;
+  /** Wallet of the moderator assigned at creation — the only one that may judge.
+   *  Null for a no-mod contract. */
+  moderator: Address | null;
+  /** That moderator's age recipient: the committer seals the delivery to it
+   *  (and the initiator) — never to every registered moderator. */
+  moderatorRecipient: string | null;
 
   // Verification (manual in MVP; null until a verdict is recorded)
   outcome: Outcome | null;

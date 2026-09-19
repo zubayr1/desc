@@ -76,7 +76,8 @@ funded → cancelled                        (before anyone accepts)
   `tests_pass`, `spec_met`).
 - Deliverables are sealed in the browser and stored as ciphertext — the server
   never sees plaintext.
-- Platform-run moderators; a single verdict settles. Manual dispute review by the
+- Two platform-run AI moderators on different models and prices (Claude Opus 5,
+  Claude Haiku 4.5); the initiator picks one, and its single verdict settles. Manual dispute review by the
   team (target SLA: 48 business hours).
 - Optional **no-mod** mode: the initiator may skip verification entirely.
 

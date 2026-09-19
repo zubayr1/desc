@@ -22,7 +22,7 @@ import {
   mintTo,
   getAccount,
 } from "@solana/spl-token";
-import { deliverBundle, recordVerdict } from "./_shared";
+import { deliverBundle, recordVerdict, pickModerator } from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -78,6 +78,7 @@ async function main() {
     deliverableType: "mergeable",
     acceptanceCriteria: [{ description: "PR merged into main" }],
     amount: String(AMOUNT),
+    moderator: await pickModerator(),
     deadline: new Date(Date.now() + 3600_000).toISOString(),
   })) as { id: string; escrowAddress: string; unsignedTx: string };
   const funded = (await signAndSubmit(

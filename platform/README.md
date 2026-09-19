@@ -209,8 +209,16 @@ pnpm scripts; they do **not** exist in the program workspace):
 cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
 pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
                                       # set as settlement_authority can now sign)
-pnpm moderator-register "Mod A — Claude Opus" --base-bps 100                            # 1%, Opus (default)
-pnpm moderator-register "Mod B — Claude Haiku" --base-bps 50 --model claude-haiku-4-5  # 0.5%, Haiku
+pnpm moderator-register "Olympus (Mod-Claude-Opus)" --base-bps 100   # 1%
+pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"  --base-bps 50    # 0.5%
+```
+
+Then set the judge and each moderator's model in `apps/api/.env` (register prints the
+exact variable name — the slug upper-cased):
+```bash
+DESC_JUDGE=claude                         # the Claude subscription
+MODEL_OLYMPUS_MOD_CLAUDE_OPUS=claude-opus-5
+MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
 ```
 
 > **Register moderators BEFORE creating contracts.** A contract is bound to one
@@ -219,23 +227,28 @@ pnpm moderator-register "Mod B — Claude Haiku" --base-bps 50 --model claude-ha
 > contracts, and **re-registering** a moderator (new wallet, new key) orphans
 > every contract assigned to the old one — they fail at decrypt.
 
-Each moderator has its own price (on-chain) and its own model (saved next to its
-keys as `<slug>-config.json`). The initiator picks one per contract; the committer's
-delivery is sealed to **that moderator only**, and only it can record the verdict.
+Each moderator has its own price (on-chain) and its own model (`.env`). A moderator
+with no `MODEL_…` line refuses to start. The initiator picks one per contract; the
+committer's delivery is sealed to **that moderator only**, and only it can record the verdict.
 
 **C) run the moderators — one terminal each, same package:**
 ```bash
-DESC_JUDGE=claude pnpm mod-watch --mod mod-a-claude-opus
-DESC_JUDGE=claude pnpm mod-watch --mod mod-b-claude-haiku
+pnpm mod-watch --mod olympus-mod-claude-opus
+pnpm mod-watch --mod hikaru-mod-claude-haiku
 ```
 Each watcher claims only the contracts assigned to its moderator. `--mod` is the slug
-of the label (lowercased, dashes). `--once` does a single sweep and exits; drop
-`DESC_JUDGE=claude` and it expects you to settle contracts by hand instead.
-`DESC_JUDGE_MODEL=<id>` overrides a moderator's saved model for a one-off run.
+of the label (lowercased, dashes). `--once` does a single sweep and exits. Set
+`DESC_JUDGE=manual` in `.env` to settle contracts by hand instead.
+
+> **`DESC_JUDGE=claude` runs on your Claude subscription**, through Claude Code in
+> headless mode (`claude -p`, tools and MCP disabled) — no API credits are used. It
+> needs Claude Code installed and logged in on this machine; set `CLAUDE_BIN` if
+> `claude` isn't on your PATH. `DESC_JUDGE=claude-api` calls the Anthropic API
+> instead and is **billed as API usage** — only for a host with no Claude Code login.
 
 To judge one specific contract without the watcher:
 ```bash
-DESC_JUDGE=claude pnpm mod-run <contractId|linkToken>
+pnpm mod-run <contractId|linkToken>
 ```
 
 No repoint step — `bootstrap` already set the escrow's `settlement_authority` to this
@@ -275,19 +288,19 @@ entirely on-chain — no UI:
 cd platform/apps/api        # the ./moderators/ files live here (moderator-register's cwd)
 
 # each mod's wallet — the file is <slug>-wallet.json, slug = label lowercased with dashes
-MOD_A=$(solana-keygen pubkey ./moderators/mod-a-claude-opus-wallet.json)
-MOD_B=$(solana-keygen pubkey ./moderators/mod-b-claude-haiku-wallet.json)
+OLYMPUS=$(solana-keygen pubkey ./moderators/olympus-mod-claude-opus-wallet.json)
+HIKARU=$(solana-keygen pubkey ./moderators/hikaru-mod-claude-haiku-wallet.json)
 ls ./moderators/*-wallet.json   # if your labels differ, the slugs are here
 
 # before settling
-spl-token balance <USDC_MINT> --owner $MOD_A --url localhost
-spl-token balance <USDC_MINT> --owner $MOD_B --url localhost
+spl-token balance <USDC_MINT> --owner $OLYMPUS --url localhost
+spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
 
 # create a contract with one of them → accept → submit → its mod-watch judges → Release
 # then check again — ONLY the assigned mod's balance moves, by its price
-# (1% for Mod A at --base-bps 100, 0.5% for Mod B at --base-bps 50)
-spl-token balance <USDC_MINT> --owner $MOD_A --url localhost
-spl-token balance <USDC_MINT> --owner $MOD_B --url localhost
+# (1% for Olympus at --base-bps 100, 0.5% for Hikaru at --base-bps 50)
+spl-token balance <USDC_MINT> --owner $OLYMPUS --url localhost
+spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
 ```
 
 - `<USDC_MINT>` is the value from `pnpm bootstrap` (also `apps/api/.env`).
@@ -321,7 +334,7 @@ the source of truth). `GET /config/moderators` reads recipients live, and
 
 ### Register a moderator
 ```bash
-pnpm --filter api moderator-register "Mod A — Claude Opus" --base-bps 100
+pnpm --filter api moderator-register "Olympus (Mod-Claude-Opus)" --base-bps 100
 ```
 This provisions the mod's **wallet** keypair + **age identity** (saved under
 `./moderators/`, gitignored), **funds** the wallet (SOL for gas + a USDC account for

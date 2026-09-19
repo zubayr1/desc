@@ -213,10 +213,11 @@ pnpm moderator-register "Mod A — Claude Opus" --base-bps 100                  
 pnpm moderator-register "Mod B — Claude Haiku" --base-bps 50 --model claude-haiku-4-5  # 0.5%, Haiku
 ```
 
-> **Register the moderator BEFORE any deliverable is uploaded.** The committer's
-> browser seals the bundle to whichever moderators are active at upload time. A
-> mod registered afterwards holds no key that can open it, and fails at decrypt
-> rather than telling you it was late.
+> **Register moderators BEFORE creating contracts.** A contract is bound to one
+> moderator when it's created, and the committer seals the delivery to that
+> moderator's key. A moderator registered later can't be picked for existing
+> contracts, and **re-registering** a moderator (new wallet, new key) orphans
+> every contract assigned to the old one — they fail at decrypt.
 
 Each moderator has its own price (on-chain) and its own model (saved next to its
 keys as `<slug>-config.json`). The initiator picks one per contract; the committer's
@@ -265,29 +266,34 @@ is the `/contracts/<uuid>` uuid or the `/c/<token>` link token.
 
 ### Check the moderator's fee
 
-The mod earns **its own price** (`--base-bps`, e.g. 1%) in USDC on **any verdict** — paid when
-the deal **settles**,
-not at verdict time: on `release` (PASS) or `refund` (FAIL). A ghost-timeout (no verdict) pays
-nothing. Verify it entirely on-chain — no UI:
+Each mod earns **its own price** (`--base-bps`) in USDC on **any verdict** — paid when the
+deal **settles**, not at verdict time: on `release` (PASS) or `refund` (FAIL). Only the mod
+**assigned to that contract** is paid. A ghost-timeout (no verdict) pays nothing. Verify it
+entirely on-chain — no UI:
 
 ```bash
 cd platform/apps/api        # the ./moderators/ files live here (moderator-register's cwd)
 
-# the mod's wallet pubkey (from its keypair file)
-MOD=$(solana-keygen pubkey ./moderators/mod-a-wallet.json)
+# each mod's wallet — the file is <slug>-wallet.json, slug = label lowercased with dashes
+MOD_A=$(solana-keygen pubkey ./moderators/mod-a-claude-opus-wallet.json)
+MOD_B=$(solana-keygen pubkey ./moderators/mod-b-claude-haiku-wallet.json)
+ls ./moderators/*-wallet.json   # if your labels differ, the slugs are here
 
-# before settling — should be 0 (or empty)
-spl-token balance <USDC_MINT> --owner $MOD --url localhost
+# before settling
+spl-token balance <USDC_MINT> --owner $MOD_A --url localhost
+spl-token balance <USDC_MINT> --owner $MOD_B --url localhost
 
-# create → accept → submit → pnpm mod-run <ref> pass → Release (in the UI or via the contract page)
-# then check again — it jumps by the mod's price (1% at --base-bps 100):
-spl-token balance <USDC_MINT> --owner $MOD --url localhost
+# create a contract with one of them → accept → submit → its mod-watch judges → Release
+# then check again — ONLY the assigned mod's balance moves, by its price
+# (1% for Mod A at --base-bps 100, 0.5% for Mod B at --base-bps 50)
+spl-token balance <USDC_MINT> --owner $MOD_A --url localhost
+spl-token balance <USDC_MINT> --owner $MOD_B --url localhost
 ```
 
 - `<USDC_MINT>` is the value from `pnpm bootstrap` (also `apps/api/.env`).
-- The reward lands on **Release/Reclaim**, so run that step first, then re-check the balance.
-- The initiator funds **amount + protocol fee + the mod's price** at create (2% + 1% at
-  `--base-bps 100`); `./fund-wallets.sh <USDC_MINT>` mints plenty.
+- The fee lands on **Release/Reclaim**, so run that step first, then re-check the balance.
+- The initiator funds **amount + protocol fee + the chosen mod's price** at create;
+  `./fund-wallets.sh <USDC_MINT>` mints plenty.
 - The form quotes the price from `GET /config/fees` and sends it as `maxModeratorFee`. If
   the mod raised its price since, creation fails instead of charging more.
 

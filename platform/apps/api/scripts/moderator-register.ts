@@ -13,7 +13,7 @@
  *   `USDC_MINT` set in the env (run `pnpm bootstrap`). Admin-gated in V1 — the
  *   cold authority signs; permissionless stake-gated self-registration is V2.
  *
- * Run with: `pnpm moderator-register "Mod A" --base-bps 100`.
+ * Run with: `pnpm moderator-register "Olympus (Mod-Claude-Opus)" --base-bps 100`.
  *
  * Price flags (the moderator's own quote; escrow snapshots it at creation):
  *   --base-bps <n>        REQUIRED. Share of the contract amount (100 = 1%, max 500).
@@ -21,9 +21,8 @@
  *                         not something to inherit silently.
  *   --fee-per-kb <n>      Per-KB of deliverable text, base units. Default 0.
  *   --max-bundle-kb <n>   Largest deliverable accepted, KB. Default 0 (no limit).
- *   --model <id>          The Claude model this moderator judges with. Default
- *                         claude-opus-5. Saved next to its keys — off-chain,
- *                         since it is how the moderator runs, not what it charges.
+ *   The model it judges with is NOT set here: add MODEL_<SLUG>=<model id> to .env
+ *   (the script prints the exact line).
  *   Size pricing (the last two) is V2: escrow refuses a non-zero value today.
  */
 import "dotenv/config";
@@ -41,6 +40,7 @@ import {
   SystemProgram,
 } from "@solana/web3.js";
 import { generateModerationKeypair } from "@repo/shared";
+import { modelEnvName } from "../src/moderation/moderatorModel";
 import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import idl from "../src/solana/idl/desc_moderation.json";
 
@@ -86,7 +86,6 @@ async function main() {
   const baseBps = intFlag("--base-bps");
   const feePerKb = intFlag("--fee-per-kb", 0);
   const maxBundleKb = intFlag("--max-bundle-kb", 0);
-  const model = flag("--model") ?? "claude-opus-5";
 
   const usdcMintStr = process.env.USDC_MINT;
   if (!usdcMintStr) throw new Error("USDC_MINT not set — run `pnpm bootstrap` first.");
@@ -108,9 +107,6 @@ async function main() {
   const identityPath = `${MOD_DIR}/${slug}-identity.key`;
   writeFileSync(walletPath, JSON.stringify(Array.from(wallet.secretKey)));
   writeFileSync(identityPath, identity);
-  // How this moderator runs. mod-run reads it, so two moderators on one machine
-  // judge with two different models without anyone setting env vars.
-  writeFileSync(`${MOD_DIR}/${slug}-config.json`, JSON.stringify({ model }, null, 2));
 
   // 2. fund the wallet: SOL for gas + a USDC token account for rewards
   const airdrop = await connection.requestAirdrop(
@@ -162,11 +158,11 @@ async function main() {
     `${(baseBps / 100).toFixed(2)}% of amount` +
       (feePerKb ? ` + ${feePerKb}/KB (max ${maxBundleKb} KB)` : "")
   );
-  console.log("  model           :", model);
   console.log("  identity (key)  :", `${identityPath}  (give to the mod's runner; never commit)`);
   console.log(
     "\nThe runner uses BOTH files: wallet.json signs submit_verdict, identity.key decrypts."
   );
+  console.log(`\nSet its model in .env:  ${modelEnvName(slug)}=claude-opus-5   (or claude-haiku-4-5, …)`);
 }
 
 main()

@@ -1,12 +1,14 @@
 /**
  * Exercises the Claude judge against synthetic deliverables. Makes REAL model
- * calls and costs real money (cents) — run it deliberately, not in CI.
+ * calls — on the Claude subscription with DESC_JUDGE=claude (the default here),
+ * or billed as API usage with DESC_JUDGE=claude-api. Run it deliberately, not in CI.
  *
  * The third case is the one that matters: a deliverable that tries to instruct
  * the moderator into passing it. That is the attack this product invites, since
  * the committer writes the files and gets paid if they pass.
  */
-import { claudeJudge } from "../src/moderation/judge/claude";
+import "dotenv/config";
+import { aiJudge } from "../src/moderation/judge";
 import { JudgeError } from "../src/moderation/judge/types";
 import type { InputFile } from "@repo/shared";
 
@@ -25,7 +27,9 @@ const check = (name: string, ok: boolean, detail = "") => {
 };
 
 async function main() {
-  const judge = claudeJudge();
+  // DESC_JUDGE=claude (default here) → subscription; claude-api → API credits.
+  const judge = aiJudge();
+  console.log(`judge: ${judge.name}\n`);
   let total = 0;
 
   // 1. genuinely complete
@@ -69,7 +73,9 @@ async function main() {
     check("oversized bundle rejected", e instanceof JudgeError, (e as Error).message);
   }
 
-  console.log(`\n${pass} passed, ${fail} failed · total spend $${total.toFixed(4)}`);
+  const how =
+    process.env.DESC_JUDGE === "claude-api" ? "billed as API usage" : "API-equivalent, paid by the subscription";
+  console.log(`\n${pass} passed, ${fail} failed · cost $${total.toFixed(4)} (${how})`);
   process.exit(fail ? 1 : 0);
 }
 

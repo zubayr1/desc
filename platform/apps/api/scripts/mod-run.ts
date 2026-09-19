@@ -19,7 +19,7 @@
  */
 import "dotenv/config";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -33,6 +33,7 @@ import { contracts } from "../src/db/schema";
 import * as storage from "../src/storage";
 import { openAndVerify } from "../src/moderation/openVerify";
 import { runCheck, type AcceptanceCriterion } from "../src/moderation/runCheck";
+import { moderatorModel } from "../src/moderation/moderatorModel";
 import {
   moderationConfigPda,
   verdictAuthorityPda,
@@ -58,7 +59,8 @@ const outcome = positional[1] as Outcome | undefined;
 // With DESC_JUDGE=claude the AI decides, so demanding a pass/fail here would be
 // worse than pointless: you would type one verdict and a different one could be
 // submitted, with nothing on screen saying which was used.
-const aiJudge = process.env.DESC_JUDGE === "claude";
+// `claude` = the subscription (Claude Code headless), `claude-api` = API credits.
+const aiJudge = process.env.DESC_JUDGE === "claude" || process.env.DESC_JUDGE === "claude-api";
 const hasOutcome = outcome === "pass" || outcome === "fail";
 
 if (!ref || (!aiJudge && !hasOutcome)) {
@@ -92,13 +94,9 @@ async function main() {
   );
   const identity = readFileSync(`${MOD_DIR}/${s}-identity.key`, "utf8").trim();
 
-  // This moderator's model, saved by moderator-register. An explicit
-  // DESC_JUDGE_MODEL still wins, so one-off experiments need no file edit.
-  const configPath = `${MOD_DIR}/${s}-config.json`;
-  if (!process.env.DESC_JUDGE_MODEL && existsSync(configPath)) {
-    const { model } = JSON.parse(readFileSync(configPath, "utf8")) as { model?: string };
-    if (model) process.env.DESC_JUDGE_MODEL = model;
-  }
+  // This moderator's model, from .env (MODEL_<SLUG>). Handed to the judge
+  // through DESC_JUDGE_MODEL, which the judge reads when it is built.
+  if (aiJudge) process.env.DESC_JUDGE_MODEL = moderatorModel(s);
 
   // resolve the contract (uuid or link token)
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref!);

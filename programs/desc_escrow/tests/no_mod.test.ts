@@ -90,18 +90,18 @@ describe("no_mod", () => {
     const world = await setupWorld();
     try {
       await createEscrow({ world, noMod: true, moderators: [world.moderatorPda] });
-      assert.fail("expected ModeratorConfigMismatch");
+      assert.fail("expected InvalidPanelSize");
     } catch (e) {
-      assert.include(e.toString(), "ModeratorConfigMismatch");
+      assert.include(e.toString(), "InvalidPanelSize");
     }
   });
 
   it("rejects a moderated escrow with no moderator", async () => {
     try {
       await createEscrow({ moderators: [] });
-      assert.fail("expected ModeratorConfigMismatch");
+      assert.fail("expected InvalidPanelSize");
     } catch (e) {
-      assert.include(e.toString(), "ModeratorConfigMismatch");
+      assert.include(e.toString(), "InvalidPanelSize");
     }
   });
 });

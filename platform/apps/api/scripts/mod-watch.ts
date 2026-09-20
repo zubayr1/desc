@@ -9,10 +9,11 @@
  *   DESC_JUDGE=claude pnpm mod-watch        # the AI judges, unattended
  *   DESC_JUDGE=claude pnpm mod-watch --once # single sweep, then exit
  *
- * Scope, deliberately: ONE moderator (ours), reading our own database. The two
- * things that make it a real worker — serving any moderator, and only the
- * contracts that moderator was assigned — live behind `WorkSource`, so V2 swaps
- * the source and leaves this loop alone.
+ * Scope, deliberately: one of OUR moderators, reading our own database. It sees
+ * only the contracts whose panel it sits on and has not yet voted, so three
+ * watchers can run side by side on one panel without colliding. Serving
+ * outside moderators over HTTP lives behind `WorkSource`, so V2 swaps the
+ * source and leaves this loop alone.
  *
  * Judging is delegated to `mod-run` as a child process rather than imported.
  * Discovery and judging stay separate concerns, a crash in one contract cannot
@@ -104,14 +105,18 @@ async function main() {
       console.log(`\n--- ${item.title ?? "(untitled)"} · ${item.contractId}${nth} ---`);
       const ok = await judge(item, slug);
       if (ok) {
-        await source.release(item.contractId);
+        await source.release(item.contractId, moderator);
       } else {
         // Marked failed rather than left claimed: these are near-always
         // permanent for that contract (no criteria, bundle too large, a
         // deliverable this mod cannot decrypt). Retrying every tick would
         // spend real money on the same doomed check forever. The reason is
         // stored, so it can be shown or cleared by hand.
-        await source.fail(item.contractId, "mod-run exited without submitting a verdict");
+        await source.fail(
+          item.contractId,
+          moderator,
+          "mod-run exited without submitting a verdict"
+        );
         console.error("  ! no verdict submitted — marked failed, not retrying");
       }
     }

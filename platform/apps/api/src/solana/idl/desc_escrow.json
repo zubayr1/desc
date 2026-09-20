@@ -489,6 +489,35 @@
               }
             ]
           }
+        },
+        {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — who may vote, and the votes so far. Boxed: it is",
+            "large enough to overflow the 4KB stack frame alongside the escrow."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
         }
       ],
       "args": [
@@ -1008,6 +1037,16 @@
       "code": 6020,
       "name": "DuplicateModerator",
       "msg": "The same moderator was listed twice on one panel"
+    },
+    {
+      "code": 6021,
+      "name": "AlreadyVoted",
+      "msg": "This moderator has already voted on this escrow"
+    },
+    {
+      "code": 6022,
+      "name": "VerdictAlreadyFinal",
+      "msg": "The verdict is already final — a majority was reached without this vote"
     }
   ],
   "types": [

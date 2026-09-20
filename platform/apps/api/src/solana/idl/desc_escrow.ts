@@ -495,6 +495,35 @@ export type DescEscrow = {
               }
             ]
           }
+        },
+        {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — who may vote, and the votes so far. Boxed: it is",
+            "large enough to overflow the 4KB stack frame alongside the escrow."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
         }
       ],
       "args": [
@@ -1014,6 +1043,16 @@ export type DescEscrow = {
       "code": 6020,
       "name": "duplicateModerator",
       "msg": "The same moderator was listed twice on one panel"
+    },
+    {
+      "code": 6021,
+      "name": "alreadyVoted",
+      "msg": "This moderator has already voted on this escrow"
+    },
+    {
+      "code": 6022,
+      "name": "verdictAlreadyFinal",
+      "msg": "The verdict is already final — a majority was reached without this vote"
     }
   ],
   "types": [

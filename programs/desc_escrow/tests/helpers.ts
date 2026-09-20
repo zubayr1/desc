@@ -375,6 +375,10 @@ export async function createEscrow(opts?: {
   /** Override the Moderator accounts passed to create_escrow. Defaults to the
    *  world's single moderator (none for no-mod). `[]` passes none. */
   moderators?: PublicKey[];
+  /** Each moderator's own price in bps, in the same order as `moderators`.
+   *  Defaults to the world's price for every seat. Needed whenever a panel
+   *  mixes prices, since the deposit is the SUM of them. */
+  moderatorBps?: number[];
   deadlineOffset?: number;
   /** Absolute deadline in CHAIN time. Use with `chainUnixTs()` for deadline
    *  tests; `deadlineOffset` is wall-relative and only safe for far futures. */
@@ -390,13 +394,16 @@ export async function createEscrow(opts?: {
   const noMod = opts?.noMod ?? false;
   const moderatorAccounts =
     opts?.moderators ?? (noMod ? [] : [world.moderatorPda]);
-  // Mirrors the program: the surcharge is the moderator's own price.
+  // Mirrors the program: each moderator is paid its OWN price, and the escrow
+  // locks the sum of them — never one fee divided up.
+  const bpsPerSeat =
+    opts?.moderatorBps ?? moderatorAccounts.map(() => world.modBps);
   const surcharge = noMod
     ? usdc(0)
-    : amount
-        .mul(new BN(world.modBps))
-        .div(new BN(10_000))
-        .mul(new BN(moderatorAccounts.length));
+    : bpsPerSeat.reduce(
+        (sum, bps) => sum.add(amount.mul(new BN(bps)).div(new BN(10_000))),
+        new BN(0)
+      );
   const moderatorCount = moderatorAccounts.length;
   const deadlineOffset = opts?.deadlineOffset ?? 3600;
 

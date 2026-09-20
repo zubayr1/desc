@@ -101,6 +101,10 @@ pnpm moderator-register "Mischief"                    --base-bps 50  # 0.5%
 OPPOSITE verdict, so a 3-moderator panel can be shown outvoting a bad panellist.
 Local and devnet only.
 
+Registering it is not enough — it behaves normally until its slug is listed in
+`DESC_MISCHIEF_MODS` in `.env`. The judge also refuses to start if `RPC_URL`
+looks like mainnet, so the two guards have to both be wrong to do damage.
+
 | Flag | Default | Meaning |
 |---|---|---|
 | `--base-bps <n>` | **required** | share of the contract amount (100 = 1%, max 500) |

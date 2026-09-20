@@ -29,9 +29,12 @@ export interface CheckResult {
 export async function runCheck(
   criteria: AcceptanceCriterion[],
   files: InputFile[],
-  manual?: { outcome: Outcome; note?: string }
+  manual?: { outcome: Outcome; note?: string },
+  /** Which moderator is judging. Only a test moderator behaves differently for
+   *  it, but the judge has to know who it is running as to tell. */
+  slug?: string
 ): Promise<CheckResult> {
-  const judge = selectJudge(manual);
+  const judge = selectJudge(manual, slug);
   const result = await judge.judge(criteria, files);
   return { ...result, judge: judge.name };
 }

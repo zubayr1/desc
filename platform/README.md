@@ -227,7 +227,12 @@ MODEL_OLYMPUS_MOD_CLAUDE_OPUS=claude-opus-5
 MODEL_SONGOKU_MOD_CLAUDE_SONNET=claude-sonnet-5
 MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
 MODEL_MISCHIEF=claude-haiku-4-5           # test moderator — local/devnet only
+DESC_MISCHIEF_MODS=mischief               # slugs that invert their verdict
 ```
+
+`DESC_MISCHIEF_MODS` is what actually makes Mischief misbehave: registering it
+on-chain only creates a normal moderator. Naming a slug here is the opt-in, and
+the judge refuses to start at all if `RPC_URL` looks like mainnet.
 
 > **Register moderators BEFORE creating contracts.** A contract is bound to one
 > moderator when it's created, and the committer seals the delivery to that

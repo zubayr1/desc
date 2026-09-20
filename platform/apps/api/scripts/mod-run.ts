@@ -159,7 +159,7 @@ async function main() {
   //    leaves the escrow to time out and refund, whereas a Pass we invented
   //    would release funds for a deliverable nobody checked.
   const criteria = (row.acceptanceCriteria as AcceptanceCriterion[] | null) ?? [];
-  const result = await runCheck(criteria, opened.files, manual);
+  const result = await runCheck(criteria, opened.files, manual, s);
   console.log(`judge:  ${result.judge} → ${result.outcome}`);
   for (const c of result.criteria) {
     console.log(`  [${c.met ? "met" : "NOT met"}] ${c.description} — ${c.reason}`);

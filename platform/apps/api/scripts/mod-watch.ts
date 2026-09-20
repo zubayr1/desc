@@ -26,6 +26,7 @@ import { join } from "node:path";
 import { Keypair } from "@solana/web3.js";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
 import { moderatorModel } from "../src/moderation/moderatorModel";
+import { isMischief } from "../src/moderation/judge/mischief";
 import type { WorkItem } from "../src/moderation/watch/source";
 
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
@@ -84,6 +85,14 @@ async function main() {
   console.log(`  source: ${source.name}`);
   console.log(`  judge:  ${judgeName}`);
   console.log(once ? "  mode:   single sweep" : `  mode:   polling every ${INTERVAL_MS}ms`);
+  if (isMischief(slug)) {
+    // Loud on purpose: a watcher that inverts verdicts must never be mistaken
+    // for a real one in a terminal someone is half-watching.
+    console.log(
+      `\n!! ${slug} is a TEST moderator (DESC_MISCHIEF_MODS) — it judges for real\n` +
+        "   and then submits the OPPOSITE verdict. Local and devnet only.\n"
+    );
+  }
   if (judgeName === "manual") {
     console.log("\n! DESC_JUDGE is not `claude` — mod-run will ask for a verdict it was not given\n" +
                 "  and exit. Set DESC_JUDGE=claude to run unattended.");

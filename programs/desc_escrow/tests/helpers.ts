@@ -513,4 +513,90 @@ export async function recordVerdict(
     .rpc();
 }
 
+/**
+ * The token accounts of every moderator that VOTED on `s`, in panel order —
+ * exactly what `release` / `refund` expect as `remainingAccounts`.
+ *
+ * Read from the panel rather than from the test's own bookkeeping, so it stays
+ * right when a moderator is outvoted, votes late, or never votes at all.
+ */
+export async function panelVoterAtas(s: EscrowSetup): Promise<PublicKey[]> {
+  const panel = await program.account.panel.fetch(s.panel);
+  const atas: PublicKey[] = [];
+  for (const entry of panel.entries.slice(0, panel.count)) {
+    if (entry.vote === 0) continue; // never voted -> not paid
+    atas.push(
+      await fundedAta(
+        s.world.mintAuthority,
+        s.world.mint,
+        entry.moderator,
+        0,
+        s.world.mintAuthority
+      )
+    );
+  }
+  return atas;
+}
+
+const remaining = (keys: PublicKey[]) =>
+  keys.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true }));
+
+/**
+ * Release a passed escrow. Moderator token accounts default to whoever voted,
+ * which is what production does after reading the panel.
+ */
+export async function releaseEscrow(
+  s: EscrowSetup,
+  opts: {
+    signer: Keypair;
+    committerTokenAccount: PublicKey;
+    moderatorAtas?: PublicKey[];
+  }
+) {
+  const atas = opts.moderatorAtas ?? (await panelVoterAtas(s));
+  await program.methods
+    .release()
+    .accountsPartial({
+      signer: opts.signer.publicKey,
+      escrow: s.escrow,
+      config: s.world.config,
+      panel: s.panel,
+      vault: s.vault,
+      committerTokenAccount: opts.committerTokenAccount,
+      treasury: s.world.treasury,
+      initiatorTokenAccount: s.initiatorAta,
+      initiator: s.initiator.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .remainingAccounts(remaining(atas))
+    .signers([opts.signer])
+    .rpc();
+}
+
+/**
+ * Refund an escrow. Moderator token accounts default to whoever voted — none on
+ * a ghost-timeout, where the escrow never reached a verdict.
+ */
+export async function refundEscrow(
+  s: EscrowSetup,
+  opts?: { moderatorAtas?: PublicKey[] }
+) {
+  const atas = opts?.moderatorAtas ?? (await panelVoterAtas(s));
+  await program.methods
+    .refund()
+    .accountsPartial({
+      initiator: s.initiator.publicKey,
+      escrow: s.escrow,
+      config: s.world.config,
+      panel: s.panel,
+      vault: s.vault,
+      initiatorTokenAccount: s.initiatorAta,
+      treasury: s.world.treasury,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .remainingAccounts(remaining(atas))
+    .signers([s.initiator])
+    .rpc();
+}
+
 export { BN, SystemProgram, TOKEN_PROGRAM_ID, Keypair, PublicKey };

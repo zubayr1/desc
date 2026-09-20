@@ -1,20 +1,30 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program_pack::Pack;
+use anchor_spl::token::spl_token::state::Account as SplTokenAccount;
 use anchor_spl::token::{close_account, transfer, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Config, Escrow, EscrowStatus, Outcome};
+use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel, VOTE_NONE};
 
 /// Pay out a passed escrow. Signed by EITHER party (initiator or committer), so
 /// the payout never depends on any one party — or the settlement authority —
 /// being online once the verdict is recorded (the liveness guarantee).
 ///
 /// Requires `Submitted` + `outcome == Pass`. Pays `amount` to the committer,
-/// `protocol_fee` to the treasury, and the `moderator_surcharge` (the 1% reward)
-/// to the moderator that judged it, then closes the vault (rent -> initiator) and
-/// marks the escrow `Settled`.
+/// `protocol_fee` to the treasury, and every moderator THAT VOTED its own
+/// snapshotted fee, then returns any unspent moderator fee to the initiator,
+/// closes the vault and the panel (both rents -> initiator) and marks the escrow
+/// `Settled`.
 ///
-/// On a no-mod escrow there is no moderator and no surcharge, so the moderator
-/// token account is omitted.
+/// Moderator fees are priced per moderator, not split: each one ran the whole
+/// check, so each earns a full fee and the panel's fees sum to
+/// `moderator_surcharge`. A moderator that never voted is not paid and its fee
+/// goes back to the initiator — hence `initiator_token_account`, which a
+/// single-moderator release never needed.
+///
+/// The voting moderators' token accounts arrive as `remaining_accounts`: one per
+/// VOTED seat, in panel order (see `pay_panel`). A no-mod escrow has an empty
+/// panel and passes none.
 #[derive(Accounts)]
 pub struct Release<'info> {
     pub signer: Signer<'info>,
@@ -26,11 +36,27 @@ pub struct Release<'info> {
         has_one = config,
         has_one = vault,
         has_one = initiator,
+        has_one = panel,
     )]
     pub escrow: Box<Account<'info, Escrow>>,
 
     #[account(has_one = treasury)]
     pub config: Box<Account<'info, Config>>,
+
+    /// The escrow's panel — who judged it, how they voted, and what each is
+    /// owed. Closed here, rent back to the INITIATOR: they put it up at
+    /// creation, and `release` may be signed by either party, so the signer must
+    /// never be the destination.
+    ///
+    /// Boxed, like every other sizeable account here — see the stack warning in
+    /// `create_escrow`.
+    #[account(
+        mut,
+        close = initiator,
+        seeds = [Panel::SEED_PREFIX, escrow.key().as_ref()],
+        bump = panel.bump,
+    )]
+    pub panel: Box<Account<'info, Panel>>,
 
     #[account(mut)]
     pub vault: Box<Account<'info, TokenAccount>>,
@@ -49,16 +75,17 @@ pub struct Release<'info> {
     )]
     pub treasury: Box<Account<'info, TokenAccount>>,
 
-    /// The judging moderator's USDC account — receives the surcharge (its reward).
-    /// Bound to the moderator that `record_verdict` stored. Omit on a no-mod
-    /// escrow, where nobody judged and there is no surcharge to pay.
+    /// Initiator's USDC account — receives the fees of any moderator that did
+    /// not vote. Required even when every moderator voted (nothing is sent then)
+    /// so the vault can always be drained to zero and closed.
     #[account(
         mut,
-        constraint = moderator_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
+        constraint = initiator_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
+        constraint = initiator_token_account.owner == escrow.initiator @ EscrowError::Unauthorized,
     )]
-    pub moderator_token_account: Option<Box<Account<'info, TokenAccount>>>,
+    pub initiator_token_account: Box<Account<'info, TokenAccount>>,
 
-    /// Initiator — receives the vault's rent on close.
+    /// Initiator — receives the vault's and the panel's rent on close.
     #[account(mut)]
     pub initiator: SystemAccount<'info>,
 
@@ -66,7 +93,7 @@ pub struct Release<'info> {
 }
 
 impl<'info> Release<'info> {
-    pub fn release(&mut self) -> Result<()> {
+    pub fn release(&mut self, moderator_token_accounts: &[AccountInfo<'info>]) -> Result<()> {
         // A stale program reading a newer account decodes silently and wrongly.
         self.escrow.check_version()?;
         self.config.check_version()?;
@@ -132,32 +159,41 @@ impl<'info> Release<'info> {
             )?;
         }
 
-        // Moderator surcharge (the 1% reward) to the judging moderator. Zero on a
-        // no-mod escrow, where the account is absent entirely.
-        if self.escrow.moderator_surcharge > 0 {
-            let mod_token = self
-                .moderator_token_account
-                .as_ref()
-                .ok_or(EscrowError::Unauthorized)?;
-            require!(
-                mod_token.owner == self.escrow.moderator,
-                EscrowError::Unauthorized
-            );
+        // Every moderator that voted, its own fee. Empty on a no-mod escrow.
+        let paid = pay_panel(
+            &self.panel,
+            &self.escrow,
+            moderator_token_accounts,
+            self.vault.to_account_info(),
+            self.escrow.to_account_info(),
+            self.token_program.to_account_info(),
+            signer_seeds,
+        )?;
+
+        // Whatever the initiator locked for moderators who never voted comes
+        // back to them. Also drains the vault so it can be closed.
+        let unspent = self
+            .escrow
+            .moderator_surcharge
+            .checked_sub(paid)
+            .ok_or(EscrowError::MathOverflow)?;
+        if unspent > 0 {
             transfer(
                 CpiContext::new_with_signer(
                     self.token_program.to_account_info(),
                     Transfer {
                         from: self.vault.to_account_info(),
-                        to: mod_token.to_account_info(),
+                        to: self.initiator_token_account.to_account_info(),
                         authority: self.escrow.to_account_info(),
                     },
                     signer_seeds,
                 ),
-                self.escrow.moderator_surcharge,
+                unspent,
             )?;
         }
 
-        // Close the drained vault, rent back to the initiator.
+        // Close the drained vault, rent back to the initiator. The panel account
+        // is closed by its `close = initiator` constraint.
         close_account(CpiContext::new_with_signer(
             self.token_program.to_account_info(),
             CloseAccount {
@@ -172,4 +208,72 @@ impl<'info> Release<'info> {
 
         Ok(())
     }
+}
+
+/// Pay every moderator that voted its own snapshotted fee, and return the total
+/// paid. Shared by `release` (Pass) and `refund` (Fail): a moderator is paid for
+/// rendering a verdict, not for the verdict going one way — including one that
+/// was outvoted, or one whose vote landed after the majority had already
+/// decided, since both did the same work.
+///
+/// `token_accounts` holds one account per VOTED seat, in panel order, and
+/// nothing for seats that never voted. Each is checked to be a real token
+/// account of the escrow's mint OWNED BY that seat's moderator, so a caller
+/// cannot redirect another moderator's fee to itself.
+pub fn pay_panel<'info>(
+    panel: &Panel,
+    escrow: &Escrow,
+    token_accounts: &[AccountInfo<'info>],
+    vault: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<u64> {
+    let count = panel.count as usize;
+    let voters = panel.entries[..count]
+        .iter()
+        .filter(|e| e.vote != VOTE_NONE);
+    require!(
+        token_accounts.len() == voters.clone().count(),
+        EscrowError::ModeratorConfigMismatch
+    );
+
+    let mut paid: u64 = 0;
+    for (entry, token_account) in voters.zip(token_accounts) {
+        // Unpacked by hand rather than through `Account<TokenAccount>`: read the
+        // two fields that matter and drop the borrow, so nothing large is held
+        // across the transfer and the token program can take its own mutable
+        // borrow of this account.
+        require!(
+            token_account.owner == &anchor_spl::token::ID,
+            EscrowError::Unauthorized
+        );
+        let (mint, wallet) = {
+            let data = token_account.try_borrow_data()?;
+            let parsed = SplTokenAccount::unpack(&data)?;
+            (parsed.mint, parsed.owner)
+        };
+        require!(mint == escrow.mint, EscrowError::Unauthorized);
+        require!(wallet == entry.moderator, EscrowError::Unauthorized);
+
+        if entry.fee > 0 {
+            transfer(
+                CpiContext::new_with_signer(
+                    token_program.clone(),
+                    Transfer {
+                        from: vault.clone(),
+                        to: token_account.clone(),
+                        authority: authority.clone(),
+                    },
+                    signer_seeds,
+                ),
+                entry.fee,
+            )?;
+        }
+        paid = paid
+            .checked_add(entry.fee)
+            .ok_or(EscrowError::MathOverflow)?;
+    }
+
+    Ok(paid)
 }

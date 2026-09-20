@@ -11,26 +11,12 @@ import {
   usdc,
   BN,
   PublicKey,
-  TOKEN_PROGRAM_ID,
+  releaseEscrow,
 } from "./helpers";
 
-/** Release with no moderator account — the no-mod path. */
+/** Release with an empty panel — the no-mod path passes no moderator accounts. */
 async function release(s: any, c: any, committerAta: any) {
-  await program.methods
-    .release()
-    .accountsPartial({
-      signer: c.publicKey,
-      escrow: s.escrow,
-      config: s.world.config,
-      vault: s.vault,
-      committerTokenAccount: committerAta,
-      treasury: s.world.treasury,
-      moderatorTokenAccount: null,
-      initiator: s.initiator.publicKey,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([c])
-    .rpc();
+  await releaseEscrow(s, { signer: c, committerTokenAccount: committerAta });
 }
 
 describe("no_mod", () => {

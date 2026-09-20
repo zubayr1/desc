@@ -94,12 +94,19 @@ pub mod desc_escrow {
             .record_verdict(outcome, verdict_hash, moderator)
     }
 
-    pub fn release(ctx: Context<Release>) -> Result<()> {
-        ctx.accounts.release()
+    pub fn release<'info>(
+        // `'info` is spelled out because the voting moderators' token accounts
+        // arrive as `remaining_accounts`, which must share the accounts' lifetime.
+        ctx: Context<'_, '_, '_, 'info, Release<'info>>,
+    ) -> Result<()> {
+        // One token account per moderator that voted, in panel order.
+        ctx.accounts.release(ctx.remaining_accounts)
     }
 
-    pub fn refund(ctx: Context<Refund>) -> Result<()> {
-        ctx.accounts.refund()
+    pub fn refund<'info>(ctx: Context<'_, '_, '_, 'info, Refund<'info>>) -> Result<()> {
+        // One token account per moderator that voted, in panel order. Empty on a
+        // ghost-timeout, where nobody judged.
+        ctx.accounts.refund(ctx.remaining_accounts)
     }
 
     pub fn mutual_cancel(ctx: Context<MutualCancel>) -> Result<()> {

@@ -8,10 +8,21 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel, VOTE_FAIL, VOT
 /// no money moves; the parties then execute `release` (Pass) or `refund` (Fail)
 /// themselves.
 ///
-/// A panel of one is decided by its single vote. A panel of three needs two
-/// votes that agree, and the escrow is decided the moment they exist — the third
-/// moderator is not waited for, and a vote arriving after that is rejected
-/// (`VerdictAlreadyFinal`), so it is neither counted nor paid.
+/// A panel of one is decided by its single vote. A panel of three is decided the
+/// moment two moderators agree — the third is not waited for, because with three
+/// judges two that agree are a majority whatever the third says.
+///
+/// Why not wait for the whole panel? Liveness. Waiting needs EVERY moderator to
+/// answer, so the odds of a stuck escrow grow as `q^n` with panel size, and get
+/// worse again once moderators are outside operators we do not run. A majority
+/// rule goes the other way: a panel of three tolerates one silent moderator, a
+/// panel of five tolerates two.
+///
+/// A vote that arrives after the outcome is set is still RECORDED on the panel
+/// and still PAID — it judged the same deliverable and earned its fee, and its
+/// vote is the record a future reputation system scores. It simply cannot move
+/// an outcome that is already final. Votes stop being accepted at settlement,
+/// when `release` / `refund` moves the escrow out of `Submitted`.
 ///
 /// The authority is read LIVE from the bound `Config` (via `escrow.config`), so
 /// it stays rotatable. Today it is the `desc_moderation` verdict PDA, which
@@ -58,12 +69,9 @@ impl<'info> RecordVerdict<'info> {
             self.escrow.status == EscrowStatus::Submitted,
             EscrowError::InvalidStatus
         );
-        // Once a majority has decided, the deal is settled: later votes are not
-        // counted and their moderators are not paid.
-        require!(
-            self.escrow.outcome.is_none(),
-            EscrowError::VerdictAlreadyFinal
-        );
+        // NOTE: a decided escrow deliberately does NOT reject further votes. A
+        // moderator still judging when the majority formed is recorded and paid
+        // like the rest; only its influence on the outcome is gone.
 
         // Only a moderator seated on this escrow's panel may vote — it is one of
         // the moderators whose price the initiator paid.
@@ -84,23 +92,29 @@ impl<'info> RecordVerdict<'info> {
         };
         self.panel.entries[seat].verdict_hash = verdict_hash;
 
-        // Tally. `quorum` was snapshotted at creation, so a later rule change
-        // cannot move the goalposts on a live deal.
-        let votes = |v: u8| {
-            self.panel.entries[..count]
-                .iter()
-                .filter(|e| e.vote == v)
-                .count() as u8
-        };
-        let quorum = self.panel.quorum;
-        if votes(VOTE_PASS) >= quorum {
-            self.escrow.outcome = Some(Outcome::Pass);
-        } else if votes(VOTE_FAIL) >= quorum {
-            self.escrow.outcome = Some(Outcome::Fail);
-        }
-        // The deciding vote's hash is the escrow's record of what was judged.
-        if self.escrow.outcome.is_some() {
-            self.escrow.verdict_hash = verdict_hash;
+        // Tally only while the escrow is still open. The FIRST side to reach
+        // quorum decides, and nothing after that moves it. `quorum` was
+        // snapshotted at creation, so a later rule change cannot shift the
+        // goalposts on a live deal.
+        if self.escrow.outcome.is_none() {
+            let votes = |v: u8| {
+                self.panel.entries[..count]
+                    .iter()
+                    .filter(|e| e.vote == v)
+                    .count() as u8
+            };
+            let quorum = self.panel.quorum;
+            if votes(VOTE_PASS) >= quorum {
+                self.escrow.outcome = Some(Outcome::Pass);
+            } else if votes(VOTE_FAIL) >= quorum {
+                self.escrow.outcome = Some(Outcome::Fail);
+            }
+            // The deciding vote's hash is the escrow's record of what was
+            // judged; every moderator's own hash stays on its panel seat, so a
+            // minority verdict is still auditable.
+            if self.escrow.outcome.is_some() {
+                self.escrow.verdict_hash = verdict_hash;
+            }
         }
 
         Ok(())

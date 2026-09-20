@@ -2,7 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{close_account, transfer, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Config, Escrow, EscrowStatus, Outcome};
+use crate::instructions::release::pay_panel;
+use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel};
 
 /// Initiator reclaims the deposit. Fires on either trigger:
 ///   1. `Active` & past deadline with no submission  -> committer ghosted, or
@@ -12,17 +13,24 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome};
 /// verdict going one way:
 /// - Ghost-timeout (no verdict): the ENTIRE vault returns to the initiator — a
 ///   deal where no moderator did any work shouldn't cost them anything.
-/// - Fail verdict (a moderator judged): the moderator earns its `surcharge`
-///   (pay-on-any-verdict), the treasury keeps the `verification_fee` — cost
-///   recovery for the verification that actually ran — and everything else
-///   (amount + the rest of the protocol fee) returns to the initiator.
+/// - Fail verdict (the panel judged): every moderator that voted earns its own
+///   snapshotted fee (pay-on-any-verdict) — including one that was outvoted,
+///   since it did the same work — the treasury keeps the `verification_fee` as
+///   cost recovery for the verification that actually ran, and everything else
+///   (amount, the rest of the protocol fee, and the fees of any moderator that
+///   never voted) returns to the initiator.
 ///
 /// So the protocol never *profits* from a failed deal, and is never paid to
 /// *pass* one either. `verification_fee` is zero when no fee floor is configured
 /// and for escrows created before the field existed, which reproduces the older
 /// fee-on-Pass-only behaviour exactly.
 ///
-/// Vault is closed; escrow kept as a `Refunded` record.
+/// The voting moderators' token accounts arrive as `remaining_accounts`: one per
+/// VOTED seat, in panel order (see `pay_panel`). A ghost-timeout pays nobody and
+/// passes none.
+///
+/// Vault and panel are closed (both rents -> initiator); escrow kept as a
+/// `Refunded` record.
 #[derive(Accounts)]
 pub struct Refund<'info> {
     #[account(mut)]
@@ -35,6 +43,7 @@ pub struct Refund<'info> {
         has_one = config,
         has_one = initiator,
         has_one = vault,
+        has_one = panel,
     )]
     pub escrow: Box<Account<'info, Escrow>>,
 
@@ -42,6 +51,18 @@ pub struct Refund<'info> {
     /// goes to (read live, like `release` does).
     #[account(has_one = treasury)]
     pub config: Box<Account<'info, Config>>,
+
+    /// The escrow's panel — who judged it, how they voted, and what each is
+    /// owed. Closed here, rent back to the initiator who put it up at creation.
+    /// Boxed, like every other sizeable account here — see the stack warning in
+    /// `create_escrow`.
+    #[account(
+        mut,
+        close = initiator,
+        seeds = [Panel::SEED_PREFIX, escrow.key().as_ref()],
+        bump = panel.bump,
+    )]
+    pub panel: Box<Account<'info, Panel>>,
 
     #[account(mut)]
     pub vault: Box<Account<'info, TokenAccount>>,
@@ -63,19 +84,11 @@ pub struct Refund<'info> {
     )]
     pub treasury: Box<Account<'info, TokenAccount>>,
 
-    /// On a Fail verdict, the judging moderator's USDC account — receives the
-    /// surcharge. Omit on a ghost-timeout (no verdict, no moderator paid).
-    #[account(
-        mut,
-        constraint = moderator_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
-    )]
-    pub moderator_token_account: Option<Box<Account<'info, TokenAccount>>>,
-
     pub token_program: Program<'info, Token>,
 }
 
 impl<'info> Refund<'info> {
-    pub fn refund(&mut self) -> Result<()> {
+    pub fn refund(&mut self, moderator_token_accounts: &[AccountInfo<'info>]) -> Result<()> {
         // A stale program reading a newer account decodes silently and wrongly.
         self.escrow.check_version()?;
         self.config.check_version()?;
@@ -99,33 +112,20 @@ impl<'info> Refund<'info> {
 
         let total = self.vault.amount;
 
-        // On a Fail verdict the moderator earns its surcharge and the treasury
-        // keeps the verification fee; the rest goes back to the initiator. On a
+        // On a Fail verdict every moderator that voted earns its fee and the
+        // treasury keeps the verification fee; the rest — including the fees of
+        // any moderator that never voted — goes back to the initiator. On a
         // ghost-timeout the full vault does.
         let to_initiator = if failed {
-            let surcharge = self.escrow.moderator_surcharge;
-            if surcharge > 0 {
-                let mod_token = self
-                    .moderator_token_account
-                    .as_ref()
-                    .ok_or(EscrowError::Unauthorized)?;
-                require!(
-                    mod_token.owner == self.escrow.moderator,
-                    EscrowError::Unauthorized
-                );
-                transfer(
-                    CpiContext::new_with_signer(
-                        self.token_program.to_account_info(),
-                        Transfer {
-                            from: self.vault.to_account_info(),
-                            to: mod_token.to_account_info(),
-                            authority: self.escrow.to_account_info(),
-                        },
-                        signer_seeds,
-                    ),
-                    surcharge,
-                )?;
-            }
+            let paid = pay_panel(
+                &self.panel,
+                &self.escrow,
+                moderator_token_accounts,
+                self.vault.to_account_info(),
+                self.escrow.to_account_info(),
+                self.token_program.to_account_info(),
+                signer_seeds,
+            )?;
 
             // Cost recovery for the verification that ran. Clamped to the fee
             // actually escrowed so a legacy or malformed account can never take
@@ -147,10 +147,16 @@ impl<'info> Refund<'info> {
             }
 
             total
-                .checked_sub(surcharge)
+                .checked_sub(paid)
                 .and_then(|v| v.checked_sub(verification_fee))
                 .ok_or(EscrowError::MathOverflow)?
         } else {
+            // Nobody judged a ghosted deal, so nobody is paid — a caller passing
+            // moderator accounts here has misread the state.
+            require!(
+                moderator_token_accounts.is_empty(),
+                EscrowError::ModeratorConfigMismatch
+            );
             total
         };
 
@@ -168,7 +174,8 @@ impl<'info> Refund<'info> {
             to_initiator,
         )?;
 
-        // Close the now-empty vault, rent back to the initiator.
+        // Close the now-empty vault, rent back to the initiator. The panel
+        // account is closed by its `close = initiator` constraint.
         close_account(CpiContext::new_with_signer(
             self.token_program.to_account_info(),
             CloseAccount {

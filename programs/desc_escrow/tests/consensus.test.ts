@@ -66,16 +66,29 @@ describe("consensus", () => {
     );
   });
 
-  it("rejects a vote that arrives after the majority decided", async () => {
+  it("records a late vote without letting it change the outcome", async () => {
     const { s, mods } = await panelOfThree();
     await recordVerdict(s, "pass", Array(32).fill(1), mods[0]);
     await recordVerdict(s, "pass", Array(32).fill(2), mods[1]);
-    try {
-      await recordVerdict(s, "fail", Array(32).fill(3), mods[2]);
-      assert.fail("expected VerdictAlreadyFinal");
-    } catch (e) {
-      assert.include(e.toString(), "VerdictAlreadyFinal");
-    }
+
+    // The third moderator was already judging when the majority formed. Its
+    // vote is kept — it did the same work, and it is paid on settle — but it
+    // cannot move a verdict that is already final.
+    await recordVerdict(s, "fail", Array(32).fill(3), mods[2]);
+
+    const esc = await program.account.escrow.fetch(s.escrow);
+    assert.property(esc.outcome, "pass");
+    assert.deepEqual(
+      Array.from(esc.verdictHash),
+      Array(32).fill(2),
+      "the deciding vote's hash stands"
+    );
+
+    const panel = await program.account.panel.fetch(s.panel);
+    assert.deepEqual(
+      panel.entries.slice(0, 3).map((e) => e.vote),
+      [1, 1, 2] // pass, pass, and the late dissent on record
+    );
   });
 
   it("rejects a second vote from the same moderator", async () => {

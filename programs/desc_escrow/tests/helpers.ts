@@ -66,6 +66,13 @@ export function escrowPda(initiator: PublicKey, cid: number[]): PublicKey {
   )[0];
 }
 
+export function panelPda(escrow: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("panel"), escrow.toBuffer()],
+    program.programId
+  )[0];
+}
+
 export function vaultPda(escrow: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), escrow.toBuffer()],
@@ -351,6 +358,7 @@ export interface EscrowSetup {
   cid: number[];
   escrow: PublicKey;
   vault: PublicKey;
+  panel: PublicKey;
   amount: BN;
   fee: BN;
   surcharge: BN;
@@ -364,9 +372,9 @@ let labelCounter = 0;
 export async function createEscrow(opts?: {
   world?: World;
   amount?: BN;
-  /** Override the Moderator account passed to create_escrow. Defaults to the
-   *  world's moderator (or none for no-mod). `null` passes no account. */
-  moderator?: PublicKey | null;
+  /** Override the Moderator accounts passed to create_escrow. Defaults to the
+   *  world's single moderator (none for no-mod). `[]` passes none. */
+  moderators?: PublicKey[];
   deadlineOffset?: number;
   /** Absolute deadline in CHAIN time. Use with `chainUnixTs()` for deadline
    *  tests; `deadlineOffset` is wall-relative and only safe for far futures. */
@@ -380,13 +388,16 @@ export async function createEscrow(opts?: {
   const world = opts?.world ?? (await setupWorld());
   const amount = opts?.amount ?? usdc(1000);
   const noMod = opts?.noMod ?? false;
-  const moderatorAccount =
-    opts?.moderator !== undefined ? opts.moderator : noMod ? null : world.moderatorPda;
+  const moderatorAccounts =
+    opts?.moderators ?? (noMod ? [] : [world.moderatorPda]);
   // Mirrors the program: the surcharge is the moderator's own price.
   const surcharge = noMod
     ? usdc(0)
-    : amount.mul(new BN(world.modBps)).div(new BN(10_000));
-  const moderatorCount = noMod ? 0 : 1;
+    : amount
+        .mul(new BN(world.modBps))
+        .div(new BN(10_000))
+        .mul(new BN(moderatorAccounts.length));
+  const moderatorCount = moderatorAccounts.length;
   const deadlineOffset = opts?.deadlineOffset ?? 3600;
 
   const initiator = await newFundedKeypair();
@@ -420,10 +431,13 @@ export async function createEscrow(opts?: {
       escrow,
       vault,
       initiatorTokenAccount: initiatorAta,
-      moderator: moderatorAccount,
+      panel: panelPda(escrow),
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
+    .remainingAccounts(
+      moderatorAccounts.map((pubkey) => ({ pubkey, isSigner: false, isWritable: false }))
+    )
     .signers([initiator])
     .rpc();
 
@@ -434,6 +448,7 @@ export async function createEscrow(opts?: {
     cid,
     escrow,
     vault,
+    panel: panelPda(escrow),
     amount,
     fee,
     surcharge,

@@ -89,7 +89,7 @@ describe("no_mod", () => {
   it("rejects a no-mod escrow that still names a moderator", async () => {
     const world = await setupWorld();
     try {
-      await createEscrow({ world, noMod: true, moderator: world.moderatorPda });
+      await createEscrow({ world, noMod: true, moderators: [world.moderatorPda] });
       assert.fail("expected ModeratorConfigMismatch");
     } catch (e) {
       assert.include(e.toString(), "ModeratorConfigMismatch");
@@ -98,7 +98,7 @@ describe("no_mod", () => {
 
   it("rejects a moderated escrow with no moderator", async () => {
     try {
-      await createEscrow({ moderator: null });
+      await createEscrow({ moderators: [] });
       assert.fail("expected ModeratorConfigMismatch");
     } catch (e) {
       assert.include(e.toString(), "ModeratorConfigMismatch");

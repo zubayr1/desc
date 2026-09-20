@@ -46,4 +46,8 @@ pub enum EscrowError {
     InvalidPanelSize,
     #[msg("The same moderator was listed twice on one panel")]
     DuplicateModerator,
+    #[msg("This moderator has already voted on this escrow")]
+    AlreadyVoted,
+    #[msg("The verdict is already final — a majority was reached without this vote")]
+    VerdictAlreadyFinal,
 }

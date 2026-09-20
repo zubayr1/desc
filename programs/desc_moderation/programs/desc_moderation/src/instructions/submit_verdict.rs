@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use crate::error::ModerationError;
 use crate::states::{ModerationConfig, Moderator};
 use desc_escrow::program::DescEscrow;
-use desc_escrow::states::{Config as EscrowConfig, Escrow, Outcome};
+use desc_escrow::states::{Config as EscrowConfig, Escrow, Outcome, Panel};
 
 /// A registered, active moderator records its verdict for a submitted escrow.
 ///
@@ -45,7 +45,12 @@ pub struct SubmitVerdict<'info> {
     pub escrow_config: Account<'info, EscrowConfig>,
 
     #[account(mut)]
-    pub escrow: Account<'info, Escrow>,
+    pub escrow: Box<Account<'info, Escrow>>,
+
+    /// The escrow's panel: who may vote and the votes so far. The escrow
+    /// program checks the seat and tallies; this program only forwards it.
+    #[account(mut)]
+    pub panel: Box<Account<'info, Panel>>,
 
     #[account(constraint = config.escrow_program == desc_escrow_program.key() @ ModerationError::Unauthorized)]
     pub desc_escrow_program: Program<'info, DescEscrow>,
@@ -66,12 +71,13 @@ impl<'info> SubmitVerdict<'info> {
                 settlement_authority: self.verdict_authority.to_account_info(),
                 config: self.escrow_config.to_account_info(),
                 escrow: self.escrow.to_account_info(),
+                panel: self.panel.to_account_info(),
             },
             signer_seeds,
         );
 
-        // Pass the signing moderator through so the escrow can pay it the
-        // surcharge on settle (release / refund).
+        // Pass the signing moderator through: the escrow seats it on the panel,
+        // counts the vote, and pays it its fee on settle (release / refund).
         desc_escrow::cpi::record_verdict(cpi_ctx, outcome, verdict_hash, self.authority.key())
     }
 }

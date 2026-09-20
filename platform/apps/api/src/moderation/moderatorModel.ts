@@ -4,6 +4,8 @@
  *
  *   MODEL_OLYMPUS_MOD_CLAUDE_OPUS=claude-opus-5
  *   MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
+ *   MODEL_SONGOKU_MOD_CLAUDE_SONNET=claude-sonnet-5
+ *   MODEL_MISCHIEF=claude-haiku-4-5
  *
  * The model is how a moderator RUNS, not what it charges, so it stays
  * off-chain. There is no silent default: a moderator with no model configured

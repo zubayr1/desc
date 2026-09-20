@@ -209,16 +209,24 @@ pnpm scripts; they do **not** exist in the program workspace):
 cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
 pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
                                       # set as settlement_authority can now sign)
-pnpm moderator-register "Olympus (Mod-Claude-Opus)" --base-bps 100   # 1%
-pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"  --base-bps 50    # 0.5%
+pnpm moderator-register "Olympus (Mod-Claude-Opus)"  --base-bps 100  # 1%
+pnpm moderator-register "SonGoku (Mod-Claude-Sonnet)" --base-bps 75  # 0.75%
+pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"   --base-bps 50  # 0.5%
+pnpm moderator-register "Mischief"                    --base-bps 50  # 0.5% — TEST ONLY
 ```
+
+> **Mischief is a deliberately wrong moderator.** It judges for real, then
+> submits the OPPOSITE verdict, so a 3-moderator panel can be shown outvoting a
+> bad panellist. Register it on local and devnet only — never mainnet.
 
 Then set the judge and each moderator's model in `apps/api/.env` (register prints the
 exact variable name — the slug upper-cased):
 ```bash
 DESC_JUDGE=claude                         # the Claude subscription
 MODEL_OLYMPUS_MOD_CLAUDE_OPUS=claude-opus-5
+MODEL_SONGOKU_MOD_CLAUDE_SONNET=claude-sonnet-5
 MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
+MODEL_MISCHIEF=claude-haiku-4-5           # test moderator — local/devnet only
 ```
 
 > **Register moderators BEFORE creating contracts.** A contract is bound to one
@@ -298,7 +306,7 @@ spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
 
 # create a contract with one of them → accept → submit → its mod-watch judges → Release
 # then check again — ONLY the assigned mod's balance moves, by its price
-# (1% for Olympus at --base-bps 100, 0.5% for Hikaru at --base-bps 50)
+# (1% for Olympus at --base-bps 100, 0.75% for SonGoku at 75, 0.5% for Hikaru at 50)
 spl-token balance <USDC_MINT> --owner $OLYMPUS --url localhost
 spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
 ```

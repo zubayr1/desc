@@ -91,9 +91,15 @@ Provisions a moderator's wallet + `age` identity (under `./moderators/`), funds
 it, and registers it on-chain **with its own price**.
 
 ```bash
-pnpm moderator-register "Olympus (Mod-Claude-Opus)" --base-bps 100
-pnpm moderator-register "Hikaru (Mod-Claude-Haiku)" --base-bps 50
+pnpm moderator-register "Olympus (Mod-Claude-Opus)"  --base-bps 100  # 1%
+pnpm moderator-register "SonGoku (Mod-Claude-Sonnet)" --base-bps 75  # 0.75%
+pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"   --base-bps 50  # 0.5%
+pnpm moderator-register "Mischief"                    --base-bps 50  # 0.5%
 ```
+
+`Mischief` is a **test moderator**: it judges for real and then submits the
+OPPOSITE verdict, so a 3-moderator panel can be shown outvoting a bad panellist.
+Local and devnet only.
 
 | Flag | Default | Meaning |
 |---|---|---|

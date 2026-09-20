@@ -163,10 +163,15 @@ pub struct Escrow {
     /// Largest deliverable accepted, in KB. 0 = no limit.
     pub max_bundle_kb: u32,
 
-    /// Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,
-    /// `dispute_account`) can be added without a risky `realloc`. Carve new
-    /// fields from here; keep this the LAST field.
-    pub reserved: [u8; 73],
+    /// This escrow's `Panel` — the moderators judging it and their votes. One
+    /// exists for every escrow, including no-mod ones (`count == 0`), so there
+    /// is a single shape to settle. Carved from `reserved`.
+    pub panel: Pubkey,
+
+    /// Forward-compat padding so V2 fields (e.g. `parent`, `dispute_account`)
+    /// can be added without a risky `realloc`. Carve new fields from here;
+    /// keep this the LAST field.
+    pub reserved: [u8; 41],
 }
 
 impl Escrow {

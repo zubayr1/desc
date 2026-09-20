@@ -50,8 +50,10 @@ pub mod desc_escrow {
         )
     }
 
-    pub fn create_escrow(
-        ctx: Context<CreateEscrow>,
+    pub fn create_escrow<'info>(
+        // `'info` is spelled out because the chosen moderators arrive as
+        // `remaining_accounts`, which must share the accounts' lifetime.
+        ctx: Context<'_, '_, '_, 'info, CreateEscrow<'info>>,
         contract_id: [u8; 16],
         amount: u64,
         deadline: i64,
@@ -64,6 +66,8 @@ pub mod desc_escrow {
             deadline,
             no_mod,
             max_moderator_fee,
+            // The chosen moderators: none for no-mod, otherwise 1 or 3.
+            ctx.remaining_accounts,
             &ctx.bumps,
         )
     }

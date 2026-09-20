@@ -506,6 +506,7 @@ export async function recordVerdict(
       moderator: moderatorPda(by.publicKey),
       escrowConfig: s.world.config,
       escrow: s.escrow,
+      panel: s.panel,
       descEscrowProgram: program.programId,
     })
     .signers([by])

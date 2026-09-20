@@ -34,6 +34,13 @@ export const escrowPda = (initiator: PublicKey, contractId: Buffer) =>
     programId
   )[0];
 
+/** The escrow's `Panel` — its moderators and their votes. */
+export const panelPda = (escrow: PublicKey) =>
+  PublicKey.findProgramAddressSync(
+    [Buffer.from("panel"), escrow.toBuffer()],
+    programId
+  )[0];
+
 export const vaultPda = (escrow: PublicKey) =>
   PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), escrow.toBuffer()],

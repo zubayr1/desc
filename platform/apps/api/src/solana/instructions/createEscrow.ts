@@ -4,7 +4,7 @@ import {
   TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { program, platformConfigPda, usdcMint } from "../program";
+import { program, platformConfigPda, panelPda, usdcMint } from "../program";
 import { finalizeUnsigned } from "../buildTransaction";
 
 // `BN` isn't a statically-detectable named export of the CJS anchor package
@@ -20,9 +20,10 @@ export interface BuildCreateEscrowParams {
   deadlineUnix: number;
   /** Initiator opted out of moderation — then `moderator` must be null. */
   noMod: boolean;
-  /** The chosen moderator's PDA. The program reads its price from this account;
-   *  the surcharge is never an argument. Null for a no-mod contract. */
-  moderator: PublicKey | null;
+  /** The chosen moderators' PDAs — none for no-mod, otherwise 1 or 3. The
+   *  program reads each one's price from its account and sums them; the fee is
+   *  never an argument. Passed as remaining accounts. */
+  moderators: PublicKey[];
   /** Slippage guard, base units: the program refuses a moderator priced above it. */
   maxModeratorFee: string;
 }
@@ -51,10 +52,13 @@ export async function buildCreateEscrow(
       escrow: p.escrow,
       vault: p.vault,
       initiatorTokenAccount,
-      moderator: p.moderator,
+      panel: panelPda(p.escrow),
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
+    .remainingAccounts(
+      p.moderators.map((pubkey) => ({ pubkey, isSigner: false, isWritable: false }))
+    )
     .instruction();
 
   return finalizeUnsigned(new Transaction().add(ix), p.initiator);

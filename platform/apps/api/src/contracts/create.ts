@@ -104,7 +104,8 @@ export async function createContract(
     amount: req.amount,
     deadlineUnix: Math.floor(deadline.getTime() / 1000),
     noMod,
-    moderator: quote?.pda ?? null,
+    // A list already: the panel takes 1 or 3, and the picker caps it at 1 for now.
+    moderators: quote ? [quote.pda] : [],
     maxModeratorFee,
   });
 

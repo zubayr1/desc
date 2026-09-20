@@ -101,6 +101,41 @@ function mapEscrowAccount(acc: EscrowAccount): OnChainEscrow {
   };
 }
 
+export interface PanelSeat {
+  /** The moderator's wallet — owner of the token account its fee must land in. */
+  moderator: PublicKey;
+  /** Its own price for this contract, snapshotted at creation. */
+  fee: string;
+  /** Has it voted? Only voters are paid on settle. */
+  voted: boolean;
+}
+
+/**
+ * Read an escrow's `Panel` — its seats in on-chain order, with who has voted.
+ *
+ * The panel, not the escrow, is the source of truth for who judged: the
+ * escrow's `moderator` field is only set on a single-moderator contract, and is
+ * `Pubkey::default()` on a panel of three.
+ */
+export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
+  const acc = await program.account.panel.fetch(panelPda(escrow));
+  return acc.entries.slice(0, acc.count).map((e) => ({
+    moderator: e.moderator,
+    fee: e.fee.toString(),
+    voted: e.vote !== 0,
+  }));
+}
+
+/**
+ * The moderators that voted, in panel order — exactly the accounts `release`
+ * and `refund` expect as remaining accounts, in exactly that order.
+ *
+ * Empty on a no-mod escrow and on a ghost-timeout, where nobody judged.
+ */
+export async function readPanelVoters(escrow: PublicKey): Promise<PublicKey[]> {
+  return (await readPanel(escrow)).filter((s) => s.voted).map((s) => s.moderator);
+}
+
 /** Read a single escrow account and map it into domain fields. */
 export async function readEscrow(escrow: PublicKey): Promise<OnChainEscrow> {
   return mapEscrowAccount(await program.account.escrow.fetch(escrow));

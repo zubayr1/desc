@@ -112,6 +112,40 @@ export type DescEscrow = {
           }
         },
         {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — created for every escrow, so a cancelled one has to",
+            "close it or the initiator's rent is orphaned on chain. Rent goes back to",
+            "the initiator, who put it up at creation.",
+            "",
+            "Boxed along with the rest: adding an account to an instruction that",
+            "already carries the escrow is how this program hit the BPF 4KB stack",
+            "limit before (see `create_escrow`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
           "name": "vault",
           "writable": true,
           "relations": [
@@ -610,6 +644,37 @@ export type DescEscrow = {
           ]
         },
         {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — who judged it, how they voted, and what each is",
+            "owed. Closed here, rent back to the initiator who put it up at creation.",
+            "Boxed, like every other sizeable account here — see the stack warning in",
+            "`create_escrow`."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
           "name": "vault",
           "writable": true,
           "relations": [
@@ -634,15 +699,6 @@ export type DescEscrow = {
           "relations": [
             "config"
           ]
-        },
-        {
-          "name": "moderatorTokenAccount",
-          "docs": [
-            "On a Fail verdict, the judging moderator's USDC account — receives the",
-            "surcharge. Omit on a ghost-timeout (no verdict, no moderator paid)."
-          ],
-          "writable": true,
-          "optional": true
         },
         {
           "name": "tokenProgram",
@@ -704,6 +760,40 @@ export type DescEscrow = {
           ]
         },
         {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — who judged it, how they voted, and what each is",
+            "owed. Closed here, rent back to the INITIATOR: they put it up at",
+            "creation, and `release` may be signed by either party, so the signer must",
+            "never be the destination.",
+            "",
+            "Boxed, like every other sizeable account here — see the stack warning in",
+            "`create_escrow`."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
           "name": "vault",
           "writable": true,
           "relations": [
@@ -728,19 +818,18 @@ export type DescEscrow = {
           ]
         },
         {
-          "name": "moderatorTokenAccount",
+          "name": "initiatorTokenAccount",
           "docs": [
-            "The judging moderator's USDC account — receives the surcharge (its reward).",
-            "Bound to the moderator that `record_verdict` stored. Omit on a no-mod",
-            "escrow, where nobody judged and there is no surcharge to pay."
+            "Initiator's USDC account — receives the fees of any moderator that did",
+            "not vote. Required even when every moderator voted (nothing is sent then)",
+            "so the vault can always be drained to zero and closed."
           ],
-          "writable": true,
-          "optional": true
+          "writable": true
         },
         {
           "name": "initiator",
           "docs": [
-            "Initiator — receives the vault's rent on close."
+            "Initiator — receives the vault's and the panel's rent on close."
           ],
           "writable": true,
           "relations": [

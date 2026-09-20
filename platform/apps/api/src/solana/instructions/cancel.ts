@@ -3,7 +3,7 @@ import {
   TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { program, usdcMint } from "../program";
+import { program, usdcMint, panelPda } from "../program";
 import { finalizeUnsigned } from "../buildTransaction";
 
 export interface BuildCancelParams {
@@ -13,7 +13,8 @@ export interface BuildCancelParams {
 }
 
 /** Build the unsigned `cancel` transaction (initiator reclaims a funded,
- *  unaccepted escrow). Initiator = fee payer + signer. */
+ *  unaccepted escrow). The panel is closed with it, returning the rent the
+ *  initiator put up at creation. Initiator = fee payer + signer. */
 export async function buildCancel(p: BuildCancelParams): Promise<string> {
   const initiatorTokenAccount = getAssociatedTokenAddressSync(
     usdcMint,
@@ -25,6 +26,7 @@ export async function buildCancel(p: BuildCancelParams): Promise<string> {
     .accountsPartial({
       initiator: p.initiator,
       escrow: p.escrow,
+      panel: panelPda(p.escrow),
       vault: p.vault,
       initiatorTokenAccount,
       tokenProgram: TOKEN_PROGRAM_ID,

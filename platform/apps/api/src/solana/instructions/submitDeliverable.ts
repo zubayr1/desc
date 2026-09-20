@@ -4,7 +4,7 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
-import { program, platformConfigPda, usdcMint } from "../program";
+import { program, platformConfigPda, usdcMint, panelPda } from "../program";
 import { finalizeUnsigned } from "../buildTransaction";
 
 export interface BuildSubmitDeliverableParams {
@@ -44,11 +44,26 @@ export async function buildSubmitDeliverable(
 
   if (p.settle) {
     const committerTokenAccount = getAssociatedTokenAddressSync(usdcMint, p.committer);
+    const initiatorTokenAccount = getAssociatedTokenAddressSync(
+      usdcMint,
+      p.settle.initiator
+    );
     tx.add(
       createAssociatedTokenAccountIdempotentInstruction(
         p.committer, // payer
         committerTokenAccount,
         p.committer, // owner
+        usdcMint
+      )
+    );
+    // `release` always takes the initiator's account (unspent moderator fees go
+    // back there). A no-mod escrow has none to return, but the account is still
+    // read, so make sure it exists.
+    tx.add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        p.committer,
+        initiatorTokenAccount,
+        p.settle.initiator,
         usdcMint
       )
     );
@@ -59,11 +74,11 @@ export async function buildSubmitDeliverable(
           signer: p.committer,
           escrow: p.escrow,
           config: platformConfigPda,
+          panel: panelPda(p.escrow),
           vault: p.settle.vault,
           committerTokenAccount,
           treasury: p.settle.treasury,
-          // no moderator judged a no-mod escrow, and none is paid
-          moderatorTokenAccount: null,
+          initiatorTokenAccount,
           initiator: p.settle.initiator,
           tokenProgram: TOKEN_PROGRAM_ID,
         })

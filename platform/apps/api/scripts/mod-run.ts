@@ -164,6 +164,8 @@ async function main() {
       moderator: moderatorPda(modKeypair.publicKey),
       escrowConfig: esc.config as PublicKey,
       escrow: escrowAddr,
+      // The panel holds the seats and the votes; the escrow tallies them.
+      panel: esc.panel as PublicKey,
       descEscrowProgram: escrowProgram.programId,
     })
     .rpc();

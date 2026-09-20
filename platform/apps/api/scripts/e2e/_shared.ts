@@ -209,6 +209,7 @@ export async function recordVerdict(
       moderator: moderatorPda(modKeypair.publicKey),
       escrowConfig: acc.config as PublicKey,
       escrow,
+      panel: acc.panel as PublicKey,
       descEscrowProgram: escrowProgram.programId,
     })
     .rpc();

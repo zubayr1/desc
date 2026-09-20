@@ -8,7 +8,12 @@ import {
   index,
   boolean,
 } from "drizzle-orm/pg-core";
-import type { AcceptanceCriterion, ContractStatus, Outcome } from "@repo/shared";
+import type {
+  AcceptanceCriterion,
+  ContractModerator,
+  ContractStatus,
+  Outcome,
+} from "@repo/shared";
 
 /**
  * Off-chain moderation progress — see the `moderationState` column for the
@@ -67,11 +72,16 @@ export const contracts = pgTable(
     // exact verified bytes. Null if the initiator didn't enrol a key.
     initiatorRecipient: text("initiator_recipient"),
 
-    // The moderator assigned at creation — the escrow binds the same wallet
-    // on-chain, and only it may record the verdict. Its age recipient is kept
-    // alongside so the committer seals the delivery to THIS moderator only:
-    // with several moderators registered, sealing to all of them would let a
-    // moderator read work it was never assigned. Null for no-mod contracts.
+    // The panel assigned at creation: every moderator judging this contract,
+    // with its age recipient and its own snapshotted price, in the same order as
+    // the on-chain `Panel`. The committer seals the delivery to exactly these
+    // recipients — sealing to every REGISTERED moderator would let one read work
+    // it was never given. Empty for no-mod contracts.
+    panel: jsonb("panel").$type<ContractModerator[]>().notNull().default([]),
+
+    // Legacy mirrors of a ONE-seat panel, kept only while `mod-watch` still
+    // claims work by this column (replaced by the per-moderator claims table).
+    // Null on a no-mod contract AND on a panel of three — read `panel` instead.
     moderator: text("moderator"),
     moderatorRecipient: text("moderator_recipient"),
 

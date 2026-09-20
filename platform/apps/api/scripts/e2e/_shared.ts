@@ -105,10 +105,13 @@ export async function deliverBundle(
     }
     recipients = [contract.initiatorRecipient];
   } else {
-    // The assigned moderator only — the same rule the browser follows.
-    const mods = contract.moderatorRecipient
-      ? [contract.moderatorRecipient]
-      : (await getJson<{ recipients: string[] }>("/config/moderators")).recipients;
+    // Every moderator on this contract's panel — the same rule the browser
+    // follows, with the same fallbacks for contracts created before it existed.
+    const mods = contract.panel?.length
+      ? contract.panel.map((m) => m.recipient)
+      : contract.moderatorRecipient
+        ? [contract.moderatorRecipient]
+        : (await getJson<{ recipients: string[] }>("/config/moderators")).recipients;
     const initiatorKey = contract.initiatorRecipient;
     recipients = initiatorKey ? [...mods, initiatorKey] : mods;
     if (!recipients.length) {

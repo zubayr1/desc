@@ -74,8 +74,9 @@ export async function listModeratorOffers(): Promise<ModeratorOffer[]> {
 
 /** A moderator chosen for a contract, with the price escrow will snapshot. */
 export interface ModeratorQuote {
-  /** The moderator's wallet — what the escrow binds as `moderator`. */
+  /** The moderator's wallet — its seat on the escrow's panel. */
   authority: PublicKey;
+  label: string;
   /** The Moderator PDA, passed to `create_escrow`. */
   pda: PublicKey;
   baseBps: number;
@@ -112,6 +113,7 @@ export async function resolveModerator(requested?: PublicKey): Promise<Moderator
 
   return {
     authority: pick.account.authority,
+    label: pick.account.label,
     pda: pick.publicKey,
     baseBps: pick.account.baseBps,
     feePerKb: BigInt(pick.account.feePerKb.toString()),
@@ -120,7 +122,57 @@ export async function resolveModerator(requested?: PublicKey): Promise<Moderator
   };
 }
 
+/** Legal panel sizes. Even panels are rejected on-chain: a tie has no majority
+ *  and the escrow would sit unsettleable. */
+const PANEL_SIZES = [1, 3];
+
+/**
+ * Resolve a contract's whole panel and read each moderator's on-chain price.
+ *
+ * `requested` are the chosen moderators' wallets. Without them, V1 falls back to
+ * the single active moderator — and refuses to guess when there are several,
+ * since the choice decides who judges and what it costs.
+ *
+ * Every seat is validated the way `create_escrow` will: a legal panel size, no
+ * moderator listed twice, and each one registered and active under this
+ * platform's config. Failing here gives the initiator a readable 400 instead of
+ * a program error after they have signed.
+ */
+export async function resolvePanel(
+  requested?: PublicKey[]
+): Promise<ModeratorQuote[]> {
+  if (!requested || requested.length === 0) return [await resolveModerator()];
+
+  if (!PANEL_SIZES.includes(requested.length)) {
+    throw Object.assign(
+      new Error(
+        `a panel must have ${PANEL_SIZES.join(" or ")} moderators — an even panel cannot reach a majority`
+      ),
+      { statusCode: 400 }
+    );
+  }
+  const seen = new Set(requested.map((w) => w.toBase58()));
+  if (seen.size !== requested.length) {
+    throw Object.assign(
+      new Error("the same moderator was chosen twice — a panel needs distinct judges"),
+      { statusCode: 400 }
+    );
+  }
+
+  // Sequential on purpose: `resolveModerator` reports WHICH wallet is bad, and
+  // the panels are at most three.
+  const quotes: ModeratorQuote[] = [];
+  for (const wallet of requested) quotes.push(await resolveModerator(wallet));
+  return quotes;
+}
+
 /** Same math as `Escrow::moderation_ceiling` on-chain — what the initiator locks up. */
 export function moderationCeiling(amount: bigint, q: ModeratorQuote): bigint {
   return (amount * BigInt(q.baseBps)) / 10_000n + q.feePerKb * BigInt(q.maxBundleKb);
+}
+
+/** What the whole panel costs: each moderator's own ceiling, summed. Never one
+ *  fee divided up — every seat runs the entire check. */
+export function panelCeiling(amount: bigint, quotes: ModeratorQuote[]): bigint {
+  return quotes.reduce((sum, q) => sum + moderationCeiling(amount, q), 0n);
 }

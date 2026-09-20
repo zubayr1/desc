@@ -224,13 +224,17 @@ function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void }) {
         }
         all = [c.initiatorRecipient];
       } else {
-        // Seal to the ONE moderator assigned to this contract — never to every
-        // registered moderator, or a moderator could read work it was never
-        // given. Contracts created before assignment was stored fall back to
-        // the active set, which is what they were sealed to back then.
-        const mods = c.moderatorRecipient
-          ? [c.moderatorRecipient]
-          : (await api.get<{ recipients: string[] }>("/config/moderators")).recipients;
+        // Seal to every moderator on THIS contract's panel — and to nobody
+        // else. Sealing to every registered moderator would let one read work
+        // it was never given; sealing to only one would leave the other two
+        // seats unable to judge. Contracts created before the panel was stored
+        // fall back to the single assigned moderator, then to the active set —
+        // which is what they were sealed to back then.
+        const mods = c.panel?.length
+          ? c.panel.map((m) => m.recipient)
+          : c.moderatorRecipient
+            ? [c.moderatorRecipient]
+            : (await api.get<{ recipients: string[] }>("/config/moderators")).recipients;
         // …and (if enrolled) the initiator, so a Pass delivers the exact
         // verified bytes — not a side-channel copy.
         all = c.initiatorRecipient ? [...mods, c.initiatorRecipient] : mods;

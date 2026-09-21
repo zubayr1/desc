@@ -40,28 +40,51 @@ docker compose up -d
 > Host port defaults to 5432. If that's taken, set `POSTGRES_PORT=5433` in
 > `platform/.env` (already done on this machine) and use that port in `DATABASE_URL`.
 
-### 2. Validator + program (keep running)
+### 2. Validator (keep running)
 ```bash
 cd programs/desc_escrow
-anchor localnet
+surfpool start --offline --block-production-mode clock --log-level none \
+  --legacy-anchor-compatibility
 ```
 
-### 3. Deploy the program (after any Rust change)
+**Do not use `anchor localnet` here.** It starts the same surfpool with
+`--block-production-mode transaction`, where surfpool mints **one block per
+transaction** instead of on a timer. `solana program deploy` sends ~400 write
+transactions, so the deploy produces ~400 blocks — and a blockhash expires after
+**150**. The deploy blows past its own expiry a third of the way in, every retry
+does the same, and it hangs forever on:
+
+```
+Blockhash expired. 4 retries remaining
+⠈   0.0% | Sending 404/404 transactions  [block height 1519; re-sign in 0 blocks]
+```
+
+`clock` mode (surfpool's own default) ticks like a real validator and the deploy
+lands. `anchor test` is unaffected — it runs its own instance per file.
+
+### 3. Deploy BOTH programs (after any Rust change)
 ```bash
 # from the repo root, in a NEW terminal — step 2 keeps running
 cd programs/desc_escrow
 solana program deploy target/deploy/desc_escrow.so \
   --program-id target/deploy/desc_escrow-keypair.json \
   --use-rpc -u localhost
-```
-`anchor localnet` only loads programs at **genesis**, and genesis happens only on a
-*fresh* ledger. Restart it against an existing `test-ledger` and it silently keeps
-running the **old** binary — your Rust changes never reach the chain. Worse, Anchor's
-borsh ignores trailing bytes, so a call with a newly-added argument still succeeds and
-the argument is quietly dropped.
 
-So deploy explicitly whenever the program changed. `--use-rpc` is required: the default
-TPU path panics against the test validator with "Failed to get slot leaders".
+solana program deploy ../desc_moderation/target/deploy/desc_moderation.so \
+  --program-id ../desc_moderation/target/deploy/desc_moderation-keypair.json \
+  --use-rpc -u localhost
+```
+Both, every time: started directly, surfpool loads nothing at genesis, so the
+`[[test.genesis]]` entry in `Anchor.toml` (which puts `desc_moderation` on the
+chain for `anchor test`) does not apply here.
+
+Deploying explicitly is the only way your Rust reaches the chain. A validator
+started against an existing ledger silently keeps running the **old** binary —
+and Anchor's borsh ignores trailing bytes, so a call with a newly-added argument
+still succeeds and the argument is quietly dropped.
+
+So deploy explicitly whenever a program changed. `--use-rpc` is required: the default
+TPU path panics against the local validator with "Failed to get slot leaders".
 
 Confirm it took:
 ```bash
@@ -92,9 +115,10 @@ reprints these (incl. the current `USDC_MINT`).
 pnpm db:push
 ```
 
-Re-run it after pulling schema changes — e.g. the `moderator` and
-`moderator_recipient` columns that record which moderator a contract was assigned.
-Contracts created before that have no assigned moderator and are skipped by `mod-watch`.
+Re-run it after pulling schema changes — e.g. the `panel` column (every moderator
+judging a contract) and the `moderation_claims` table that replaced the old
+`moderation_*` columns. Contracts created before the panel existed fall back to
+the single `moderator` column.
 
 ### 6. API
 ```bash
@@ -110,7 +134,7 @@ pnpm dev            # → http://localhost:5173
 
 ### Dependency order at a glance
 ```
-docker compose up → anchor localnet → solana program deploy → pnpm bootstrap
+docker compose up → surfpool (clock) → deploy BOTH programs → pnpm bootstrap
                                                                 (edit .env, restart api)
                                                             → pnpm db:push
                                                             → api  pnpm dev
@@ -121,7 +145,7 @@ docker compose up → anchor localnet → solana program deploy → pnpm bootstr
 
 ## Reset local state (keep validator ↔ DB in sync)
 
-Restarting `anchor localnet` gives a **fresh chain** (no escrows), but Postgres
+Restarting surfpool gives a **fresh chain** (no escrows), but Postgres
 **persists** — so the dashboard would show stale contracts pointing at accounts
 that no longer exist. After a validator restart, clear the DB so the two stay in
 sync:

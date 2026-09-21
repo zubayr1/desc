@@ -37,7 +37,10 @@ Prepares a cluster so the api has something to talk to. It:
 There is no hot settlement keypair. Moderator pricing is **not** set here — each
 moderator sets its own (see `moderator-register`).
 
-**Prereq:** a validator running with the program deployed (`anchor localnet`).
+**Prereq:** a validator running with both programs deployed — start it with
+`surfpool start --offline --block-production-mode clock`, **not** `anchor localnet`
+(see `platform/README.md` step 2: its `transaction` block mode makes
+`solana program deploy` expire its own blockhash and hang).
 
 ```bash
 pnpm bootstrap

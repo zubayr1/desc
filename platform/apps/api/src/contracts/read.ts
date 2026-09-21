@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import type { Contract, ContractPage, ContractStatus } from "@repo/shared";
 import type { ContractRow } from "../db/schema";
-import { readEscrow, readEscrows, type OnChainEscrow } from "../solana/program";
+import { readEscrow, readEscrows, readPanel, type OnChainEscrow } from "../solana/program";
 import { toContract } from "./mapper";
 import { getRow, getRowByLink, getRows, getRowsPage, writeCache } from "./repo";
 
@@ -14,12 +14,30 @@ const TERMINAL: ReadonlySet<ContractStatus> = new Set([
 
 /** Detail read: live chain state. Null if the escrow isn't on-chain yet. */
 async function merge(row: ContractRow): Promise<Contract | null> {
+  const escrow = new PublicKey(row.escrowAddress);
+  let oc: OnChainEscrow;
   try {
-    const oc = await readEscrow(new PublicKey(row.escrowAddress));
-    return toContract(row, oc);
+    oc = await readEscrow(escrow);
   } catch {
     return null;
   }
+  const contract = toContract(row, oc);
+
+  // Overlay each seat's live vote. Best-effort on purpose: the panel account is
+  // CLOSED on settle (its rent goes back to the initiator), so a settled
+  // contract has no votes to read and the seats keep `vote: undefined`. The
+  // outcome itself lives on the escrow and is unaffected.
+  try {
+    const seats = await readPanel(escrow);
+    const byWallet = new Map(seats.map((s) => [s.moderator.toBase58(), s.vote]));
+    contract.panel = contract.panel.map((m) => ({
+      ...m,
+      vote: byWallet.get(m.wallet),
+    }));
+  } catch {
+    // no panel on chain (settled, or created before panels existed)
+  }
+  return contract;
 }
 
 export async function getContract(id: string): Promise<Contract | null> {

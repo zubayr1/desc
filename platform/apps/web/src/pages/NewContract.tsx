@@ -15,6 +15,7 @@ import {
   type FeeConfig,
   type CreateContractRequest,
   type DeliverableType,
+  type ModeratorOffer,
 } from "@repo/shared";
 import { Card } from "@/components/ui/Card";
 import { ModeratorPicker } from "@/components/ModeratorPicker";
@@ -55,7 +56,7 @@ export function NewContract() {
   const [amount, setAmount] = useState("");
   const [deadline, setDeadline] = useState("");
   const [noMod, setNoMod] = useState(false);
-  const [modWallet, setModWallet] = useState("");
+  const [modWallets, setModWallets] = useState<string[]>([]);
   const [created, setCreated] = useState<Contract | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -78,25 +79,37 @@ export function NewContract() {
       : 0;
   // No moderator, no moderator fee — and no verification fee either, since
   // nothing is ever checked. The protocol fee still applies.
-  // The moderator's fee is ITS price, read from its on-chain account — the same
-  // numbers create_escrow reads. With one moderator it is picked for you.
-  const moderator =
-    fees.moderators.find((m) => m.wallet === modWallet) ??
-    (fees.moderators.length === 1 ? fees.moderators[0] : undefined);
-  const needsModerator = !noMod && !moderator;
-  // The same fee in base units, with the program's integer math — so the limit
+  // Each moderator's fee is ITS price, read from its on-chain account — the same
+  // numbers create_escrow reads. With exactly one registered, it is picked for you.
+  const panel = noMod
+    ? []
+    : modWallets.length
+      ? modWallets
+          .map((w) => fees.moderators.find((m) => m.wallet === w))
+          .filter((m): m is ModeratorOffer => !!m)
+      : fees.moderators.length === 1
+        ? [fees.moderators[0]]
+        : [];
+  // 1 or 3. An even panel has no majority, so the program rejects it — say so
+  // here rather than letting the wallet sign a transaction that cannot land.
+  const panelOk = panel.length === 1 || panel.length === 3;
+  const needsModerator = !noMod && !panelOk;
+  // The same fees in base units, with the program's integer math — so the limit
   // we send equals what the program computes, not a float that is 1 unit short.
+  // SUMMED, never divided: each moderator runs the whole check and earns a full fee.
   const amountBase = BigInt(Math.round(amountNum * 1_000_000));
-  const surchargeBase =
-    noMod || !moderator
-      ? 0n
-      : (amountBase * BigInt(moderator.baseBps)) / 10_000n +
-        BigInt(moderator.feePerKb) * BigInt(moderator.maxBundleKb);
-  const surcharge =
-    noMod || !moderator
-      ? 0
-      : (amountNum * moderator.baseBps) / 10_000 +
-        toUsdc(moderator.feePerKb) * moderator.maxBundleKb;
+  const surchargeBase = panel.reduce(
+    (sum, m) =>
+      sum +
+      (amountBase * BigInt(m.baseBps)) / 10_000n +
+      BigInt(m.feePerKb) * BigInt(m.maxBundleKb),
+    0n
+  );
+  const surcharge = panel.reduce(
+    (sum, m) =>
+      sum + (amountNum * m.baseBps) / 10_000 + toUsdc(m.feePerKb) * m.maxBundleKb,
+    0
+  );
   const total = amountNum + fee + surcharge;
 
   // Kept only when a moderator actually rendered a verdict (Pass or Fail); the
@@ -148,7 +161,7 @@ export function NewContract() {
         amount: String(Math.round(amountNum * 1_000_000)),
         // No fee is sent: the program reads the chosen moderator's price itself.
         noMod,
-        moderator: noMod ? undefined : moderator?.wallet,
+        moderators: noMod ? undefined : panel.map((m) => m.wallet),
         // What the initiator is looking at. A price rise since → creation fails.
         maxModeratorFee: surchargeBase.toString(),
         deadline: new Date(deadline).toISOString(),
@@ -330,13 +343,21 @@ export function NewContract() {
                   verification below.
                 </div>
               ) : (
-                <ModeratorPicker
-                  moderators={fees.moderators}
-                  selected={moderator ? [moderator.wallet] : []}
-                  onChange={(ws) => setModWallet(ws[0] ?? "")}
-                  max={1}
-                  amount={amountNum}
-                />
+                <>
+                  <ModeratorPicker
+                    moderators={fees.moderators}
+                    selected={panel.map((m) => m.wallet)}
+                    onChange={setModWallets}
+                    sizes={[1, 3]}
+                    amount={amountNum}
+                  />
+                  {panel.length === 2 && (
+                    <p className="mt-2 text-sm text-fail">
+                      Pick one more, or drop one. Two moderators can split 1–1 and
+                      never reach a majority, so the program only accepts 1 or 3.
+                    </p>
+                  )}
+                </>
               )}
             </FormField>
           )}
@@ -396,7 +417,10 @@ export function NewContract() {
             </div>
             {!noMod && (
               <div className="flex justify-between gap-3">
-                <dt className="truncate text-muted">Moderator{moderator ? ` · ${moderator.label}` : ""}</dt>
+                <dt className="truncate text-muted">
+                  {panel.length > 1 ? `Moderators · ${panel.length}` : "Moderator"}
+                  {panel.length ? ` · ${panel.map((m) => m.label).join(", ")}` : ""}
+                </dt>
                 <dd className="font-mono tabular-nums">{surcharge.toFixed(2)}</dd>
               </div>
             )}
@@ -421,8 +445,9 @@ export function NewContract() {
             ) : (
               <>
                 If the work fails verification you get {refundedOnFail.toFixed(2)} back — we
-                keep only the {verificationFee.toFixed(2)} check fee and the moderator keeps
-                its {surcharge.toFixed(2)}. If it's never delivered, nothing is charged.
+                keep only the {verificationFee.toFixed(2)} check fee and the{" "}
+                {panel.length > 1 ? "moderators keep their" : "moderator keeps its"}{" "}
+                {surcharge.toFixed(2)}. If it's never delivered, nothing is charged.
               </>
             )}
           </p>

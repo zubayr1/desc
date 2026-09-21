@@ -106,8 +106,8 @@ export interface PanelSeat {
   moderator: PublicKey;
   /** Its own price for this contract, snapshotted at creation. */
   fee: string;
-  /** Has it voted? Only voters are paid on settle. */
-  voted: boolean;
+  /** How it voted, or null if it has not. Only voters are paid on settle. */
+  vote: Outcome | null;
 }
 
 /**
@@ -119,10 +119,12 @@ export interface PanelSeat {
  */
 export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
   const acc = await program.account.panel.fetch(panelPda(escrow));
+  // Mirrors the program's VOTE_NONE / VOTE_PASS / VOTE_FAIL.
+  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
   return acc.entries.slice(0, acc.count).map((e) => ({
     moderator: e.moderator,
     fee: e.fee.toString(),
-    voted: e.vote !== 0,
+    vote: VOTES[e.vote] ?? null,
   }));
 }
 
@@ -133,7 +135,7 @@ export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
  * Empty on a no-mod escrow and on a ghost-timeout, where nobody judged.
  */
 export async function readPanelVoters(escrow: PublicKey): Promise<PublicKey[]> {
-  return (await readPanel(escrow)).filter((s) => s.voted).map((s) => s.moderator);
+  return (await readPanel(escrow)).filter((s) => s.vote !== null).map((s) => s.moderator);
 }
 
 /** Read a single escrow account and map it into domain fields. */

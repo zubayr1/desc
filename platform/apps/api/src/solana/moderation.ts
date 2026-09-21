@@ -4,6 +4,8 @@ import type { ModeratorOffer } from "@repo/shared";
 import type { DescModeration } from "./idl/desc_moderation";
 import idl from "./idl/desc_moderation.json";
 import { env } from "../config/env";
+import { moderatorSlug } from "../moderation/moderatorModel";
+import { isMischief } from "../moderation/judge/mischief";
 
 /**
  * Read-only view of the `desc_moderation` program. The chain is the source of
@@ -69,6 +71,10 @@ export async function listModeratorOffers(): Promise<ModeratorOffer[]> {
     baseBps: m.account.baseBps,
     feePerKb: m.account.feePerKb.toString(),
     maxBundleKb: m.account.maxBundleKb,
+    // Surfaced so the UI can warn before anyone picks one. Read from the same
+    // env var the judge obeys, so a moderator can never be quietly inverting
+    // verdicts while the site shows it as a normal one.
+    test: isMischief(moderatorSlug(m.account.label)),
   }));
 }
 

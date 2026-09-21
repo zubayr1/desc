@@ -250,6 +250,12 @@ export interface ContractModerator {
    *  divided. */
   fee: TokenAmount;
   label: string;
+  /** How this moderator voted, read live from the on-chain panel.
+   *
+   *  `null` = seated but has not voted yet. `undefined` = not read — list views
+   *  do not touch the chain, and a settled contract has no panel left to read
+   *  (it is closed on settle and its rent returned). */
+  vote?: Outcome | null;
 }
 
 /** Live fee parameters (`GET /config/fees`). The first three come from the
@@ -276,6 +282,10 @@ export interface ModeratorOffer {
   feePerKb: TokenAmount;
   /** Largest deliverable accepted, KB. 0 = no limit. */
   maxBundleKb: number;
+  /** A TEST moderator: it judges for real and then returns the OPPOSITE
+   *  verdict, to prove a panel outvotes a bad panellist. Only ever true on
+   *  localnet and devnet — the judge refuses to run against mainnet. */
+  test?: boolean;
 }
 
 /** One page of `GET /contracts`. `total` counts every match, not just this page. */

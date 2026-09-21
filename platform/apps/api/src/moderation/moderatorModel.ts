@@ -13,6 +13,19 @@
  * never chose for it.
  */
 
+/**
+ * A moderator's on-chain label → its slug, the key everything off-chain uses.
+ * The same rule `moderator-register` prints, so the env line it tells you to add
+ * is the one that gets read back.
+ *
+ * `Hikaru (Mod-Claude-Haiku)` → `hikaru-mod-claude-haiku`
+ */
+export const moderatorSlug = (label: string) =>
+  label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "moderator";
+
 /** `hikaru-mod-claude-haiku` → `MODEL_HIKARU_MOD_CLAUDE_HAIKU` */
 export const modelEnvName = (slug: string) =>
   `MODEL_${slug.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;

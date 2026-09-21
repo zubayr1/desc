@@ -5,7 +5,7 @@ import { api, prepareSignSubmit, uploadDeliverable } from "@/lib/api";
 import { deriveDeliverableKey } from "@/lib/deliverableKey";
 import { cn, short, usd } from "@/lib/utils";
 import { useFees } from "@/lib/fees";
-import type { BundleBlob, BundleResult, Contract, InputFile } from "@repo/shared";
+import type { BundleBlob, BundleResult, Contract, InputFile, Outcome } from "@repo/shared";
 import {
   buildBundle,
   decryptWithIdentity,
@@ -170,6 +170,94 @@ function Field({
         {value}
       </div>
     </div>
+  );
+}
+
+/**
+ * The panel and how it voted.
+ *
+ * Votes are read live from the on-chain panel, so they appear one at a time as
+ * the moderators finish. A seat with `vote === undefined` was not read rather
+ * than not voted: the panel account is CLOSED on settle (its rent goes back to
+ * the initiator), so a settled contract shows the outcome without the
+ * breakdown.
+ */
+function PanelBoard({ c }: { c: Contract }) {
+  const seats = c.panel;
+  const known = seats.filter((m) => m.vote !== undefined);
+  const agreeing = c.outcome ? known.filter((m) => m.vote === c.outcome).length : 0;
+  // "2 of 3 agreed" is only honest while the votes are still readable.
+  const result =
+    c.outcome && known.length
+      ? `${agreeing} of ${seats.length} agreed — ${c.outcome.toUpperCase()}`
+      : c.outcome
+        ? c.outcome.toUpperCase()
+        : null;
+
+  return (
+    <div className="mt-6">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <span className="text-xs uppercase tracking-wider text-muted">
+          {seats.length > 1 ? `Panel · ${seats.length} moderators` : "Moderator"}
+        </span>
+        {result && (
+          <span
+            className={cn(
+              "text-xs font-semibold",
+              c.outcome === "pass" ? "text-pass" : "text-fail"
+            )}
+          >
+            {result}
+          </span>
+        )}
+      </div>
+      <ul className="space-y-1.5">
+        {seats.map((m) => (
+          <li
+            key={m.wallet}
+            className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{m.label}</span>
+              <span className="block truncate font-mono text-[0.68rem] text-muted">
+                {short(m.wallet)} · {usd(m.fee)}
+              </span>
+            </span>
+            <VoteBadge vote={m.vote} />
+          </li>
+        ))}
+      </ul>
+      {seats.length > 1 && (
+        <p className="mt-2 text-xs text-muted">
+          Each moderator judges on its own and is paid its own price — the fees are
+          summed, not split. A majority settles the contract.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function VoteBadge({ vote }: { vote?: Outcome | null }) {
+  if (vote === undefined) {
+    return <span className="font-mono text-[0.68rem] text-muted">—</span>;
+  }
+  if (vote === null) {
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-[0.68rem] text-muted">
+        <span className="size-1.5 animate-pulse rounded-full bg-st-submitted" />
+        judging
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        "rounded-md px-2 py-0.5 text-[0.68rem] font-semibold",
+        vote === "pass" ? "bg-pass/15 text-pass" : "bg-fail/15 text-fail"
+      )}
+    >
+      {vote.toUpperCase()}
+    </span>
   );
 }
 
@@ -653,8 +741,11 @@ export function ContractView() {
             value={
               contract.noMod
                 ? "Nobody — no verification"
-                : (fees.moderators.find((m) => m.wallet === contract.moderator)?.label ??
-                  (contract.moderator ? short(contract.moderator) : "Moderator"))
+                : contract.panel.length > 1
+                  ? `${contract.panel.length} moderators`
+                  : (contract.panel[0]?.label ??
+                    fees.moderators.find((m) => m.wallet === contract.moderator)?.label ??
+                    (contract.moderator ? short(contract.moderator) : "Moderator"))
             }
           />
           {contract.committer && (
@@ -669,6 +760,8 @@ export function ContractView() {
             {hasModFee && <> · {usd(contract.moderatorSurcharge)} moderator fee</>}
           </p>
         )}
+
+        {contract.panel.length > 0 && <PanelBoard c={contract} />}
 
         <div className="mt-6">
           <div className="mb-2 text-xs uppercase tracking-wider text-muted">

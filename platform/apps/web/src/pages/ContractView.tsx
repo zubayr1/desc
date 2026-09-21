@@ -177,10 +177,12 @@ function Field({
  * The panel and how it voted.
  *
  * Votes are read live from the on-chain panel, so they appear one at a time as
- * the moderators finish. A seat with `vote === undefined` was not read rather
- * than not voted: the panel account is CLOSED on settle (its rent goes back to
- * the initiator), so a settled contract shows the outcome without the
- * breakdown.
+ * the moderators finish, and the api caches them — the panel account is closed
+ * on settle to return its rent, so without the cache a settled contract could
+ * only ever show its final outcome.
+ *
+ * `vote === undefined` means never read, not "did not vote"; an unvoted seat
+ * reads `null`.
  */
 function PanelBoard({ c }: { c: Contract }) {
   const seats = c.panel;

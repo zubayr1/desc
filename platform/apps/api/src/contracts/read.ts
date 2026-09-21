@@ -1,9 +1,28 @@
 import { PublicKey } from "@solana/web3.js";
-import type { Contract, ContractPage, ContractStatus } from "@repo/shared";
+import type {
+  Contract,
+  ContractModerator,
+  ContractPage,
+  ContractStatus,
+} from "@repo/shared";
 import type { ContractRow } from "../db/schema";
-import { readEscrow, readEscrows, readPanel, type OnChainEscrow } from "../solana/program";
+import {
+  readEscrow,
+  readEscrows,
+  readPanel,
+  readPanels,
+  type OnChainEscrow,
+  type PanelSeat,
+} from "../solana/program";
 import { toContract } from "./mapper";
-import { getRow, getRowByLink, getRows, getRowsPage, writeCache } from "./repo";
+import {
+  getRow,
+  getRowByLink,
+  getRows,
+  getRowsPage,
+  writeCache,
+  writePanelVotes,
+} from "./repo";
 
 /** Final states — never change, so never re-read them. */
 const TERMINAL: ReadonlySet<ContractStatus> = new Set([
@@ -11,6 +30,30 @@ const TERMINAL: ReadonlySet<ContractStatus> = new Set([
   "refunded",
   "cancelled",
 ]);
+
+/**
+ * Overlay live panel votes onto the stored seats.
+ *
+ * Returns the merged seats and whether anything changed — a changed panel is
+ * written back, because the panel account is closed on settle and the votes are
+ * unreadable after that. Seats keep their cached vote when the live read has
+ * nothing for them, so a settled contract still shows who said what.
+ */
+function overlayVotes(
+  stored: ContractModerator[],
+  live: PanelSeat[] | undefined
+): { seats: ContractModerator[]; changed: boolean } {
+  if (!live?.length) return { seats: stored, changed: false };
+  const byWallet = new Map(live.map((s) => [s.moderator.toBase58(), s.vote]));
+  let changed = false;
+  const seats = stored.map((m) => {
+    const vote = byWallet.get(m.wallet);
+    if (vote === undefined || vote === m.vote) return m;
+    changed = true;
+    return { ...m, vote };
+  });
+  return { seats, changed };
+}
 
 /** Detail read: live chain state. Null if the escrow isn't on-chain yet. */
 async function merge(row: ContractRow): Promise<Contract | null> {
@@ -23,17 +66,13 @@ async function merge(row: ContractRow): Promise<Contract | null> {
   }
   const contract = toContract(row, oc);
 
-  // Overlay each seat's live vote. Best-effort on purpose: the panel account is
-  // CLOSED on settle (its rent goes back to the initiator), so a settled
-  // contract has no votes to read and the seats keep `vote: undefined`. The
-  // outcome itself lives on the escrow and is unaffected.
+  // Overlay each seat's live vote and cache anything new. Best-effort: once the
+  // contract settles the panel account is gone, and the read simply falls back
+  // to the votes cached on the way there.
   try {
-    const seats = await readPanel(escrow);
-    const byWallet = new Map(seats.map((s) => [s.moderator.toBase58(), s.vote]));
-    contract.panel = contract.panel.map((m) => ({
-      ...m,
-      vote: byWallet.get(m.wallet),
-    }));
+    const { seats, changed } = overlayVotes(contract.panel, await readPanel(escrow));
+    contract.panel = seats;
+    if (changed) await writePanelVotes(row.id, seats);
   } catch {
     // no panel on chain (settled, or created before panels existed)
   }
@@ -74,6 +113,23 @@ export async function reconcileRows(
   if (!inflight.length) return { fresh, updated };
 
   const live = await readEscrows(inflight.map((r) => new PublicKey(r.escrowAddress)));
+
+  // Votes have to be caught BEFORE settlement — `release` / `refund` close the
+  // panel and take the votes with it. The sweep is the only thing guaranteed to
+  // look; a contract nobody opens would otherwise settle with its breakdown
+  // unrecorded. Only contracts actually awaiting a verdict are read.
+  const awaiting = inflight.filter(
+    (r) => live.get(r.escrowAddress)?.status === "submitted" && r.panel?.length
+  );
+  let panels = new Map<string, PanelSeat[]>();
+  if (awaiting.length) {
+    try {
+      panels = await readPanels(awaiting.map((r) => new PublicKey(r.escrowAddress)));
+    } catch {
+      // panels unreadable this sweep — the next one tries again
+    }
+  }
+
   const writes: Promise<void>[] = [];
   for (const r of inflight) {
     const oc = live.get(r.escrowAddress);
@@ -87,6 +143,8 @@ export async function reconcileRows(
       writes.push(writeCache(r.id, oc));
       updated++;
     }
+    const votes = overlayVotes(r.panel ?? [], panels.get(r.escrowAddress));
+    if (votes.changed) writes.push(writePanelVotes(r.id, votes.seats));
   }
   if (writes.length) await Promise.all(writes);
   return { fresh, updated };

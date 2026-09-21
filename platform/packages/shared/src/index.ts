@@ -250,11 +250,14 @@ export interface ContractModerator {
    *  divided. */
   fee: TokenAmount;
   label: string;
-  /** How this moderator voted, read live from the on-chain panel.
+  /** How this moderator voted.
    *
-   *  `null` = seated but has not voted yet. `undefined` = not read — list views
-   *  do not touch the chain, and a settled contract has no panel left to read
-   *  (it is closed on settle and its rent returned). */
+   *  Read live from the on-chain panel and cached, because the panel account is
+   *  closed on settle and its votes go with it. A CACHE, not evidence — the
+   *  proof of a vote is that moderator's own signed transaction in the ledger.
+   *
+   *  `undefined` = never read yet · `null` = seated, has not voted ·
+   *  `"pass"`/`"fail"` = its vote. */
   vote?: Outcome | null;
 }
 

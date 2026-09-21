@@ -138,6 +138,36 @@ export async function readPanelVoters(escrow: PublicKey): Promise<PublicKey[]> {
   return (await readPanel(escrow)).filter((s) => s.vote !== null).map((s) => s.moderator);
 }
 
+/**
+ * Batch-read many panels in one round-trip, keyed by ESCROW address. A missing
+ * entry means no panel on chain — either it was closed on settle, or the escrow
+ * predates panels.
+ */
+export async function readPanels(
+  escrows: PublicKey[]
+): Promise<Map<string, PanelSeat[]>> {
+  const out = new Map<string, PanelSeat[]>();
+  if (!escrows.length) return out;
+  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
+  const CHUNK = 100;
+  for (let i = 0; i < escrows.length; i += CHUNK) {
+    const slice = escrows.slice(i, i + CHUNK);
+    const accs = await program.account.panel.fetchMultiple(slice.map(panelPda));
+    accs.forEach((acc, j) => {
+      if (!acc) return;
+      out.set(
+        slice[j].toBase58(),
+        acc.entries.slice(0, acc.count).map((e) => ({
+          moderator: e.moderator,
+          fee: e.fee.toString(),
+          vote: VOTES[e.vote] ?? null,
+        }))
+      );
+    });
+  }
+  return out;
+}
+
 /** Read a single escrow account and map it into domain fields. */
 export async function readEscrow(escrow: PublicKey): Promise<OnChainEscrow> {
   return mapEscrowAccount(await program.account.escrow.fetch(escrow));

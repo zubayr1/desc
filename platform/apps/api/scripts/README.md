@@ -143,6 +143,14 @@ moderator the escrow was assigned — its wallet must be in `./moderators/`.
 | `pnpm e2e:release` | `e2e/e2e_release.ts` | full happy path → settled |
 | `pnpm e2e:refund` | `e2e/e2e_refund.ts` | verdict(fail) → refund |
 | `pnpm e2e:mutual-cancel` | `e2e/e2e_mutual_cancel.ts` | two-signer unwind → refunded |
+| `pnpm e2e:panel` | `e2e/e2e_panel.ts` | **3 moderators**, one voting the opposite → majority settles, every voter paid its own price |
+
+`e2e:panel` needs **three** active moderators, ideally including Mischief (with
+`DESC_MISCHIEF_MODS` naming it) so the run has a bad panellist to outvote. With
+fewer than three it fails with a clear message; with three honest ones it still
+runs, but only proves a unanimous panel. It drives `submit_verdict` directly
+like the other scripts, so it tests the tally and the payout — that the *judge*
+inverts is the wrapper's own concern.
 
 Each funds a fresh initiator/committer, builds the tx via the api, signs it
 locally, and submits it back through the api. The initiator gets **1070 USDC**:

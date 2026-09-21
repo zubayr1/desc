@@ -258,24 +258,38 @@ DESC_MISCHIEF_MODS=mischief               # slugs that invert their verdict
 on-chain only creates a normal moderator. Naming a slug here is the opt-in, and
 the judge refuses to start at all if `RPC_URL` looks like mainnet.
 
-> **Register moderators BEFORE creating contracts.** A contract is bound to one
-> moderator when it's created, and the committer seals the delivery to that
-> moderator's key. A moderator registered later can't be picked for existing
-> contracts, and **re-registering** a moderator (new wallet, new key) orphans
-> every contract assigned to the old one — they fail at decrypt.
+> **Register moderators BEFORE creating contracts.** A contract's panel is fixed
+> when it's created, and the committer seals the delivery to those moderators'
+> keys. A moderator registered later can't be added to existing contracts, and
+> **re-registering** a moderator (new wallet, new key) orphans every contract it
+> was seated on — they fail at decrypt.
 
 Each moderator has its own price (on-chain) and its own model (`.env`). A moderator
-with no `MODEL_…` line refuses to start. The initiator picks one per contract; the
-committer's delivery is sealed to **that moderator only**, and only it can record the verdict.
+with no `MODEL_…` line refuses to start. The initiator picks a **panel of 1 or 3**
+per contract — never 2, which can split 1–1 and never reach a majority. The
+delivery is sealed to **exactly those moderators**, only they can vote, and the
+first outcome to reach a majority settles it.
 
 **C) run the moderators — one terminal each, same package:**
 ```bash
 pnpm mod-watch --mod olympus-mod-claude-opus
+pnpm mod-watch --mod songoku-mod-claude-sonnet
 pnpm mod-watch --mod hikaru-mod-claude-haiku
+pnpm mod-watch --mod mischief            # test moderator — votes the OPPOSITE
 ```
-Each watcher claims only the contracts assigned to its moderator. `--mod` is the slug
-of the label (lowercased, dashes). `--once` does a single sweep and exits. Set
-`DESC_JUDGE=manual` in `.env` to settle contracts by hand instead.
+Run one per moderator you registered. A three-moderator contract needs all three
+of its watchers up, or it sits at `submitted` waiting for the vote that never
+comes.
+
+Each watcher claims only the contracts whose **panel it sits on** and that it has
+not voted on yet, so three watchers can work the same contract side by side
+without colliding — claims are per seat, in `moderation_claims`. `--mod` is the
+slug of the label (lowercased, dashes). `--once` does a single sweep and exits.
+Set `DESC_JUDGE=manual` in `.env` to settle contracts by hand instead.
+
+Mischief prints a loud banner at startup. It judges for real and then submits the
+opposite verdict, so keep it off any panel whose outcome you care about — it is
+there to be outvoted.
 
 > **`DESC_JUDGE=claude` runs on your Claude subscription**, through Claude Code in
 > headless mode (`claude -p`, tools and MCP disabled) — no API credits are used. It
@@ -326,26 +340,31 @@ cd platform/apps/api        # the ./moderators/ files live here (moderator-regis
 
 # each mod's wallet — the file is <slug>-wallet.json, slug = label lowercased with dashes
 OLYMPUS=$(solana-keygen pubkey ./moderators/olympus-mod-claude-opus-wallet.json)
+SONGOKU=$(solana-keygen pubkey ./moderators/songoku-mod-claude-sonnet-wallet.json)
 HIKARU=$(solana-keygen pubkey ./moderators/hikaru-mod-claude-haiku-wallet.json)
 ls ./moderators/*-wallet.json   # if your labels differ, the slugs are here
 
-# before settling
-spl-token balance <USDC_MINT> --owner $OLYMPUS --url localhost
-spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
+check() { for w in $OLYMPUS $SONGOKU $HIKARU; do
+  spl-token balance <USDC_MINT> --owner $w --url localhost; done }
 
-# create a contract with one of them → accept → submit → its mod-watch judges → Release
-# then check again — ONLY the assigned mod's balance moves, by its price
-# (1% for Olympus at --base-bps 100, 0.75% for SonGoku at 75, 0.5% for Hikaru at 50)
-spl-token balance <USDC_MINT> --owner $OLYMPUS --url localhost
-spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
+check   # before settling
+
+# create a contract → accept → submit → the panel's watchers judge → Release
+check   # after
 ```
+Only the moderators **on that contract's panel** are paid, and each by its own
+price — 1% for Olympus at `--base-bps 100`, 0.75% for SonGoku at 75, 0.5% for
+Hikaru at 50. On a panel of three all three move, by different amounts; a
+moderator that never voted is not paid and its fee goes back to the initiator.
 
 - `<USDC_MINT>` is the value from `pnpm bootstrap` (also `apps/api/.env`).
 - The fee lands on **Release/Reclaim**, so run that step first, then re-check the balance.
-- The initiator funds **amount + protocol fee + the chosen mod's price** at create;
+- The initiator funds **amount + protocol fee + the SUM of the panel's prices** at
+  create — each moderator runs the whole check, so the fees are summed, never split.
   `./fund-wallets.sh <USDC_MINT>` mints plenty.
-- The form quotes the price from `GET /config/fees` and sends it as `maxModeratorFee`. If
-  the mod raised its price since, creation fails instead of charging more.
+- The form quotes those prices from `GET /config/fees` and sends their sum as
+  `maxModeratorFee`. If any of them raised its price since, creation fails instead
+  of charging more.
 
 ### Admin console — read-only oversight
 ```bash

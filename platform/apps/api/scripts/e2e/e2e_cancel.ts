@@ -1,6 +1,8 @@
 /**
  * End-to-end check for the cancel flow: create → fund → cancel.
- * Verifies the initiator is fully refunded and the contract is `cancelled`.
+ * Verifies the initiator is fully refunded, the contract is `cancelled`, and the
+ * panel account is closed — its rent is a deposit the initiator put up at
+ * creation, and an unclosed panel strands it on chain for ever.
  *
  * Prereq: validator + program, bootstrap done, db:push done, api running.
  * Run: `pnpm e2e:cancel`.
@@ -20,7 +22,13 @@ import {
   mintTo,
   getAccount,
 } from "@solana/spl-token";
-import { pickModerator } from "./_shared";
+import {
+  accountExists,
+  panelAddress,
+  pickModerator,
+  postJson,
+  signAndSubmit,
+} from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -33,27 +41,6 @@ const loadKeypair = (p: string) =>
   Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
 
 const TOTAL = 1_070_000_000; // amount 1000 + fee 20 + moderator price (up to 5% = 50)
-
-async function postJson(path: string, body: unknown) {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${path} failed: ${await res.text()}`);
-  return res.json();
-}
-
-async function signAndSubmit(
-  connection: Connection,
-  unsignedTx: string,
-  signer: Keypair,
-  submitPath: string
-) {
-  const tx = Transaction.from(Buffer.from(unsignedTx, "base64"));
-  tx.partialSign(signer);
-  return postJson(submitPath, { signedTx: tx.serialize().toString("base64") });
-}
 
 async function main() {
   const connection = new Connection(RPC, "confirmed");
@@ -81,8 +68,8 @@ async function main() {
     amount: "1000000000",
     moderator: await pickModerator(),
     deadline: new Date(Date.now() + 3600_000).toISOString(),
-  })) as { id: string; unsignedTx: string };
-  await signAndSubmit(connection, created.unsignedTx, initiator, `/contracts/${created.id}/submit`);
+  })) as { id: string; escrowAddress: string; unsignedTx: string };
+  await signAndSubmit(created.unsignedTx, initiator, `/contracts/${created.id}/submit`);
 
   // after funding, the initiator's USDC is in the vault → balance 0
   const afterFund = await getAccount(connection, ata.address);
@@ -92,9 +79,16 @@ async function main() {
   const prep = (await postJson(`/contracts/${created.id}/cancel/prepare`, {})) as {
     unsignedTx: string;
   };
+  // The panel exists from creation — cancel has to close it, or the rent the
+  // initiator put up is stranded on chain for ever.
+  const panel = panelAddress(new PublicKey(created.escrowAddress));
+  if (!(await accountExists(panel))) {
+    throw new Error("no panel account was created for this escrow");
+  }
+  const solBefore = await connection.getBalance(initiator.publicKey);
+
   const cancelled = (await signAndSubmit(
-    connection,
-    prep.unsignedTx,
+        prep.unsignedTx,
     initiator,
     `/contracts/${created.id}/cancel/submit`
   )) as { status: string };
@@ -106,7 +100,25 @@ async function main() {
   if (afterCancel.amount.toString() !== String(TOTAL)) {
     throw new Error(`expected full refund ${TOTAL}, got ${afterCancel.amount}`);
   }
-  console.log("\n✅ create → fund → cancel flow OK (full refund)");
+
+  if (await accountExists(panel)) {
+    throw new Error("panel account survived cancel — its rent is stranded");
+  }
+  // Rent back, minus the transaction fee the initiator just paid. Only the sign
+  // matters: the vault's and the panel's rent together are ~0.005 SOL, and a
+  // signature is 0.000005, so a net gain can only mean both closes landed.
+  const solAfter = await connection.getBalance(initiator.publicKey);
+  console.log(
+    "panel closed ✓ · initiator SOL:",
+    (solBefore / LAMPORTS_PER_SOL).toFixed(6),
+    "→",
+    (solAfter / LAMPORTS_PER_SOL).toFixed(6)
+  );
+  if (solAfter <= solBefore) {
+    throw new Error("initiator did not get the vault + panel rent back");
+  }
+
+  console.log("\n✅ create → fund → cancel flow OK (full refund, panel closed)");
 }
 
 main()

@@ -23,7 +23,7 @@ import {
  * Settlement with a panel: who gets paid, how much, and what happens to the
  * fees of a moderator that never voted.
  *
- * The rule under test (consensus-plan.md §1.1): the first majority decides, and
+ * The rule under test (see feature-doc.md, V2 / consensus): the first majority decides, and
  * EVERY moderator that voted is paid its own price — the outvoted one and the
  * one whose vote landed after the majority included. Fees of moderators that
  * never voted go back to the initiator.

@@ -118,7 +118,7 @@ Two principles behind this:
 | **AI moderator** | ⬜ |
 | **Helper AI** | ⬜ |
 | Background reconciler | ⬜ |
-| Verdict consensus (k-of-n) | 🔮 V2 |
+| Verdict consensus (panel of 1 or 3, majority) | ✅ |
 
 ---
 
@@ -291,6 +291,38 @@ supplies the fee.
 - Open: initiator-picked mods invite collusion once registration is open. Either
   the committer sees and accepts the mod, or assignment is random — not both.
 
+**Consensus — majority is built, commit-reveal is the V2 upgrade.** A contract
+carries a panel of 0, 1 or 3 moderators; the first outcome to reach a majority
+is final, and every moderator that voted is paid its own price, including one
+that was outvoted or voted after the majority formed. Waiting for the whole
+panel was considered and rejected: it yields the identical verdict but needs
+every moderator alive, so stuck-contract odds grow as `q^n` — exactly backwards
+for scale. See `consensus-plan.md` §1.1.
+
+That rule is safe only while we run every moderator. Once panels mix outside
+operators, votes land in public one at a time and a lazy mod can simply copy the
+first one — free fee, no inference. **Commit-reveal** closes that:
+
+- **Phase 1 — commit.** Each mod submits `sha256(verdict ‖ salt ‖ mod ‖ escrow)`
+  on-chain. Votes are hidden; there is nothing to copy. The moderator and escrow
+  are in the preimage so a commit cannot be replayed onto another contract.
+- **Phase 2 — reveal.** Once every commit is locked, each mod submits
+  `(verdict, salt)` **on-chain**; the program recomputes the hash and rejects
+  anything that does not match that mod's commit. The tally runs inside the last
+  deciding reveal — there is no third transaction.
+- **Not via the backend.** Reveals must go on-chain. A backend that collected
+  them would choose which votes count, which is the trusted party this protocol
+  exists to remove. It may *relay* reveals (a reveal is self-verifying), but mods
+  must be able to submit their own or the relay can censor.
+- **Needs a deadline.** A mod that commits and never reveals freezes the escrow,
+  so commit-reveal makes the verdict deadline mandatory, with a stake slash for
+  non-reveal once stake exists.
+
+Cost is one extra transaction per mod (~5,000 lamports each — nothing beside the
+inference). The reason to defer it is not cost but that it buys nothing while
+every moderator is ours: they judge independently, in separate processes, before
+submitting. It lands with the third-party moderator market, not before.
+
 Everything below is expansion, not core — do it after the above:
 
 - 🔮 Human juror escalation tier (required before subjective work)
@@ -346,7 +378,9 @@ Settled — don't relitigate without a reason.
 | No settlement keypair | Mods sign with their own wallets via `desc_moderation`. |
 | Deliverable types are bundle-checkable | `mergeable`, `deployable`, `tests_pass`, `spec_met` — not "merged"/"deployed". |
 | Initiator is an encryption recipient | A Pass delivers the verified bytes, not a side-channel promise. |
-| Single mod verdict at V1 | Consensus is V2. |
+| Panel of **1 or 3**, majority decides | Even panels are rejected on-chain: a tie has no majority and the escrow would be unsettleable. |
+| Every moderator that voted is paid its **own** price | Fees are summed, not split — each ran the whole check. The outvoted one is paid too, or moderators learn to vote with the crowd. |
+| The first majority is final | Waiting for the whole panel gives the identical verdict but needs every moderator alive, so stuck-contract odds grow as `q^n`. A late vote is still recorded and paid. |
 | No moderator selection at V1 | Random assignment is V2. Initiators never pick, ever. |
 | Deliverable types: one per contract | Multiple types is an off-chain change, deferred. |
 | AI comes last | Build every seam first, drop the model in at `runCheck`. |

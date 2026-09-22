@@ -17,7 +17,7 @@ import {
   readEscrow,
 } from "../solana/program";
 import { buildCreateEscrow } from "../solana/instructions/createEscrow";
-import { moderationCeiling, resolveModerator } from "../solana/moderation";
+import { moderationCeiling, panelCeiling, resolvePanel } from "../solana/moderation";
 import { submitSignedTx } from "../solana/rpc";
 import { generateLinkToken } from "../links/token";
 import { toContract } from "./mapper";
@@ -61,23 +61,39 @@ export async function createContract(
   // moderator has rendered a verdict. Same snapshot the program stores.
   const verificationFee = noMod ? "0" : feeMin.toString();
 
-  // The moderator's fee is its OWN on-chain price, which the program reads from
-  // the Moderator account at create_escrow. We compute the same number only to
-  // store it — the chain decides what is actually charged.
-  const quote = noMod
-    ? null
-    : await resolveModerator(req.moderator ? new PublicKey(req.moderator) : undefined);
-  if (quote && (quote.feePerKb > 0n || quote.maxBundleKb > 0)) {
+  // The panel's fee is each moderator's OWN on-chain price, which the program
+  // reads from the Moderator accounts at create_escrow. We compute the same
+  // numbers only to store them — the chain decides what is actually charged.
+  //
+  // `moderators` is the panel (1 or 3); `moderator` is the one-seat shorthand
+  // the single-moderator UI still sends.
+  const requested = req.moderators?.length
+    ? req.moderators
+    : req.moderator
+      ? [req.moderator]
+      : undefined;
+  const quotes = noMod
+    ? []
+    : await resolvePanel(requested?.map((w) => new PublicKey(w)));
+  const sizePriced = quotes.find((q) => q.feePerKb > 0n || q.maxBundleKb > 0);
+  if (sizePriced) {
     // Friendly early-fail; the program refuses this too (SizePricingNotEnabled).
     throw Object.assign(
-      new Error("this moderator uses size-based pricing, which is not enabled yet"),
+      new Error(
+        `moderator "${sizePriced.label}" uses size-based pricing, which is not enabled yet`
+      ),
       { statusCode: 400 }
     );
   }
-  const moderatorSurcharge = quote
-    ? moderationCeiling(BigInt(req.amount), quote).toString()
-    : "0";
-  const moderatorCount = quote ? 1 : 0;
+  // Summed, never divided: every moderator runs the whole check.
+  const moderatorSurcharge = panelCeiling(BigInt(req.amount), quotes).toString();
+  const moderatorCount = quotes.length;
+  const panel = quotes.map((q) => ({
+    wallet: q.authority.toBase58(),
+    recipient: q.recipient,
+    fee: moderationCeiling(BigInt(req.amount), q).toString(),
+    label: q.label,
+  }));
 
   // The fee the initiator agreed to. Without one, use the price right now — the
   // guard then only covers the gap between this request and the tx landing.
@@ -104,7 +120,7 @@ export async function createContract(
     amount: req.amount,
     deadlineUnix: Math.floor(deadline.getTime() / 1000),
     noMod,
-    moderator: quote?.pda ?? null,
+    moderators: quotes.map((q) => q.pda),
     maxModeratorFee,
   });
 
@@ -129,8 +145,11 @@ export async function createContract(
       deadline,
       linkToken: null,
       initiatorRecipient: req.initiatorRecipient ?? null,
-      moderator: quote?.authority.toBase58() ?? null,
-      moderatorRecipient: quote?.recipient ?? null,
+      panel,
+      // Legacy single-seat mirrors — only meaningful for a panel of one, which
+      // is also all `mod-watch` can claim by until the claims table lands.
+      moderator: panel.length === 1 ? panel[0].wallet : null,
+      moderatorRecipient: panel.length === 1 ? panel[0].recipient : null,
     })
     .returning();
 

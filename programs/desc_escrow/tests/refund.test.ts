@@ -9,26 +9,13 @@ import {
   tokenBalance,
   accountExists,
   usdc,
-  TOKEN_PROGRAM_ID,
+  refundEscrow,
 } from "./helpers";
 
-/** `moderator: false` models the ghost-timeout path, where no verdict was
- *  rendered and the optional moderator account is omitted. */
-async function refund(s: any, moderator = true) {
-  await program.methods
-    .refund()
-    .accountsPartial({
-      initiator: s.initiator.publicKey,
-      escrow: s.escrow,
-      config: s.world.config,
-      vault: s.vault,
-      initiatorTokenAccount: s.initiatorAta,
-      treasury: s.world.treasury,
-      moderatorTokenAccount: moderator ? s.world.moderatorAta : null,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([s.initiator])
-    .rpc();
+/** Moderator token accounts default to whoever voted — none before a verdict,
+ *  which is also the ghost-timeout shape. */
+async function refund(s: any) {
+  await refundEscrow(s);
 }
 
 async function failedEscrow(world?: any, amount?: any) {
@@ -107,7 +94,7 @@ describe("refund", () => {
     const s = await createEscrow();
     await acceptEscrow(s);
     try {
-      await refund(s, false);
+      await refund(s);
       assert.fail("expected InvalidStatus");
     } catch (e) {
       assert.include(e.toString(), "InvalidStatus");

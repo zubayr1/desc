@@ -4,12 +4,27 @@
  *
  *   MODEL_OLYMPUS_MOD_CLAUDE_OPUS=claude-opus-5
  *   MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
+ *   MODEL_SONGOKU_MOD_CLAUDE_SONNET=claude-sonnet-5
+ *   MODEL_MISCHIEF=claude-haiku-4-5
  *
  * The model is how a moderator RUNS, not what it charges, so it stays
  * off-chain. There is no silent default: a moderator with no model configured
  * refuses to start, rather than quietly judging with a model (and cost) you
  * never chose for it.
  */
+
+/**
+ * A moderator's on-chain label → its slug, the key everything off-chain uses.
+ * The same rule `moderator-register` prints, so the env line it tells you to add
+ * is the one that gets read back.
+ *
+ * `Hikaru (Mod-Claude-Haiku)` → `hikaru-mod-claude-haiku`
+ */
+export const moderatorSlug = (label: string) =>
+  label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "moderator";
 
 /** `hikaru-mod-claude-haiku` → `MODEL_HIKARU_MOD_CLAUDE_HAIKU` */
 export const modelEnvName = (slug: string) =>

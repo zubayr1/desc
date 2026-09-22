@@ -41,7 +41,7 @@ describe("moderator pricing", () => {
     const world = await setupWorld();
     const sized = await addModerator(world, { feePerKb: 1_000, maxBundleKb: 500 });
     try {
-      await createEscrow({ world, moderator: sized.pda });
+      await createEscrow({ world, moderators: [sized.pda] });
       assert.fail("expected SizePricingNotEnabled");
     } catch (e) {
       assert.include(e.toString(), "SizePricingNotEnabled");
@@ -67,7 +67,7 @@ describe("moderator pricing", () => {
     const ours = await setupWorld();
     const theirs = await setupWorld(); // a genuine Moderator, wrong platform
     try {
-      await createEscrow({ world: ours, moderator: theirs.moderatorPda });
+      await createEscrow({ world: ours, moderators: [theirs.moderatorPda] });
       assert.fail("expected ModeratorNotRecognized");
     } catch (e) {
       assert.include(e.toString(), "ModeratorNotRecognized");
@@ -78,7 +78,7 @@ describe("moderator pricing", () => {
     const world = await setupWorld();
     try {
       // The escrow Config: a real account, wrong discriminator.
-      await createEscrow({ world, moderator: world.config });
+      await createEscrow({ world, moderators: [world.config] });
       assert.fail("expected ModeratorNotRecognized");
     } catch (e) {
       assert.include(e.toString(), "ModeratorNotRecognized");

@@ -66,6 +66,13 @@ export function escrowPda(initiator: PublicKey, cid: number[]): PublicKey {
   )[0];
 }
 
+export function panelPda(escrow: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("panel"), escrow.toBuffer()],
+    program.programId
+  )[0];
+}
+
 export function vaultPda(escrow: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), escrow.toBuffer()],
@@ -351,6 +358,7 @@ export interface EscrowSetup {
   cid: number[];
   escrow: PublicKey;
   vault: PublicKey;
+  panel: PublicKey;
   amount: BN;
   fee: BN;
   surcharge: BN;
@@ -364,9 +372,13 @@ let labelCounter = 0;
 export async function createEscrow(opts?: {
   world?: World;
   amount?: BN;
-  /** Override the Moderator account passed to create_escrow. Defaults to the
-   *  world's moderator (or none for no-mod). `null` passes no account. */
-  moderator?: PublicKey | null;
+  /** Override the Moderator accounts passed to create_escrow. Defaults to the
+   *  world's single moderator (none for no-mod). `[]` passes none. */
+  moderators?: PublicKey[];
+  /** Each moderator's own price in bps, in the same order as `moderators`.
+   *  Defaults to the world's price for every seat. Needed whenever a panel
+   *  mixes prices, since the deposit is the SUM of them. */
+  moderatorBps?: number[];
   deadlineOffset?: number;
   /** Absolute deadline in CHAIN time. Use with `chainUnixTs()` for deadline
    *  tests; `deadlineOffset` is wall-relative and only safe for far futures. */
@@ -380,13 +392,19 @@ export async function createEscrow(opts?: {
   const world = opts?.world ?? (await setupWorld());
   const amount = opts?.amount ?? usdc(1000);
   const noMod = opts?.noMod ?? false;
-  const moderatorAccount =
-    opts?.moderator !== undefined ? opts.moderator : noMod ? null : world.moderatorPda;
-  // Mirrors the program: the surcharge is the moderator's own price.
+  const moderatorAccounts =
+    opts?.moderators ?? (noMod ? [] : [world.moderatorPda]);
+  // Mirrors the program: each moderator is paid its OWN price, and the escrow
+  // locks the sum of them — never one fee divided up.
+  const bpsPerSeat =
+    opts?.moderatorBps ?? moderatorAccounts.map(() => world.modBps);
   const surcharge = noMod
     ? usdc(0)
-    : amount.mul(new BN(world.modBps)).div(new BN(10_000));
-  const moderatorCount = noMod ? 0 : 1;
+    : bpsPerSeat.reduce(
+        (sum, bps) => sum.add(amount.mul(new BN(bps)).div(new BN(10_000))),
+        new BN(0)
+      );
+  const moderatorCount = moderatorAccounts.length;
   const deadlineOffset = opts?.deadlineOffset ?? 3600;
 
   const initiator = await newFundedKeypair();
@@ -420,10 +438,13 @@ export async function createEscrow(opts?: {
       escrow,
       vault,
       initiatorTokenAccount: initiatorAta,
-      moderator: moderatorAccount,
+      panel: panelPda(escrow),
       tokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
+    .remainingAccounts(
+      moderatorAccounts.map((pubkey) => ({ pubkey, isSigner: false, isWritable: false }))
+    )
     .signers([initiator])
     .rpc();
 
@@ -434,6 +455,7 @@ export async function createEscrow(opts?: {
     cid,
     escrow,
     vault,
+    panel: panelPda(escrow),
     amount,
     fee,
     surcharge,
@@ -491,9 +513,96 @@ export async function recordVerdict(
       moderator: moderatorPda(by.publicKey),
       escrowConfig: s.world.config,
       escrow: s.escrow,
+      panel: s.panel,
       descEscrowProgram: program.programId,
     })
     .signers([by])
+    .rpc();
+}
+
+/**
+ * The token account of EVERY seat on `s`'s panel, in panel order — exactly what
+ * `release` / `refund` expect as `remainingAccounts`.
+ *
+ * One per seat, not one per voter: the voter list grows as votes land, so a
+ * settlement transaction built from it could arrive with the wrong number of
+ * accounts. Seats never change. The program skips the ones that did not vote.
+ */
+export async function panelAtas(s: EscrowSetup): Promise<PublicKey[]> {
+  const panel = await program.account.panel.fetch(s.panel);
+  const atas: PublicKey[] = [];
+  for (const entry of panel.entries.slice(0, panel.count)) {
+    atas.push(
+      await fundedAta(
+        s.world.mintAuthority,
+        s.world.mint,
+        entry.moderator,
+        0,
+        s.world.mintAuthority
+      )
+    );
+  }
+  return atas;
+}
+
+const remaining = (keys: PublicKey[]) =>
+  keys.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true }));
+
+/**
+ * Release a passed escrow. Moderator token accounts default to every seat on the
+ * panel, which is what production does after reading it.
+ */
+export async function releaseEscrow(
+  s: EscrowSetup,
+  opts: {
+    signer: Keypair;
+    committerTokenAccount: PublicKey;
+    moderatorAtas?: PublicKey[];
+  }
+) {
+  const atas = opts.moderatorAtas ?? (await panelAtas(s));
+  await program.methods
+    .release()
+    .accountsPartial({
+      signer: opts.signer.publicKey,
+      escrow: s.escrow,
+      config: s.world.config,
+      panel: s.panel,
+      vault: s.vault,
+      committerTokenAccount: opts.committerTokenAccount,
+      treasury: s.world.treasury,
+      initiatorTokenAccount: s.initiatorAta,
+      initiator: s.initiator.publicKey,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .remainingAccounts(remaining(atas))
+    .signers([opts.signer])
+    .rpc();
+}
+
+/**
+ * Refund an escrow. Moderator token accounts default to every seat on the panel;
+ * the program pays only the seats that voted, which on a ghost-timeout is none.
+ */
+export async function refundEscrow(
+  s: EscrowSetup,
+  opts?: { moderatorAtas?: PublicKey[] }
+) {
+  const atas = opts?.moderatorAtas ?? (await panelAtas(s));
+  await program.methods
+    .refund()
+    .accountsPartial({
+      initiator: s.initiator.publicKey,
+      escrow: s.escrow,
+      config: s.world.config,
+      panel: s.panel,
+      vault: s.vault,
+      initiatorTokenAccount: s.initiatorAta,
+      treasury: s.world.treasury,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    })
+    .remainingAccounts(remaining(atas))
+    .signers([s.initiator])
     .rpc();
 }
 

@@ -39,6 +39,11 @@ export const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
 export const BASE = `http://localhost:${process.env.PORT ?? "3000"}`;
 export const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
 
+/** The cold authority keypair — also the dev USDC mint authority. */
+export const AUTHORITY_PATH = expand(
+  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
+);
+
 export const loadKeypair = (p: string) =>
   Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
 
@@ -105,10 +110,13 @@ export async function deliverBundle(
     }
     recipients = [contract.initiatorRecipient];
   } else {
-    // The assigned moderator only — the same rule the browser follows.
-    const mods = contract.moderatorRecipient
-      ? [contract.moderatorRecipient]
-      : (await getJson<{ recipients: string[] }>("/config/moderators")).recipients;
+    // Every moderator on this contract's panel — the same rule the browser
+    // follows, with the same fallbacks for contracts created before it existed.
+    const mods = contract.panel?.length
+      ? contract.panel.map((m) => m.recipient)
+      : contract.moderatorRecipient
+        ? [contract.moderatorRecipient]
+        : (await getJson<{ recipients: string[] }>("/config/moderators")).recipients;
     const initiatorKey = contract.initiatorRecipient;
     recipients = initiatorKey ? [...mods, initiatorKey] : mods;
     if (!recipients.length) {
@@ -135,27 +143,65 @@ export async function deliverBundle(
   return { status: out.status, deliverableHash };
 }
 
+export interface ModOffer {
+  wallet: string;
+  label: string;
+  baseBps: number;
+  /** Judges for real, then submits the OPPOSITE verdict. Localnet/devnet only. */
+  test?: boolean;
+}
+
+/** Active moderators and their own on-chain prices, cheapest first. */
+export async function listModerators(): Promise<ModOffer[]> {
+  const { moderators } = await getJson<{ moderators: ModOffer[] }>("/config/fees");
+  if (!moderators.length) {
+    throw new Error("no active moderator — run `pnpm moderator-register` first");
+  }
+  return [...moderators].sort((a, b) => a.baseBps - b.baseBps);
+}
+
 /**
  * The moderator a new e2e contract is created with: the cheapest active one,
  * exactly as the app would list it. The api refuses to guess when several are
  * active, so the scripts choose explicitly.
+ *
+ * Never a test moderator — it would fail work that should pass, and every other
+ * script asserts the honest outcome.
  */
 export async function pickModerator(): Promise<string> {
-  const { moderators } = await getJson<{ moderators: { wallet: string; baseBps: number }[] }>(
-    "/config/fees"
-  );
-  if (!moderators.length) {
-    throw new Error("no active moderator — run `pnpm moderator-register` first");
+  const honest = (await listModerators()).filter((m) => !m.test);
+  if (!honest.length) {
+    throw new Error("only test moderators are registered — register a real one");
   }
-  return [...moderators].sort((a, b) => a.baseBps - b.baseBps)[0].wallet;
+  return honest[0].wallet;
 }
 
 /**
- * The local keypair of the moderator ASSIGNED to this escrow. Only it can
- * record the verdict, so with several moderators provisioned we match the
- * escrow's bound moderator against the wallets on disk.
+ * A panel of `size` moderators, cheapest first, **including a test moderator**
+ * when one is registered and the panel has room for it.
+ *
+ * Putting the bad panellist in on purpose is the point of the multi-moderator
+ * run: a panel that only ever agrees proves nothing about the majority rule.
  */
-function assignedModKeypair(assigned: PublicKey): Keypair {
+export async function pickPanel(size: number): Promise<ModOffer[]> {
+  const all = await listModerators();
+  if (all.length < size) {
+    throw new Error(
+      `need ${size} active moderators for a panel of ${size}, found ${all.length} — see platform/README.md`
+    );
+  }
+  if (size === 1) return [all.find((m) => !m.test) ?? all[0]];
+
+  const test = all.find((m) => m.test);
+  const honest = all.filter((m) => m !== test);
+  // Majority honest, one test moderator — with 3 seats that is 2 against 1.
+  return test ? [...honest.slice(0, size - 1), test] : all.slice(0, size);
+}
+
+/**
+ * The local keypair of a moderator, matched against the wallets on disk.
+ */
+export function modKeypairFor(assigned: PublicKey): Keypair {
   const wallets = readdirSync(MOD_DIR).filter((f) => f.endsWith("-wallet.json"));
   for (const f of wallets) {
     const kp = loadKeypair(`${MOD_DIR}/${f}`);
@@ -168,23 +214,62 @@ function assignedModKeypair(assigned: PublicKey): Keypair {
   );
 }
 
+/** One seat on an escrow's panel, as the chain has it. */
+export interface Seat {
+  wallet: PublicKey;
+  /** Its own fee on this contract, base units. */
+  fee: bigint;
+  /** null until it votes. */
+  vote: "pass" | "fail" | null;
+}
+
+/**
+ * The escrow's panel, in on-chain order.
+ *
+ * The PANEL is who may vote — not the escrow's `moderator` field, which is only
+ * set on a single-moderator contract and is the default pubkey on a panel of
+ * three.
+ */
+export async function panelSeats(escrowAddress: string): Promise<Seat[]> {
+  const connection = new Connection(RPC, "confirmed");
+  const reader = new Program<DescEscrow>(
+    escrowIdl as DescEscrow,
+    new AnchorProvider(connection, new Wallet(Keypair.generate()), { commitment: "confirmed" })
+  );
+  const acc = await reader.account.escrow.fetch(new PublicKey(escrowAddress));
+  const panel = await reader.account.panel.fetch(acc.panel as PublicKey);
+  const VOTES = [null, "pass", "fail"] as const;
+  return panel.entries.slice(0, panel.count).map((e) => ({
+    wallet: e.moderator as PublicKey,
+    fee: BigInt(e.fee.toString()),
+    vote: VOTES[e.vote] ?? null,
+  }));
+}
+
 /**
  * Record a verdict the way the product does: the moderator signs
  * `submit_verdict`, which CPIs into the escrow. No admin endpoint is involved.
+ *
+ * `moderator` names which seat votes; omitted, it is the first seat that has
+ * not voted yet, which keeps every single-moderator script working unchanged.
  */
 export async function recordVerdict(
   escrowAddress: string,
-  outcome: "pass" | "fail"
+  outcome: "pass" | "fail",
+  moderator?: PublicKey
 ): Promise<void> {
   const connection = new Connection(RPC, "confirmed");
-  // Read the escrow first: it names the moderator that must sign.
   const reader = new Program<DescEscrow>(
     escrowIdl as DescEscrow,
     new AnchorProvider(connection, new Wallet(Keypair.generate()), { commitment: "confirmed" })
   );
   const escrow = new PublicKey(escrowAddress);
   const acc = await reader.account.escrow.fetch(escrow);
-  const modKeypair = assignedModKeypair(acc.moderator as PublicKey);
+
+  const seat =
+    moderator ?? (await panelSeats(escrowAddress)).find((s) => s.vote === null)?.wallet;
+  if (!seat) throw new Error("every seat on this panel has already voted");
+  const modKeypair = modKeypairFor(seat);
 
   const provider = new AnchorProvider(connection, new Wallet(modKeypair), {
     commitment: "confirmed",
@@ -209,6 +294,7 @@ export async function recordVerdict(
       moderator: moderatorPda(modKeypair.publicKey),
       escrowConfig: acc.config as PublicKey,
       escrow,
+      panel: acc.panel as PublicKey,
       descEscrowProgram: escrowProgram.programId,
     })
     .rpc();

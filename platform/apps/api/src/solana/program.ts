@@ -34,6 +34,13 @@ export const escrowPda = (initiator: PublicKey, contractId: Buffer) =>
     programId
   )[0];
 
+/** The escrow's `Panel` — its moderators and their votes. */
+export const panelPda = (escrow: PublicKey) =>
+  PublicKey.findProgramAddressSync(
+    [Buffer.from("panel"), escrow.toBuffer()],
+    programId
+  )[0];
+
 export const vaultPda = (escrow: PublicKey) =>
   PublicKey.findProgramAddressSync(
     [Buffer.from("vault"), escrow.toBuffer()],
@@ -92,6 +99,78 @@ function mapEscrowAccount(acc: EscrowAccount): OnChainEscrow {
     noMod: acc.noMod,
     deadline: acc.deadline.toNumber(),
   };
+}
+
+export interface PanelSeat {
+  /** The moderator's wallet — owner of the token account its fee must land in. */
+  moderator: PublicKey;
+  /** Its own price for this contract, snapshotted at creation. */
+  fee: string;
+  /** How it voted, or null if it has not. Only voters are paid on settle. */
+  vote: Outcome | null;
+}
+
+/**
+ * Read an escrow's `Panel` — its seats in on-chain order, with who has voted.
+ *
+ * The panel, not the escrow, is the source of truth for who judged: the
+ * escrow's `moderator` field is only set on a single-moderator contract, and is
+ * `Pubkey::default()` on a panel of three.
+ */
+export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
+  const acc = await program.account.panel.fetch(panelPda(escrow));
+  // Mirrors the program's VOTE_NONE / VOTE_PASS / VOTE_FAIL.
+  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
+  return acc.entries.slice(0, acc.count).map((e) => ({
+    moderator: e.moderator,
+    fee: e.fee.toString(),
+    vote: VOTES[e.vote] ?? null,
+  }));
+}
+
+/**
+ * Every moderator seated on the panel, in order — the accounts `release` and
+ * `refund` expect as remaining accounts, one per seat.
+ *
+ * Deliberately not "the ones that voted": the voter list grows as votes land, so
+ * a settlement transaction built while the last moderator was still judging
+ * would arrive with the wrong number of accounts and fail. Seats never change
+ * after creation. The program skips seats that did not vote.
+ *
+ * Empty only on a no-mod escrow.
+ */
+export async function readPanelWallets(escrow: PublicKey): Promise<PublicKey[]> {
+  return (await readPanel(escrow)).map((s) => s.moderator);
+}
+
+/**
+ * Batch-read many panels in one round-trip, keyed by ESCROW address. A missing
+ * entry means no panel on chain — either it was closed on settle, or the escrow
+ * predates panels.
+ */
+export async function readPanels(
+  escrows: PublicKey[]
+): Promise<Map<string, PanelSeat[]>> {
+  const out = new Map<string, PanelSeat[]>();
+  if (!escrows.length) return out;
+  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
+  const CHUNK = 100;
+  for (let i = 0; i < escrows.length; i += CHUNK) {
+    const slice = escrows.slice(i, i + CHUNK);
+    const accs = await program.account.panel.fetchMultiple(slice.map(panelPda));
+    accs.forEach((acc, j) => {
+      if (!acc) return;
+      out.set(
+        slice[j].toBase58(),
+        acc.entries.slice(0, acc.count).map((e) => ({
+          moderator: e.moderator,
+          fee: e.fee.toString(),
+          vote: VOTES[e.vote] ?? null,
+        }))
+      );
+    });
+  }
+  return out;
 }
 
 /** Read a single escrow account and map it into domain fields. */

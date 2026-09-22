@@ -9,10 +9,11 @@
  *   DESC_JUDGE=claude pnpm mod-watch        # the AI judges, unattended
  *   DESC_JUDGE=claude pnpm mod-watch --once # single sweep, then exit
  *
- * Scope, deliberately: ONE moderator (ours), reading our own database. The two
- * things that make it a real worker — serving any moderator, and only the
- * contracts that moderator was assigned — live behind `WorkSource`, so V2 swaps
- * the source and leaves this loop alone.
+ * Scope, deliberately: one of OUR moderators, reading our own database. It sees
+ * only the contracts whose panel it sits on and has not yet voted, so three
+ * watchers can run side by side on one panel without colliding. Serving
+ * outside moderators over HTTP lives behind `WorkSource`, so V2 swaps the
+ * source and leaves this loop alone.
  *
  * Judging is delegated to `mod-run` as a child process rather than imported.
  * Discovery and judging stay separate concerns, a crash in one contract cannot
@@ -25,6 +26,7 @@ import { join } from "node:path";
 import { Keypair } from "@solana/web3.js";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
 import { moderatorModel } from "../src/moderation/moderatorModel";
+import { isMischief } from "../src/moderation/judge/mischief";
 import type { WorkItem } from "../src/moderation/watch/source";
 
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
@@ -83,6 +85,14 @@ async function main() {
   console.log(`  source: ${source.name}`);
   console.log(`  judge:  ${judgeName}`);
   console.log(once ? "  mode:   single sweep" : `  mode:   polling every ${INTERVAL_MS}ms`);
+  if (isMischief(slug)) {
+    // Loud on purpose: a watcher that inverts verdicts must never be mistaken
+    // for a real one in a terminal someone is half-watching.
+    console.log(
+      `\n!! ${slug} is a TEST moderator (DESC_MISCHIEF_MODS) — it judges for real\n` +
+        "   and then submits the OPPOSITE verdict. Local and devnet only.\n"
+    );
+  }
   if (judgeName === "manual") {
     console.log("\n! DESC_JUDGE is not `claude` — mod-run will ask for a verdict it was not given\n" +
                 "  and exit. Set DESC_JUDGE=claude to run unattended.");
@@ -104,14 +114,18 @@ async function main() {
       console.log(`\n--- ${item.title ?? "(untitled)"} · ${item.contractId}${nth} ---`);
       const ok = await judge(item, slug);
       if (ok) {
-        await source.release(item.contractId);
+        await source.release(item.contractId, moderator);
       } else {
         // Marked failed rather than left claimed: these are near-always
         // permanent for that contract (no criteria, bundle too large, a
         // deliverable this mod cannot decrypt). Retrying every tick would
         // spend real money on the same doomed check forever. The reason is
         // stored, so it can be shown or cleared by hand.
-        await source.fail(item.contractId, "mod-run exited without submitting a verdict");
+        await source.fail(
+          item.contractId,
+          moderator,
+          "mod-run exited without submitting a verdict"
+        );
         console.error("  ! no verdict submitted — marked failed, not retrying");
       }
     }

@@ -50,8 +50,10 @@ pub mod desc_escrow {
         )
     }
 
-    pub fn create_escrow(
-        ctx: Context<CreateEscrow>,
+    pub fn create_escrow<'info>(
+        // `'info` is spelled out because the chosen moderators arrive as
+        // `remaining_accounts`, which must share the accounts' lifetime.
+        ctx: Context<'_, '_, '_, 'info, CreateEscrow<'info>>,
         contract_id: [u8; 16],
         amount: u64,
         deadline: i64,
@@ -64,6 +66,8 @@ pub mod desc_escrow {
             deadline,
             no_mod,
             max_moderator_fee,
+            // The chosen moderators: none for no-mod, otherwise 1 or 3.
+            ctx.remaining_accounts,
             &ctx.bumps,
         )
     }
@@ -90,12 +94,19 @@ pub mod desc_escrow {
             .record_verdict(outcome, verdict_hash, moderator)
     }
 
-    pub fn release(ctx: Context<Release>) -> Result<()> {
-        ctx.accounts.release()
+    pub fn release<'info>(
+        // `'info` is spelled out because the voting moderators' token accounts
+        // arrive as `remaining_accounts`, which must share the accounts' lifetime.
+        ctx: Context<'_, '_, '_, 'info, Release<'info>>,
+    ) -> Result<()> {
+        // One token account per moderator that voted, in panel order.
+        ctx.accounts.release(ctx.remaining_accounts)
     }
 
-    pub fn refund(ctx: Context<Refund>) -> Result<()> {
-        ctx.accounts.refund()
+    pub fn refund<'info>(ctx: Context<'_, '_, '_, 'info, Refund<'info>>) -> Result<()> {
+        // One token account per moderator that voted, in panel order. Empty on a
+        // ghost-timeout, where nobody judged.
+        ctx.accounts.refund(ctx.remaining_accounts)
     }
 
     pub fn mutual_cancel(ctx: Context<MutualCancel>) -> Result<()> {

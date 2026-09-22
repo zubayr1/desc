@@ -8,7 +8,7 @@ import {
   chainUnixTs,
   waitForChainTime,
   usdc,
-  TOKEN_PROGRAM_ID,
+  refundEscrow,
 } from "./helpers";
 
 /**
@@ -20,20 +20,8 @@ import {
  * times out; run first on a fresh validator (see ../run-tests.sh) it passes.
  */
 async function refund(s: any) {
-  await program.methods
-    .refund()
-    .accountsPartial({
-      initiator: s.initiator.publicKey,
-      escrow: s.escrow,
-      config: s.world.config,
-      vault: s.vault,
-      initiatorTokenAccount: s.initiatorAta,
-      treasury: s.world.treasury,
-      moderatorTokenAccount: null, // no verdict was rendered, so no mod is paid
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([s.initiator])
-    .rpc();
+  // No verdict was rendered, so no moderator voted and none is paid.
+  await refundEscrow(s);
 }
 
 describe("ghost timeout", () => {

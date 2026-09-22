@@ -2,13 +2,17 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{transfer, Mint, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Config, Escrow, EscrowStatus, ModeratorPrice};
+use crate::states::{Config, Escrow, EscrowStatus, ModeratorPrice, Panel, PanelEntry, VOTE_NONE};
 
 /// Initiator opens an escrow and deposits the full amount (payout + protocol
 /// fee + moderator surcharge) into a program-owned vault. Status -> Funded.
 ///
 /// The protocol fee is snapshotted from the live `Config` so it's trustless and
 /// can't drift if the config fee changes mid-deal.
+/// Every sizeable account here is BOXED (heap, not stack). Unboxing any of them
+/// overflows the BPF 4KB stack frame in `try_accounts` — which does not fail
+/// loudly, it corrupts the accounts it parsed and surfaces as a nonsense error
+/// from whatever reads them next.
 #[derive(Accounts)]
 #[instruction(contract_id: [u8; 16])]
 pub struct CreateEscrow<'info> {
@@ -19,9 +23,9 @@ pub struct CreateEscrow<'info> {
         seeds = [Config::SEED_PREFIX, config.authority.as_ref()],
         bump = config.bump,
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 
-    pub mint: Account<'info, Mint>,
+    pub mint: Box<Account<'info, Mint>>,
 
     #[account(
         init,
@@ -30,7 +34,7 @@ pub struct CreateEscrow<'info> {
         seeds = [Escrow::SEED_PREFIX, initiator.key().as_ref(), contract_id.as_ref()],
         bump,
     )]
-    pub escrow: Account<'info, Escrow>,
+    pub escrow: Box<Account<'info, Escrow>>,
 
     /// Program-owned vault (PDA token account) that holds the deposit.
     #[account(
@@ -41,7 +45,7 @@ pub struct CreateEscrow<'info> {
         seeds = [b"vault", escrow.key().as_ref()],
         bump,
     )]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: Box<Account<'info, TokenAccount>>,
 
     /// Initiator's USDC account funding the deposit.
     #[account(
@@ -49,13 +53,18 @@ pub struct CreateEscrow<'info> {
         token::mint = mint,
         token::authority = initiator,
     )]
-    pub initiator_token_account: Account<'info, TokenAccount>,
+    pub initiator_token_account: Box<Account<'info, TokenAccount>>,
 
-    /// The moderator the initiator picked (a `desc_moderation::Moderator`).
-    /// Required when moderated, omitted for no-mod. Read raw and verified in
-    /// `ModeratorPrice::load` — escrow cannot import that account type.
-    /// CHECK: owner, discriminator and settlement-authority binding are checked.
-    pub moderator: Option<UncheckedAccount<'info>>,
+    /// The moderators judging this escrow and (later) their votes. Created for
+    /// every escrow, including no-mod ones, so settlement has one shape.
+    #[account(
+        init,
+        payer = initiator,
+        space = 8 + Panel::INIT_SPACE,
+        seeds = [Panel::SEED_PREFIX, escrow.key().as_ref()],
+        bump,
+    )]
+    pub panel: Box<Account<'info, Panel>>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -69,6 +78,10 @@ impl<'info> CreateEscrow<'info> {
         deadline: i64,
         no_mod: bool,
         max_moderator_fee: u64,
+        // The `desc_moderation::Moderator` accounts the initiator picked: none
+        // for no-mod, otherwise 1 or 3. Read raw and verified in
+        // `ModeratorPrice::load` — escrow cannot import that account type.
+        moderators: &[AccountInfo<'info>],
         bumps: &CreateEscrowBumps,
     ) -> Result<()> {
         self.config.check_version()?;
@@ -81,17 +94,24 @@ impl<'info> CreateEscrow<'info> {
             EscrowError::AmountBelowMinimum
         );
 
-        // The moderator's fee comes from the MODERATOR's own quoted price, never
-        // from the caller. It used to be an instruction argument, so a caller
-        // could pass 0 and the moderator would judge for free.
-        let (moderator, moderator_count, base_bps, fee_per_kb, max_bundle_kb) = if no_mod {
-            require!(self.moderator.is_none(), EscrowError::ModeratorConfigMismatch);
-            (Pubkey::default(), 0u8, 0u16, 0u64, 0u32)
-        } else {
-            let account = self
-                .moderator
-                .as_ref()
-                .ok_or(EscrowError::ModeratorConfigMismatch)?;
+        // The moderators' fees come from the MODERATORS' own quoted prices, never
+        // from the caller. The fee used to be an instruction argument, so a
+        // caller could pass 0 and have them judge for free.
+        //
+        // Panel sizes are 0, 1 or 3 — never even, because a tie has no majority
+        // and the escrow would be left unsettleable.
+        let count = moderators.len();
+        require!(
+            Panel::is_valid_size(count as u8) && (count == 0) == no_mod,
+            EscrowError::InvalidPanelSize
+        );
+
+        let mut entries = [PanelEntry::default(); Panel::MAX_SEATS];
+        let mut surcharge: u64 = 0;
+        // The escrow keeps the price snapshot only for a single-moderator deal;
+        // with a panel the per-seat fees on the panel are the record.
+        let mut snapshot = (0u16, 0u64, 0u32);
+        for (i, account) in moderators.iter().enumerate() {
             let price = ModeratorPrice::load(account, &self.config.settlement_authority)?;
             // V1: settlement has no way to charge by delivered size or refund an
             // unused ceiling yet, so a size-priced moderator is refused rather
@@ -100,10 +120,49 @@ impl<'info> CreateEscrow<'info> {
                 price.fee_per_kb == 0 && price.max_bundle_kb == 0,
                 EscrowError::SizePricingNotEnabled
             );
-            (price.authority, 1u8, price.base_bps, price.fee_per_kb, price.max_bundle_kb)
-        };
-        let moderator_surcharge =
-            Escrow::moderation_ceiling(amount, base_bps, fee_per_kb, max_bundle_kb)?;
+            // One seat each: the same moderator twice would be two votes from
+            // one judge, and a "majority" of one.
+            require!(
+                !entries[..i].iter().any(|e| e.moderator == price.authority),
+                EscrowError::DuplicateModerator
+            );
+            let fee = Escrow::moderation_ceiling(
+                amount,
+                price.base_bps,
+                price.fee_per_kb,
+                price.max_bundle_kb,
+            )?;
+            surcharge = surcharge
+                .checked_add(fee)
+                .ok_or(EscrowError::MathOverflow)?;
+            if count == 1 {
+                snapshot = (price.base_bps, price.fee_per_kb, price.max_bundle_kb);
+            }
+            entries[i] = PanelEntry {
+                moderator: price.authority,
+                fee,
+                vote: VOTE_NONE,
+                verdict_hash: [0; 32],
+            };
+        }
+
+        self.panel.set_inner(Panel {
+            version: Panel::VERSION,
+            escrow: self.escrow.key(),
+            count: count as u8,
+            // 1 of 1, or 2 of 3.
+            quorum: (count as u8) / 2 + 1,
+            entries,
+            bump: bumps.panel,
+            reserved: [0; 64],
+        });
+
+        // Kept on the escrow for the single-moderator fast path; zero when the
+        // panel has none or several — the panel is the source of truth.
+        let moderator = if count == 1 { entries[0].moderator } else { Pubkey::default() };
+        let moderator_count = count as u8;
+
+        let moderator_surcharge = surcharge;
 
         // Slippage guard. The initiator agreed to a price when it was quoted; the
         // moderator can change its price before this transaction lands. Refuse
@@ -181,10 +240,11 @@ impl<'info> CreateEscrow<'info> {
             moderator,
             verification_fee,
             no_mod,
-            base_bps,
-            fee_per_kb,
-            max_bundle_kb,
-            reserved: [0; 73],
+            base_bps: snapshot.0,
+            fee_per_kb: snapshot.1,
+            max_bundle_kb: snapshot.2,
+            panel: self.panel.key(),
+            reserved: [0; 41],
         });
 
         Ok(())

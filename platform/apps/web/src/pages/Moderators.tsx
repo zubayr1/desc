@@ -50,9 +50,20 @@ export function Moderators() {
                     {m.label.replace(/^mod\s*/i, "").slice(0, 1).toUpperCase() || "M"}
                   </span>
                   <div className="min-w-0">
-                    <div className="truncate font-semibold">{m.label}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-semibold">{m.label}</span>
+                      {m.test && (
+                        <span className="shrink-0 rounded-md bg-fail/15 px-1.5 py-0.5 text-[0.62rem] font-semibold uppercase tracking-wide text-fail">
+                          test
+                        </span>
+                      )}
+                    </div>
                     <div className="font-mono text-xs text-muted">
-                      {Number(m.feePerKb) > 0 ? "size-priced" : "flat rate"}
+                      {m.test
+                        ? "returns the OPPOSITE verdict"
+                        : Number(m.feePerKb) > 0
+                          ? "size-priced"
+                          : "flat rate"}
                     </div>
                   </div>
                 </div>
@@ -73,6 +84,16 @@ export function Moderators() {
           </div>
         </Reveal>
       </section>
+
+      {mods.some((m) => m.test) && (
+        <div className="glass border-fail/25 p-4 text-sm">
+          <span className="font-semibold text-fail">Test moderator on this network.</span>{" "}
+          One of the moderators above judges the work for real and then submits the{" "}
+          <em>opposite</em> verdict. It exists to prove a three-moderator panel still
+          settles correctly with a bad panellist on it. It runs on localnet and devnet
+          only — the judge refuses to start against mainnet at all.
+        </div>
+      )}
 
       <section className="grid gap-4 md:grid-cols-3">
         {[

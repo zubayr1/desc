@@ -7,12 +7,18 @@ import {
   timestamp,
   index,
   boolean,
+  primaryKey,
 } from "drizzle-orm/pg-core";
-import type { AcceptanceCriterion, ContractStatus, Outcome } from "@repo/shared";
+import type {
+  AcceptanceCriterion,
+  ContractModerator,
+  ContractStatus,
+  Outcome,
+} from "@repo/shared";
 
 /**
- * Off-chain moderation progress — see the `moderationState` column for the
- * state machine. Not an on-chain concept.
+ * Off-chain moderation progress for ONE moderator on ONE contract — see
+ * `moderationClaims`. Not an on-chain concept.
  */
 export type ModerationState = "in_progress" | "done" | "failed";
 
@@ -67,11 +73,16 @@ export const contracts = pgTable(
     // exact verified bytes. Null if the initiator didn't enrol a key.
     initiatorRecipient: text("initiator_recipient"),
 
-    // The moderator assigned at creation — the escrow binds the same wallet
-    // on-chain, and only it may record the verdict. Its age recipient is kept
-    // alongside so the committer seals the delivery to THIS moderator only:
-    // with several moderators registered, sealing to all of them would let a
-    // moderator read work it was never assigned. Null for no-mod contracts.
+    // The panel assigned at creation: every moderator judging this contract,
+    // with its age recipient and its own snapshotted price, in the same order as
+    // the on-chain `Panel`. The committer seals the delivery to exactly these
+    // recipients — sealing to every REGISTERED moderator would let one read work
+    // it was never given. Empty for no-mod contracts.
+    panel: jsonb("panel").$type<ContractModerator[]>().notNull().default([]),
+
+    // Legacy mirrors of a ONE-seat panel, kept only while `mod-watch` still
+    // claims work by this column (replaced by the per-moderator claims table).
+    // Null on a no-mod contract AND on a panel of three — read `panel` instead.
     moderator: text("moderator"),
     moderatorRecipient: text("moderator_recipient"),
 
@@ -87,25 +98,9 @@ export const contracts = pgTable(
     // Verdict note (manual/admin context in the MVP)
     verdictNote: text("verdict_note"),
 
-    // --- Moderation progress (OFF-CHAIN worker bookkeeping) -----------------
-    // Deliberately NOT part of `status`: that column is a cache of on-chain
-    // state and the reconciler rewrites it every sweep, so anything invented
-    // there is erased. The chain has no concept of "being moderated" — that
-    // only exists between a deliverable landing and `submit_verdict`.
-    //
-    // Only meaningful while status = "submitted"; null everywhere else.
-    //   null         — delivered, no moderator has picked it up
-    //   in_progress  — a moderator claimed it (see moderationStartedAt for the lease)
-    //   done         — a verdict was submitted; terminal, never re-judged
-    //   failed       — cannot be judged; never retried, needs a human
-    moderationState: text("moderation_state").$type<ModerationState>(),
-    /** Bumped on each claim, so a contract that keeps failing is visible. */
-    moderationAttempts: integer("moderation_attempts").notNull().default(0),
-    /** Why it could not be judged. Safe to show a user. */
-    moderationError: text("moderation_error"),
-    /** When the claim was taken. A worker that dies leaves this stale, and the
-     *  claim is reclaimable once it ages past the lease. */
-    moderationStartedAt: timestamp("moderation_started_at", { withTimezone: true }),
+    // Moderation progress used to live here as four columns. It moved to
+    // `moderationClaims`: one column per contract cannot say "Hikaru is judging,
+    // SonGoku has already voted", which is the normal state of a panel of three.
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -122,3 +117,49 @@ export const contracts = pgTable(
 
 export type ContractRow = typeof contracts.$inferSelect;
 export type NewContractRow = typeof contracts.$inferInsert;
+
+/**
+ * One moderator's progress on one contract — the panel's work queue.
+ *
+ * This replaces the four `moderation_*` columns that used to sit on `contracts`.
+ * A single column per contract can hold exactly one state, which was fine while
+ * exactly one moderator judged each deal; with a panel of three the normal state
+ * is "Hikaru is judging, SonGoku has voted, Olympus has not started", and one
+ * column cannot say that. Worse, three watchers would fight over the same value
+ * and each believe it had claimed the work.
+ *
+ * The primary key is (contract, moderator), so a claim is per SEAT: each
+ * moderator claims, judges, and finishes its own row without touching anyone
+ * else's.
+ *
+ * States, all meaningful only while the contract is `submitted`:
+ *   (no row)     — this moderator has not picked the contract up
+ *   in_progress  — claimed (see `startedAt` for the lease)
+ *   done         — this moderator's verdict is in; terminal, never re-judged
+ *   failed       — this moderator cannot judge it; never retried, needs a human
+ */
+export const moderationClaims = pgTable(
+  "moderation_claims",
+  {
+    contractId: uuid("contract_id")
+      .notNull()
+      .references(() => contracts.id, { onDelete: "cascade" }),
+    /** The moderator's wallet — its seat on the contract's panel. */
+    moderator: text("moderator").notNull(),
+    state: text("state").$type<ModerationState>().notNull(),
+    /** Bumped on each claim, so a seat that keeps failing is visible. */
+    attempts: integer("attempts").notNull().default(0),
+    /** Why this moderator could not judge it. Safe to show a user. */
+    error: text("error"),
+    /** When the claim was taken. A worker that dies leaves this stale, and the
+     *  claim is reclaimable once it ages past the lease. */
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.contractId, t.moderator] }),
+    index("moderation_claims_moderator_idx").on(t.moderator, t.state),
+  ]
+);
+
+export type ModerationClaimRow = typeof moderationClaims.$inferSelect;

@@ -112,6 +112,40 @@ export type DescEscrow = {
           }
         },
         {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — created for every escrow, so a cancelled one has to",
+            "close it or the initiator's rent is orphaned on chain. Rent goes back to",
+            "the initiator, who put it up at creation.",
+            "",
+            "Boxed along with the rest: adding an account to an instruction that",
+            "already carries the escrow is how this program hit the BPF 4KB stack",
+            "limit before (see `create_escrow`)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
           "name": "vault",
           "writable": true,
           "relations": [
@@ -236,13 +270,30 @@ export type DescEscrow = {
           "writable": true
         },
         {
-          "name": "moderator",
+          "name": "panel",
           "docs": [
-            "The moderator the initiator picked (a `desc_moderation::Moderator`).",
-            "Required when moderated, omitted for no-mod. Read raw and verified in",
-            "`ModeratorPrice::load` — escrow cannot import that account type."
+            "The moderators judging this escrow and (later) their votes. Created for",
+            "every escrow, including no-mod ones, so settlement has one shape."
           ],
-          "optional": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          }
         },
         {
           "name": "tokenProgram",
@@ -478,6 +529,35 @@ export type DescEscrow = {
               }
             ]
           }
+        },
+        {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — who may vote, and the votes so far. Boxed: it is",
+            "large enough to overflow the 4KB stack frame alongside the escrow."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
         }
       ],
       "args": [
@@ -564,6 +644,37 @@ export type DescEscrow = {
           ]
         },
         {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — who judged it, how they voted, and what each is",
+            "owed. Closed here, rent back to the initiator who put it up at creation.",
+            "Boxed, like every other sizeable account here — see the stack warning in",
+            "`create_escrow`."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
           "name": "vault",
           "writable": true,
           "relations": [
@@ -588,15 +699,6 @@ export type DescEscrow = {
           "relations": [
             "config"
           ]
-        },
-        {
-          "name": "moderatorTokenAccount",
-          "docs": [
-            "On a Fail verdict, the judging moderator's USDC account — receives the",
-            "surcharge. Omit on a ghost-timeout (no verdict, no moderator paid)."
-          ],
-          "writable": true,
-          "optional": true
         },
         {
           "name": "tokenProgram",
@@ -658,6 +760,40 @@ export type DescEscrow = {
           ]
         },
         {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel — who judged it, how they voted, and what each is",
+            "owed. Closed here, rent back to the INITIATOR: they put it up at",
+            "creation, and `release` may be signed by either party, so the signer must",
+            "never be the destination.",
+            "",
+            "Boxed, like every other sizeable account here — see the stack warning in",
+            "`create_escrow`."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
           "name": "vault",
           "writable": true,
           "relations": [
@@ -682,19 +818,18 @@ export type DescEscrow = {
           ]
         },
         {
-          "name": "moderatorTokenAccount",
+          "name": "initiatorTokenAccount",
           "docs": [
-            "The judging moderator's USDC account — receives the surcharge (its reward).",
-            "Bound to the moderator that `record_verdict` stored. Omit on a no-mod",
-            "escrow, where nobody judged and there is no surcharge to pay."
+            "Initiator's USDC account — receives the fees of any moderator that did",
+            "not vote. Required even when every moderator voted (nothing is sent then)",
+            "so the vault can always be drained to zero and closed."
           ],
-          "writable": true,
-          "optional": true
+          "writable": true
         },
         {
           "name": "initiator",
           "docs": [
-            "Initiator — receives the vault's rent on close."
+            "Initiator — receives the vault's and the panel's rent on close."
           ],
           "writable": true,
           "relations": [
@@ -877,6 +1012,19 @@ export type DescEscrow = {
         218,
         155
       ]
+    },
+    {
+      "name": "panel",
+      "discriminator": [
+        223,
+        223,
+        14,
+        220,
+        233,
+        57,
+        156,
+        38
+      ]
     }
   ],
   "errors": [
@@ -974,6 +1122,26 @@ export type DescEscrow = {
       "code": 6018,
       "name": "moderatorFeeAboveMax",
       "msg": "Moderator's price is above the maximum the initiator agreed to"
+    },
+    {
+      "code": 6019,
+      "name": "invalidPanelSize",
+      "msg": "A panel must have 0, 1 or 3 moderators — an even panel cannot reach a majority"
+    },
+    {
+      "code": 6020,
+      "name": "duplicateModerator",
+      "msg": "The same moderator was listed twice on one panel"
+    },
+    {
+      "code": 6021,
+      "name": "alreadyVoted",
+      "msg": "This moderator has already voted on this escrow"
+    },
+    {
+      "code": 6022,
+      "name": "verdictAlreadyFinal",
+      "msg": "The verdict is already final — a majority was reached without this vote"
     }
   ],
   "types": [
@@ -1343,16 +1511,25 @@ export type DescEscrow = {
             "type": "u32"
           },
           {
+            "name": "panel",
+            "docs": [
+              "This escrow's `Panel` — the moderators judging it and their votes. One",
+              "exists for every escrow, including no-mod ones (`count == 0`), so there",
+              "is a single shape to settle. Carved from `reserved`."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "reserved",
             "docs": [
-              "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
-              "`dispute_account`) can be added without a risky `realloc`. Carve new",
-              "fields from here; keep this the LAST field."
+              "Forward-compat padding so V2 fields (e.g. `parent`, `dispute_account`)",
+              "can be added without a risky `realloc`. Carve new fields from here;",
+              "keep this the LAST field."
             ],
             "type": {
               "array": [
                 "u8",
-                73
+                41
               ]
             }
           }
@@ -1415,6 +1592,136 @@ export type DescEscrow = {
           },
           {
             "name": "fail"
+          }
+        ]
+      }
+    },
+    {
+      "name": "panel",
+      "docs": [
+        "The moderators judging one escrow, and their votes (PDA, seeds =",
+        "[b\"panel\", escrow]).",
+        "",
+        "A separate account because the escrow cannot hold three moderators plus",
+        "their votes — three pubkeys alone outgrow its remaining `reserved` space.",
+        "",
+        "One panel exists per escrow, including a no-mod escrow (`count == 0`), so",
+        "every settlement path has exactly one shape to handle. Its rent is paid by",
+        "the initiator at creation and returns to the initiator when the panel is",
+        "closed on settle.",
+        "",
+        "Backward-compat discipline: `version` first, `reserved` LAST."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "docs": [
+              "Schema version of this account. Set to `VERSION` at init."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "escrow",
+            "docs": [
+              "The escrow this panel judges. Bound at creation."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "count",
+            "docs": [
+              "How many seats are filled: 0 (no-mod), 1 or 3. Never even above zero —",
+              "a tie has no majority."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "quorum",
+            "docs": [
+              "Votes needed for an outcome: `count / 2 + 1`. Snapshotted so a later",
+              "rule change cannot move the goalposts on a live deal."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "entries",
+            "docs": [
+              "Seats. Only the first `count` are used."
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "panelEntry"
+                  }
+                },
+                3
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Forward-compat padding. Carve new fields from here; keep it LAST."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "panelEntry",
+      "docs": [
+        "A moderator's seat on an escrow's panel: who they are, what they are owed,",
+        "and how they voted."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "moderator",
+            "docs": [
+              "The moderator's wallet — the key that signs its verdict."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "fee",
+            "docs": [
+              "Its own price for THIS contract, snapshotted at creation. Paid on settle",
+              "only if it voted; otherwise it returns to the initiator."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "vote",
+            "docs": [
+              "`VOTE_NONE` until it votes, then `VOTE_PASS` / `VOTE_FAIL`."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "verdictHash",
+            "docs": [
+              "sha256 of the verdict this moderator signed. Zero until it votes."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }

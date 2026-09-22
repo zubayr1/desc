@@ -181,11 +181,14 @@ export interface Contract {
    *  committer seals the deliverable to this too, so a Pass delivers the exact
    *  verified bytes. Null if the initiator didn't enrol an encryption key. */
   initiatorRecipient: string | null;
-  /** Wallet of the moderator assigned at creation — the only one that may judge.
-   *  Null for a no-mod contract. */
+  /** The moderators judging this contract — its panel. 0 seats for a no-mod
+   *  contract, otherwise 1 or 3. Mirrors the on-chain `Panel`, in the same
+   *  order, and it is what the committer seals the delivery to. */
+  panel: ContractModerator[];
+  /** Legacy mirror of a ONE-seat panel: `panel[0].wallet`, or null. Kept while
+   *  `mod-watch` still claims by this column; use `panel`. */
   moderator: Address | null;
-  /** That moderator's age recipient: the committer seals the delivery to it
-   *  (and the initiator) — never to every registered moderator. */
+  /** Legacy mirror of `panel[0].recipient`. Use `panel`. */
   moderatorRecipient: string | null;
 
   // Verification (manual in MVP; null until a verdict is recorded)
@@ -213,8 +216,13 @@ export interface CreateContractRequest {
   amount: TokenAmount;
   /** Opt out of moderation. No moderator, no surcharge, no verification fee. */
   noMod?: boolean;
-  /** Wallet of the chosen moderator. Its price is read on-chain — the client
-   *  never sends a fee. Optional while V1 has a single active moderator. */
+  /** Wallets of the chosen moderators — the contract's panel. **1 or 3**; an
+   *  even panel has no majority and is rejected. Their prices are read
+   *  on-chain, so the client never sends a fee. Omit to let V1 fall back to the
+   *  single active moderator. */
+  moderators?: Address[];
+  /** One-moderator shorthand for `moderators: [wallet]`. Ignored when
+   *  `moderators` is given. */
   moderator?: Address;
   /** The most the initiator agrees to pay the moderator — the fee they were
    *  shown, in base units. A LIMIT, not the fee: if the moderator's price rose
@@ -225,6 +233,32 @@ export interface CreateContractRequest {
   /** The initiator's age recipient, derived client-side from a wallet signature.
    *  Optional — if absent, the deliverable is sealed to the moderators only. */
   initiatorRecipient?: string;
+}
+
+/** One seat on a contract's panel — a moderator judging it, and its terms as
+ *  snapshotted when the contract was created. */
+export interface ContractModerator {
+  /** The moderator's wallet — the same key seated on the on-chain panel, and
+   *  the only one that may cast that seat's vote. */
+  wallet: Address;
+  /** Its public age recipient. The committer seals the delivery to every seat,
+   *  so each moderator can open the work it was actually given — and nobody
+   *  else's. */
+  recipient: string;
+  /** What this moderator earns on this contract, in base units. Its own price,
+   *  not a share: every seat runs the whole check, so they are summed, never
+   *  divided. */
+  fee: TokenAmount;
+  label: string;
+  /** How this moderator voted.
+   *
+   *  Read live from the on-chain panel and cached, because the panel account is
+   *  closed on settle and its votes go with it. A CACHE, not evidence — the
+   *  proof of a vote is that moderator's own signed transaction in the ledger.
+   *
+   *  `undefined` = never read yet · `null` = seated, has not voted ·
+   *  `"pass"`/`"fail"` = its vote. */
+  vote?: Outcome | null;
 }
 
 /** Live fee parameters (`GET /config/fees`). The first three come from the
@@ -242,7 +276,7 @@ export interface FeeConfig {
 
 /** A moderator an initiator can pick, with the price it charges. */
 export interface ModeratorOffer {
-  /** The moderator's wallet — send as `CreateContractRequest.moderator`. */
+  /** The moderator's wallet — send in `CreateContractRequest.moderators`. */
   wallet: Address;
   label: string;
   /** Share of the contract amount, in basis points (100 = 1%). */
@@ -251,6 +285,10 @@ export interface ModeratorOffer {
   feePerKb: TokenAmount;
   /** Largest deliverable accepted, KB. 0 = no limit. */
   maxBundleKb: number;
+  /** A TEST moderator: it judges for real and then returns the OPPOSITE
+   *  verdict, to prove a panel outvotes a bad panellist. Only ever true on
+   *  localnet and devnet — the judge refuses to run against mainnet. */
+  test?: boolean;
 }
 
 /** One page of `GET /contracts`. `total` counts every match, not just this page. */

@@ -123,6 +123,31 @@ async function main() {
   }
   const deliverableHash = Buffer.from(esc.deliverableHash as number[]).toString("hex");
 
+  // Check the panel before spending anything. Two things can make this run
+  // pointless, and both are a single account read away.
+  const panel = await escrowProgram.account.panel.fetch(esc.panel as PublicKey);
+  const seat = panel.entries
+    .slice(0, panel.count)
+    .find((e) => e.moderator.equals(modKeypair.publicKey));
+  if (!seat) {
+    throw new Error(
+      `${s} does not hold a seat on this contract's panel — record_verdict would reject it`
+    );
+  }
+  if (seat.vote !== 0) {
+    // One vote per seat: `record_verdict` rejects a second with AlreadyVoted.
+    console.log(`${s} has already voted on this contract — nothing to do.`);
+    return;
+  }
+  if (esc.outcome) {
+    // Deliberately NOT a skip. A panel of three settles on the second agreeing
+    // vote, so the third moderator often arrives here after the outcome is
+    // final — but a late vote is still recorded and still PAID, and its fee
+    // (a share of the contract) dwarfs the inference it costs. The only way to
+    // lose is for `release` to land before the vote does.
+    console.log("the panel already reached a majority — this vote cannot change it, but it is still paid.");
+  }
+
   // 5. open + verify the sealed bundle against the on-chain commitment
   const ciphertext = await storage.get(row.deliverableStorageKey);
   const opened = await openAndVerify({ ciphertext, identity, expectedHash: deliverableHash });
@@ -134,7 +159,7 @@ async function main() {
   //    leaves the escrow to time out and refund, whereas a Pass we invented
   //    would release funds for a deliverable nobody checked.
   const criteria = (row.acceptanceCriteria as AcceptanceCriterion[] | null) ?? [];
-  const result = await runCheck(criteria, opened.files, manual);
+  const result = await runCheck(criteria, opened.files, manual, s);
   console.log(`judge:  ${result.judge} → ${result.outcome}`);
   for (const c of result.criteria) {
     console.log(`  [${c.met ? "met" : "NOT met"}] ${c.description} — ${c.reason}`);
@@ -164,6 +189,8 @@ async function main() {
       moderator: moderatorPda(modKeypair.publicKey),
       escrowConfig: esc.config as PublicKey,
       escrow: escrowAddr,
+      // The panel holds the seats and the votes; the escrow tallies them.
+      panel: esc.panel as PublicKey,
       descEscrowProgram: escrowProgram.programId,
     })
     .rpc();

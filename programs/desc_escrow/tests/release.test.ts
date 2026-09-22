@@ -8,7 +8,7 @@ import {
   fundedAta,
   tokenBalance,
   accountExists,
-  TOKEN_PROGRAM_ID,
+  releaseEscrow,
 } from "./helpers";
 
 async function ready(outcome: "pass" | "fail" | null) {
@@ -27,21 +27,7 @@ async function ready(outcome: "pass" | "fail" | null) {
 }
 
 async function release(s: any, c: any, committerAta: any, signer = c) {
-  await program.methods
-    .release()
-    .accountsPartial({
-      signer: signer.publicKey,
-      escrow: s.escrow,
-      config: s.world.config,
-      vault: s.vault,
-      committerTokenAccount: committerAta,
-      treasury: s.world.treasury,
-      moderatorTokenAccount: s.world.moderatorAta,
-      initiator: s.initiator.publicKey,
-      tokenProgram: TOKEN_PROGRAM_ID,
-    })
-    .signers([signer])
-    .rpc();
+  await releaseEscrow(s, { signer, committerTokenAccount: committerAta });
 }
 
 describe("release", () => {

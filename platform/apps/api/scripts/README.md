@@ -37,7 +37,10 @@ Prepares a cluster so the api has something to talk to. It:
 There is no hot settlement keypair. Moderator pricing is **not** set here — each
 moderator sets its own (see `moderator-register`).
 
-**Prereq:** a validator running with the program deployed (`anchor localnet`).
+**Prereq:** a validator running with both programs deployed — start it with
+`surfpool start --offline --block-production-mode clock`, **not** `anchor localnet`
+(see `platform/README.md` step 2: its `transaction` block mode makes
+`solana program deploy` expire its own blockhash and hang).
 
 ```bash
 pnpm bootstrap
@@ -91,9 +94,19 @@ Provisions a moderator's wallet + `age` identity (under `./moderators/`), funds
 it, and registers it on-chain **with its own price**.
 
 ```bash
-pnpm moderator-register "Olympus (Mod-Claude-Opus)" --base-bps 100
-pnpm moderator-register "Hikaru (Mod-Claude-Haiku)" --base-bps 50
+pnpm moderator-register "Olympus (Mod-Claude-Opus)"  --base-bps 100  # 1%
+pnpm moderator-register "SonGoku (Mod-Claude-Sonnet)" --base-bps 75  # 0.75%
+pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"   --base-bps 50  # 0.5%
+pnpm moderator-register "Mischief"                    --base-bps 50  # 0.5%
 ```
+
+`Mischief` is a **test moderator**: it judges for real and then submits the
+OPPOSITE verdict, so a 3-moderator panel can be shown outvoting a bad panellist.
+Local and devnet only.
+
+Registering it is not enough — it behaves normally until its slug is listed in
+`DESC_MISCHIEF_MODS` in `.env`. The judge also refuses to start if `RPC_URL`
+looks like mainnet, so the two guards have to both be wrong to do damage.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -130,6 +143,14 @@ moderator the escrow was assigned — its wallet must be in `./moderators/`.
 | `pnpm e2e:release` | `e2e/e2e_release.ts` | full happy path → settled |
 | `pnpm e2e:refund` | `e2e/e2e_refund.ts` | verdict(fail) → refund |
 | `pnpm e2e:mutual-cancel` | `e2e/e2e_mutual_cancel.ts` | two-signer unwind → refunded |
+| `pnpm e2e:panel` | `e2e/e2e_panel.ts` | **3 moderators**, one voting the opposite → majority settles, every voter paid its own price |
+
+`e2e:panel` needs **three** active moderators, ideally including Mischief (with
+`DESC_MISCHIEF_MODS` naming it) so the run has a bad panellist to outvote. With
+fewer than three it fails with a clear message; with three honest ones it still
+runs, but only proves a unanimous panel. It drives `submit_verdict` directly
+like the other scripts, so it tests the tally and the payout — that the *judge*
+inverts is the wrapper's own concern.
 
 Each funds a fresh initiator/committer, builds the tx via the api, signs it
 locally, and submits it back through the api. The initiator gets **1070 USDC**:

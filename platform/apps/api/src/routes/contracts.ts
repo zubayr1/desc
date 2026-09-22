@@ -29,7 +29,11 @@ const createSchema = z.object({
   acceptanceCriteria: z.array(z.object({ description: z.string().min(1) })).min(1),
   amount: z.string().regex(/^\d+$/),
   noMod: z.boolean().optional(),
-  // The moderator's WALLET the initiator picked. Optional while V1 has one mod.
+  // The WALLETS of the moderators the initiator picked — the contract's panel,
+  // 1 or 3. Zod strips unknown keys, so a field missing here is silently dropped
+  // rather than rejected: anything the client may send must be declared.
+  moderators: z.array(z.string().min(1)).optional(),
+  // One-moderator shorthand for `moderators: [wallet]`.
   moderator: z.string().min(1).optional(),
   maxModeratorFee: z.string().regex(/^\d+$/).optional(),
   deadline: z.string().min(1),

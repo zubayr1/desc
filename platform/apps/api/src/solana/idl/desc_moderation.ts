@@ -365,6 +365,14 @@ export type DescModeration = {
           "writable": true
         },
         {
+          "name": "panel",
+          "docs": [
+            "The escrow's panel: who may vote and the votes so far. The escrow",
+            "program checks the seat and tallies; this program only forwards it."
+          ],
+          "writable": true
+        },
+        {
           "name": "descEscrowProgram",
           "address": "4Q1jTgR9UVpbbVo57Dx1cpjo77Hx8oBn78ieex4gY2CU"
         }
@@ -506,6 +514,19 @@ export type DescModeration = {
         167,
         143,
         128
+      ]
+    },
+    {
+      "name": "panel",
+      "discriminator": [
+        223,
+        223,
+        14,
+        220,
+        233,
+        57,
+        156,
+        38
       ]
     }
   ],
@@ -903,16 +924,25 @@ export type DescModeration = {
             "type": "u32"
           },
           {
+            "name": "panel",
+            "docs": [
+              "This escrow's `Panel` — the moderators judging it and their votes. One",
+              "exists for every escrow, including no-mod ones (`count == 0`), so there",
+              "is a single shape to settle. Carved from `reserved`."
+            ],
+            "type": "pubkey"
+          },
+          {
             "name": "reserved",
             "docs": [
-              "Forward-compat padding so V2 fields (e.g. `parent`, `moderation_account`,",
-              "`dispute_account`) can be added without a risky `realloc`. Carve new",
-              "fields from here; keep this the LAST field."
+              "Forward-compat padding so V2 fields (e.g. `parent`, `dispute_account`)",
+              "can be added without a risky `realloc`. Carve new fields from here;",
+              "keep this the LAST field."
             ],
             "type": {
               "array": [
                 "u8",
-                73
+                41
               ]
             }
           }
@@ -1161,6 +1191,136 @@ export type DescModeration = {
           },
           {
             "name": "fail"
+          }
+        ]
+      }
+    },
+    {
+      "name": "panel",
+      "docs": [
+        "The moderators judging one escrow, and their votes (PDA, seeds =",
+        "[b\"panel\", escrow]).",
+        "",
+        "A separate account because the escrow cannot hold three moderators plus",
+        "their votes — three pubkeys alone outgrow its remaining `reserved` space.",
+        "",
+        "One panel exists per escrow, including a no-mod escrow (`count == 0`), so",
+        "every settlement path has exactly one shape to handle. Its rent is paid by",
+        "the initiator at creation and returns to the initiator when the panel is",
+        "closed on settle.",
+        "",
+        "Backward-compat discipline: `version` first, `reserved` LAST."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "docs": [
+              "Schema version of this account. Set to `VERSION` at init."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "escrow",
+            "docs": [
+              "The escrow this panel judges. Bound at creation."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "count",
+            "docs": [
+              "How many seats are filled: 0 (no-mod), 1 or 3. Never even above zero —",
+              "a tie has no majority."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "quorum",
+            "docs": [
+              "Votes needed for an outcome: `count / 2 + 1`. Snapshotted so a later",
+              "rule change cannot move the goalposts on a live deal."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "entries",
+            "docs": [
+              "Seats. Only the first `count` are used."
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "panelEntry"
+                  }
+                },
+                3
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Forward-compat padding. Carve new fields from here; keep it LAST."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "panelEntry",
+      "docs": [
+        "A moderator's seat on an escrow's panel: who they are, what they are owed,",
+        "and how they voted."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "moderator",
+            "docs": [
+              "The moderator's wallet — the key that signs its verdict."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "fee",
+            "docs": [
+              "Its own price for THIS contract, snapshotted at creation. Paid on settle",
+              "only if it voted; otherwise it returns to the initiator."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "vote",
+            "docs": [
+              "`VOTE_NONE` until it votes, then `VOTE_PASS` / `VOTE_FAIL`."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "verdictHash",
+            "docs": [
+              "sha256 of the verdict this moderator signed. Zero until it votes."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }

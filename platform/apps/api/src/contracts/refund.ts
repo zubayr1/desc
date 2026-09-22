@@ -35,8 +35,8 @@ export async function prepareRefund(
     escrow: new PublicKey(row.escrowAddress),
     vault: new PublicKey(row.vaultAddress),
     treasury: cfg.treasury,
-    // On a Fail verdict the judging mod gets the surcharge; ghost-timeout = none.
-    moderator: failed && oc.moderator ? new PublicKey(oc.moderator) : undefined,
+    // Who is paid comes from the panel, read inside the builder: every moderator
+    // that voted on a Fail, nobody on a ghost-timeout.
   });
   return { id: row.id, unsignedTx };
 }

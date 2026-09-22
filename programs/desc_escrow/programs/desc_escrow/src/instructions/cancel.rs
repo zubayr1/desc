@@ -2,12 +2,17 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{close_account, transfer, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Escrow, EscrowStatus};
+use crate::states::{Escrow, EscrowStatus, Panel};
 
 /// Initiator cancels an escrow that no committer has accepted yet, reclaiming
 /// the full deposit. Allowed ONLY while `Funded` (and thus `committer == None`)
 /// — once a committer is `Active`, the initiator can never unilaterally pull the
-/// funds. The vault is closed; the escrow is kept as a `Cancelled` record.
+/// funds. The vault and the panel are closed; the escrow is kept as a
+/// `Cancelled` record.
+///
+/// The moderator fees need no special handling: the whole vault sweeps back to
+/// the initiator, and a `Funded` escrow was never accepted, so no moderator can
+/// have voted.
 #[derive(Accounts)]
 pub struct Cancel<'info> {
     #[account(mut)]
@@ -19,11 +24,27 @@ pub struct Cancel<'info> {
         bump = escrow.bump,
         has_one = initiator,
         has_one = vault,
+        has_one = panel,
     )]
-    pub escrow: Account<'info, Escrow>,
+    pub escrow: Box<Account<'info, Escrow>>,
+
+    /// The escrow's panel — created for every escrow, so a cancelled one has to
+    /// close it or the initiator's rent is orphaned on chain. Rent goes back to
+    /// the initiator, who put it up at creation.
+    ///
+    /// Boxed along with the rest: adding an account to an instruction that
+    /// already carries the escrow is how this program hit the BPF 4KB stack
+    /// limit before (see `create_escrow`).
+    #[account(
+        mut,
+        close = initiator,
+        seeds = [Panel::SEED_PREFIX, escrow.key().as_ref()],
+        bump = panel.bump,
+    )]
+    pub panel: Box<Account<'info, Panel>>,
 
     #[account(mut)]
-    pub vault: Account<'info, TokenAccount>,
+    pub vault: Box<Account<'info, TokenAccount>>,
 
     /// Refund destination — the initiator's USDC account.
     #[account(
@@ -31,7 +52,7 @@ pub struct Cancel<'info> {
         constraint = initiator_token_account.mint == escrow.mint,
         constraint = initiator_token_account.owner == initiator.key(),
     )]
-    pub initiator_token_account: Account<'info, TokenAccount>,
+    pub initiator_token_account: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
 }
@@ -72,7 +93,8 @@ impl<'info> Cancel<'info> {
             self.vault.amount,
         )?;
 
-        // Close the now-empty vault, returning its rent to the initiator.
+        // Close the now-empty vault, returning its rent to the initiator. The
+        // panel is closed by its `close = initiator` constraint.
         close_account(CpiContext::new_with_signer(
             self.token_program.to_account_info(),
             CloseAccount {

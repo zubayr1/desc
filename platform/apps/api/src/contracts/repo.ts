@@ -1,5 +1,5 @@
 import { and, count, desc, eq, isNotNull } from "drizzle-orm";
-import type { ContractStatus } from "@repo/shared";
+import type { ContractModerator, ContractStatus } from "@repo/shared";
 import { db } from "../db/client";
 import { contracts, type ContractRow } from "../db/schema";
 import type { OnChainEscrow } from "../solana/program";
@@ -68,6 +68,26 @@ export const cacheFields = (oc: OnChainEscrow) => ({
   outcome: oc.outcome,
   updatedAt: new Date(),
 });
+
+/**
+ * Cache the panel's votes so they survive settlement.
+ *
+ * The `Panel` account is CLOSED on settle to return its rent, and the votes go
+ * with it — so without this the contract page could only ever show the final
+ * outcome, never which moderator said what. This is a CACHE, not evidence: the
+ * proof is each moderator's own signed `submit_verdict` transaction in the
+ * ledger. On-chain vote history belongs on the `Moderator` account when
+ * reputation ships.
+ */
+export async function writePanelVotes(
+  id: string,
+  panel: ContractModerator[]
+): Promise<void> {
+  await db
+    .update(contracts)
+    .set({ panel, updatedAt: new Date() })
+    .where(eq(contracts.id, id));
+}
 
 /** Reconcile one row's cached fields from a fresh on-chain read (reconciler). */
 export async function writeCache(id: string, oc: OnChainEscrow): Promise<void> {

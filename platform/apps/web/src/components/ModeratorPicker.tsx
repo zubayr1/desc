@@ -7,27 +7,31 @@ import { cn } from "@/lib/utils";
  * Choose who judges the work. Built for many moderators and for choosing
  * several — chosen ones show as tokens, the list is searchable and sortable.
  *
- * `max` caps how many can be chosen. The escrow program takes ONE moderator
- * today, so callers pass `max={1}` and picking another replaces the choice.
- * When per-escrow multi-moderator settlement ships, raising `max` is the only
- * change needed here.
+ * `sizes` are the panel sizes the program accepts — `[1, 3]` for a real
+ * contract, since an even panel cannot reach a majority. The largest is the cap:
+ * picking beyond it replaces the oldest choice, which with `[1]` makes this a
+ * radio. Sizes in between are selectable but invalid, and the caller is expected
+ * to say so and block submission — stopping the click that takes you from 1 to 2
+ * would make three moderators unreachable.
  */
 export function ModeratorPicker({
   moderators,
   selected,
   onChange,
-  max = 1,
+  sizes = [1],
   amount,
 }: {
   moderators: ModeratorOffer[];
   selected: string[];
   onChange: (wallets: string[]) => void;
-  max?: number;
+  /** Panel sizes the program accepts, ascending. Defaults to one moderator. */
+  sizes?: number[];
   /** Contract amount in USDC, to show each moderator's fee in money too. */
   amount: number;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const max = Math.max(...sizes);
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -119,7 +123,14 @@ export function ModeratorPicker({
                     </span>
                     <Avatar label={m.label} />
                     <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold">{m.label}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold">{m.label}</span>
+                        {m.test && (
+                          <span className="shrink-0 rounded bg-fail/15 px-1 py-px text-[0.6rem] font-semibold uppercase text-fail">
+                            test
+                          </span>
+                        )}
+                      </span>
                       <span className="block truncate font-mono text-[0.7rem] text-muted">
                         {m.wallet.slice(0, 4)}…{m.wallet.slice(-4)}
                       </span>
@@ -134,8 +145,10 @@ export function ModeratorPicker({
             })}
           </ul>
           <div className="border-t border-white/[0.07] px-3 py-2 font-mono text-[0.68rem] text-muted">
-            {max === 1 ? "One moderator per contract for now — several is coming" : `Choose up to ${max}`} · prices are
-            read on-chain
+            {sizes.length === 1
+              ? `${sizes[0]} moderator${sizes[0] === 1 ? "" : "s"} per contract`
+              : `Choose ${sizes.slice(0, -1).join(", ")} or ${sizes.at(-1)}`}{" "}
+            · each is paid its own price, read on-chain
           </div>
         </div>
       )}

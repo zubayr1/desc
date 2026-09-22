@@ -42,4 +42,12 @@ pub enum EscrowError {
     NotAssignedModerator,
     #[msg("Moderator's price is above the maximum the initiator agreed to")]
     ModeratorFeeAboveMax,
+    #[msg("A panel must have 0, 1 or 3 moderators — an even panel cannot reach a majority")]
+    InvalidPanelSize,
+    #[msg("The same moderator was listed twice on one panel")]
+    DuplicateModerator,
+    #[msg("This moderator has already voted on this escrow")]
+    AlreadyVoted,
+    #[msg("The verdict is already final — a majority was reached without this vote")]
+    VerdictAlreadyFinal,
 }

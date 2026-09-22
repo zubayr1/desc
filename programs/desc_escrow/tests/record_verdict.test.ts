@@ -72,9 +72,11 @@ describe("record_verdict", () => {
     await recordVerdict(s, "pass");
     try {
       await recordVerdict(s, "fail");
-      assert.fail("expected InvalidStatus");
+      assert.fail("expected VerdictAlreadyFinal");
     } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
+      // Distinct from a failure: the outcome was already decided by a majority
+      // (here, the single moderator's own vote), so this one is not counted.
+      assert.include(e.toString(), "VerdictAlreadyFinal");
     }
   });
 

@@ -40,28 +40,72 @@ docker compose up -d
 > Host port defaults to 5432. If that's taken, set `POSTGRES_PORT=5433` in
 > `platform/.env` (already done on this machine) and use that port in `DATABASE_URL`.
 
-### 2. Validator + program (keep running)
+### 2. Validator (keep running)
 ```bash
 cd programs/desc_escrow
-anchor localnet
+surfpool start --offline --block-production-mode clock --log-level none \
+  --legacy-anchor-compatibility
 ```
 
-### 3. Deploy the program (after any Rust change)
+**Do not use `anchor localnet` here.** It starts the same surfpool with
+`--block-production-mode transaction`, where surfpool mints **one block per
+transaction** instead of on a timer. `solana program deploy` sends ~400 write
+transactions, so the deploy produces ~400 blocks — and a blockhash expires after
+**150**. The deploy blows past its own expiry a third of the way in, every retry
+does the same, and it hangs forever on:
+
+```
+Blockhash expired. 4 retries remaining
+⠈   0.0% | Sending 404/404 transactions  [block height 1519; re-sign in 0 blocks]
+```
+
+`clock` mode (surfpool's own default) ticks like a real validator and the deploy
+lands. `anchor test` is unaffected — it runs its own instance per file.
+
+### 3. Deploy BOTH programs (after any Rust change)
 ```bash
 # from the repo root, in a NEW terminal — step 2 keeps running
 cd programs/desc_escrow
 solana program deploy target/deploy/desc_escrow.so \
   --program-id target/deploy/desc_escrow-keypair.json \
   --use-rpc -u localhost
-```
-`anchor localnet` only loads programs at **genesis**, and genesis happens only on a
-*fresh* ledger. Restart it against an existing `test-ledger` and it silently keeps
-running the **old** binary — your Rust changes never reach the chain. Worse, Anchor's
-borsh ignores trailing bytes, so a call with a newly-added argument still succeeds and
-the argument is quietly dropped.
 
-So deploy explicitly whenever the program changed. `--use-rpc` is required: the default
-TPU path panics against the test validator with "Failed to get slot leaders".
+solana program deploy ../desc_moderation/target/deploy/desc_moderation.so \
+  --program-id ../desc_moderation/target/deploy/desc_moderation-keypair.json \
+  --use-rpc -u localhost
+```
+**Except `desc_moderation`, which you cannot deploy here at all.**
+`--legacy-anchor-compatibility` makes surfpool read `Anchor.toml` and load the
+`[[test.genesis]]` entry at **genesis** — and a genesis program is immutable:
+
+```
+$ solana program show AHGBmn… -u localhost
+Authority: 11111111111111111111111111111111   ← none
+Last Deployed In Slot: 0                       ← genesis
+$ solana program deploy …/desc_moderation.so
+Error: Program's authority Some(111…) does not match authority provided …
+```
+
+Genesis reads the `.so` **from disk at startup**, so the way to update
+`desc_moderation` is to rebuild it and **restart surfpool** — never a deploy:
+
+```bash
+cd programs/desc_moderation && anchor build
+# then restart surfpool (fresh chain — see "Reset local state")
+```
+
+A stale `desc_moderation` fails loudly but confusingly: its account list is
+positional, so a client sending the newer list has every account after the added
+one shifted by a slot, and you get `InvalidProgramId` comparing a data account
+against a program id.
+
+Deploying explicitly is the only way your Rust reaches the chain. A validator
+started against an existing ledger silently keeps running the **old** binary —
+and Anchor's borsh ignores trailing bytes, so a call with a newly-added argument
+still succeeds and the argument is quietly dropped.
+
+So deploy explicitly whenever a program changed. `--use-rpc` is required: the default
+TPU path panics against the local validator with "Failed to get slot leaders".
 
 Confirm it took:
 ```bash
@@ -92,9 +136,10 @@ reprints these (incl. the current `USDC_MINT`).
 pnpm db:push
 ```
 
-Re-run it after pulling schema changes — e.g. the `moderator` and
-`moderator_recipient` columns that record which moderator a contract was assigned.
-Contracts created before that have no assigned moderator and are skipped by `mod-watch`.
+Re-run it after pulling schema changes — e.g. the `panel` column (every moderator
+judging a contract) and the `moderation_claims` table that replaced the old
+`moderation_*` columns. Contracts created before the panel existed fall back to
+the single `moderator` column.
 
 ### 6. API
 ```bash
@@ -110,7 +155,7 @@ pnpm dev            # → http://localhost:5173
 
 ### Dependency order at a glance
 ```
-docker compose up → anchor localnet → solana program deploy → pnpm bootstrap
+docker compose up → surfpool (clock) → deploy BOTH programs → pnpm bootstrap
                                                                 (edit .env, restart api)
                                                             → pnpm db:push
                                                             → api  pnpm dev
@@ -121,10 +166,11 @@ docker compose up → anchor localnet → solana program deploy → pnpm bootstr
 
 ## Reset local state (keep validator ↔ DB in sync)
 
-Restarting `anchor localnet` gives a **fresh chain** (no escrows), but Postgres
+Restarting surfpool gives a **fresh chain** (no escrows), but Postgres
 **persists** — so the dashboard would show stale contracts pointing at accounts
 that no longer exist. After a validator restart, clear the DB so the two stay in
-sync:
+sync — and redo steps 3-5 plus the moderator registrations, since Config, the
+USDC mint and the `Moderator` accounts are all gone with the chain:
 
 ```bash
 # wipe contract rows (keeps the schema)
@@ -209,36 +255,63 @@ pnpm scripts; they do **not** exist in the program workspace):
 cd platform/apps/api        # from programs/desc_moderation that's:  cd ../../platform/apps/api
 pnpm moderation-init                  # creates ModerationConfig (the PDA bootstrap already
                                       # set as settlement_authority can now sign)
-pnpm moderator-register "Olympus (Mod-Claude-Opus)" --base-bps 100   # 1%
-pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"  --base-bps 50    # 0.5%
+pnpm moderator-register "Olympus (Mod-Claude-Opus)"  --base-bps 100  # 1%
+pnpm moderator-register "SonGoku (Mod-Claude-Sonnet)" --base-bps 75  # 0.75%
+pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"   --base-bps 50  # 0.5%
+pnpm moderator-register "Mischief"                    --base-bps 50  # 0.5% — TEST ONLY
 ```
+
+> **Mischief is a deliberately wrong moderator.** It judges for real, then
+> submits the OPPOSITE verdict, so a 3-moderator panel can be shown outvoting a
+> bad panellist. Register it on local and devnet only — never mainnet.
 
 Then set the judge and each moderator's model in `apps/api/.env` (register prints the
 exact variable name — the slug upper-cased):
 ```bash
 DESC_JUDGE=claude                         # the Claude subscription
 MODEL_OLYMPUS_MOD_CLAUDE_OPUS=claude-opus-5
+MODEL_SONGOKU_MOD_CLAUDE_SONNET=claude-sonnet-5
 MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
+MODEL_MISCHIEF=claude-haiku-4-5           # test moderator — local/devnet only
+DESC_MISCHIEF_MODS=mischief               # slugs that invert their verdict
 ```
 
-> **Register moderators BEFORE creating contracts.** A contract is bound to one
-> moderator when it's created, and the committer seals the delivery to that
-> moderator's key. A moderator registered later can't be picked for existing
-> contracts, and **re-registering** a moderator (new wallet, new key) orphans
-> every contract assigned to the old one — they fail at decrypt.
+`DESC_MISCHIEF_MODS` is what actually makes Mischief misbehave: registering it
+on-chain only creates a normal moderator. Naming a slug here is the opt-in, and
+the judge refuses to start at all if `RPC_URL` looks like mainnet.
+
+> **Register moderators BEFORE creating contracts.** A contract's panel is fixed
+> when it's created, and the committer seals the delivery to those moderators'
+> keys. A moderator registered later can't be added to existing contracts, and
+> **re-registering** a moderator (new wallet, new key) orphans every contract it
+> was seated on — they fail at decrypt.
 
 Each moderator has its own price (on-chain) and its own model (`.env`). A moderator
-with no `MODEL_…` line refuses to start. The initiator picks one per contract; the
-committer's delivery is sealed to **that moderator only**, and only it can record the verdict.
+with no `MODEL_…` line refuses to start. The initiator picks a **panel of 1 or 3**
+per contract — never 2, which can split 1–1 and never reach a majority. The
+delivery is sealed to **exactly those moderators**, only they can vote, and the
+first outcome to reach a majority settles it.
 
 **C) run the moderators — one terminal each, same package:**
 ```bash
 pnpm mod-watch --mod olympus-mod-claude-opus
+pnpm mod-watch --mod songoku-mod-claude-sonnet
 pnpm mod-watch --mod hikaru-mod-claude-haiku
+pnpm mod-watch --mod mischief            # test moderator — votes the OPPOSITE
 ```
-Each watcher claims only the contracts assigned to its moderator. `--mod` is the slug
-of the label (lowercased, dashes). `--once` does a single sweep and exits. Set
-`DESC_JUDGE=manual` in `.env` to settle contracts by hand instead.
+Run one per moderator you registered. A three-moderator contract needs all three
+of its watchers up, or it sits at `submitted` waiting for the vote that never
+comes.
+
+Each watcher claims only the contracts whose **panel it sits on** and that it has
+not voted on yet, so three watchers can work the same contract side by side
+without colliding — claims are per seat, in `moderation_claims`. `--mod` is the
+slug of the label (lowercased, dashes). `--once` does a single sweep and exits.
+Set `DESC_JUDGE=manual` in `.env` to settle contracts by hand instead.
+
+Mischief prints a loud banner at startup. It judges for real and then submits the
+opposite verdict, so keep it off any panel whose outcome you care about — it is
+there to be outvoted.
 
 > **`DESC_JUDGE=claude` runs on your Claude subscription**, through Claude Code in
 > headless mode (`claude -p`, tools and MCP disabled) — no API credits are used. It
@@ -289,26 +362,31 @@ cd platform/apps/api        # the ./moderators/ files live here (moderator-regis
 
 # each mod's wallet — the file is <slug>-wallet.json, slug = label lowercased with dashes
 OLYMPUS=$(solana-keygen pubkey ./moderators/olympus-mod-claude-opus-wallet.json)
+SONGOKU=$(solana-keygen pubkey ./moderators/songoku-mod-claude-sonnet-wallet.json)
 HIKARU=$(solana-keygen pubkey ./moderators/hikaru-mod-claude-haiku-wallet.json)
 ls ./moderators/*-wallet.json   # if your labels differ, the slugs are here
 
-# before settling
-spl-token balance <USDC_MINT> --owner $OLYMPUS --url localhost
-spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
+check() { for w in $OLYMPUS $SONGOKU $HIKARU; do
+  spl-token balance <USDC_MINT> --owner $w --url localhost; done }
 
-# create a contract with one of them → accept → submit → its mod-watch judges → Release
-# then check again — ONLY the assigned mod's balance moves, by its price
-# (1% for Olympus at --base-bps 100, 0.5% for Hikaru at --base-bps 50)
-spl-token balance <USDC_MINT> --owner $OLYMPUS --url localhost
-spl-token balance <USDC_MINT> --owner $HIKARU --url localhost
+check   # before settling
+
+# create a contract → accept → submit → the panel's watchers judge → Release
+check   # after
 ```
+Only the moderators **on that contract's panel** are paid, and each by its own
+price — 1% for Olympus at `--base-bps 100`, 0.75% for SonGoku at 75, 0.5% for
+Hikaru at 50. On a panel of three all three move, by different amounts; a
+moderator that never voted is not paid and its fee goes back to the initiator.
 
 - `<USDC_MINT>` is the value from `pnpm bootstrap` (also `apps/api/.env`).
 - The fee lands on **Release/Reclaim**, so run that step first, then re-check the balance.
-- The initiator funds **amount + protocol fee + the chosen mod's price** at create;
+- The initiator funds **amount + protocol fee + the SUM of the panel's prices** at
+  create — each moderator runs the whole check, so the fees are summed, never split.
   `./fund-wallets.sh <USDC_MINT>` mints plenty.
-- The form quotes the price from `GET /config/fees` and sends it as `maxModeratorFee`. If
-  the mod raised its price since, creation fails instead of charging more.
+- The form quotes those prices from `GET /config/fees` and sends their sum as
+  `maxModeratorFee`. If any of them raised its price since, creation fails instead
+  of charging more.
 
 ### Admin console — read-only oversight
 ```bash

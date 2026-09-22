@@ -15,6 +15,7 @@ async function cancel(s: any, signer = s.initiator) {
     .accountsPartial({
       initiator: signer.publicKey,
       escrow: s.escrow,
+      panel: s.panel,
       vault: s.vault,
       initiatorTokenAccount: s.initiatorAta,
       tokenProgram: TOKEN_PROGRAM_ID,

@@ -47,18 +47,43 @@ export const AUTHORITY_PATH = expand(
 export const loadKeypair = (p: string) =>
   Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
 
+/**
+ * Wait out a rate limit rather than failing on it.
+ *
+ * `POST /contracts` allows 10 a minute — it writes an unfunded draft row before
+ * any wallet signature, so it is the spam vector. That limit is correct, and the
+ * suite now runs more than ten scripts, so a full `e2e:all` trips it and fails
+ * scripts that have nothing wrong with them (a different set each run, since it
+ * depends on timing). The harness respects the limit instead of the product
+ * being loosened for tests.
+ *
+ * The api tells us how long to wait, so this sleeps exactly that long.
+ */
+async function withRateLimit(send: () => Promise<Response>): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await send();
+    if (res.status !== 429 || attempt >= 3) return res;
+    const body = await res.clone().text();
+    const seconds = Number(body.match(/retry in (\d+)/)?.[1] ?? 5);
+    console.log(`  … rate limited, waiting ${seconds}s`);
+    await new Promise((r) => setTimeout(r, (seconds + 1) * 1000));
+  }
+}
+
 export async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await withRateLimit(() => fetch(`${BASE}${path}`));
   if (!res.ok) throw new Error(`GET ${path} failed: ${await res.text()}`);
   return res.json() as Promise<T>;
 }
 
 export async function postJson(path: string, body: unknown) {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const res = await withRateLimit(() =>
+    fetch(`${BASE}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    })
+  );
   if (!res.ok) throw new Error(`${path} failed: ${await res.text()}`);
   return res.json();
 }
@@ -212,6 +237,20 @@ export function modKeypairFor(assigned: PublicKey): Keypair {
       ? `no mod wallets in ${MOD_DIR} — run \`pnpm moderator-register\` first`
       : `the assigned moderator ${assigned.toBase58()} has no wallet in ${MOD_DIR}`
   );
+}
+
+/** The escrow's `Panel` PDA — closed on settle, so its absence is the proof. */
+export function panelAddress(escrow: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("panel"), escrow.toBuffer()],
+    new PublicKey(escrowIdl.address)
+  )[0];
+}
+
+/** Does this account still exist on chain? */
+export async function accountExists(pubkey: PublicKey): Promise<boolean> {
+  const connection = new Connection(RPC, "confirmed");
+  return (await connection.getAccountInfo(pubkey)) !== null;
 }
 
 /** One seat on an escrow's panel, as the chain has it. */

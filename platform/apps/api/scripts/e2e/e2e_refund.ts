@@ -23,7 +23,13 @@ import {
   mintTo,
   getAccount,
 } from "@solana/spl-token";
-import { deliverBundle, recordVerdict, pickModerator } from "./_shared";
+import {
+  deliverBundle,
+  pickModerator,
+  postJson,
+  recordVerdict,
+  signAndSubmit,
+} from "./_shared";
 
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
@@ -36,22 +42,6 @@ const loadKeypair = (p: string) =>
   Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
 
 const TOTAL = 1_070_000_000; // amount 1000 + fee 20 + moderator price (up to 5% = 50)
-
-async function postJson(path: string, body: unknown) {
-  const res = await fetch(`${BASE}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${path} failed: ${await res.text()}`);
-  return res.json();
-}
-
-async function signAndSubmit(unsignedTx: string, signer: Keypair, path: string) {
-  const tx = Transaction.from(Buffer.from(unsignedTx, "base64"));
-  tx.partialSign(signer);
-  return postJson(path, { signedTx: tx.serialize().toString("base64") });
-}
 
 async function main() {
   const connection = new Connection(RPC, "confirmed");

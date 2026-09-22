@@ -216,10 +216,16 @@ impl<'info> Release<'info> {
 /// was outvoted, or one whose vote landed after the majority had already
 /// decided, since both did the same work.
 ///
-/// `token_accounts` holds one account per VOTED seat, in panel order, and
-/// nothing for seats that never voted. Each is checked to be a real token
-/// account of the escrow's mint OWNED BY that seat's moderator, so a caller
-/// cannot redirect another moderator's fee to itself.
+/// `token_accounts` holds one account per SEAT, in panel order — including seats
+/// that have not voted, whose entry is ignored. One per *voter* would be
+/// smaller, but the voter list changes as votes land: a settlement transaction
+/// built while the last moderator was still judging would arrive with the wrong
+/// number of accounts and fail. Seats are fixed at creation, so this list cannot
+/// drift between building the transaction and landing it.
+///
+/// Each paid account is checked to be a real token account of the escrow's mint
+/// OWNED BY that seat's moderator, so a caller cannot redirect another
+/// moderator's fee to itself.
 pub fn pay_panel<'info>(
     panel: &Panel,
     escrow: &Escrow,
@@ -230,16 +236,18 @@ pub fn pay_panel<'info>(
     signer_seeds: &[&[&[u8]]],
 ) -> Result<u64> {
     let count = panel.count as usize;
-    let voters = panel.entries[..count]
-        .iter()
-        .filter(|e| e.vote != VOTE_NONE);
     require!(
-        token_accounts.len() == voters.clone().count(),
+        token_accounts.len() == count,
         EscrowError::ModeratorConfigMismatch
     );
 
     let mut paid: u64 = 0;
-    for (entry, token_account) in voters.zip(token_accounts) {
+    for (entry, token_account) in panel.entries[..count].iter().zip(token_accounts) {
+        // Seated but silent: not paid, and its account is never even read. Its
+        // fee returns to the initiator (see `release`).
+        if entry.vote == VOTE_NONE {
+            continue;
+        }
         // Unpacked by hand rather than through `Account<TokenAccount>`: read the
         // two fields that matter and drop the borrow, so nothing large is held
         // across the transfer and the token program can take its own mutable

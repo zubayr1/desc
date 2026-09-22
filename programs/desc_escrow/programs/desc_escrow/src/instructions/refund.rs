@@ -116,16 +116,19 @@ impl<'info> Refund<'info> {
         // treasury keeps the verification fee; the rest — including the fees of
         // any moderator that never voted — goes back to the initiator. On a
         // ghost-timeout the full vault does.
+        // Pays every moderator that voted. Zero on a ghost-timeout: the escrow
+        // never reached `Submitted`, so no seat can hold a vote.
+        let paid = pay_panel(
+            &self.panel,
+            &self.escrow,
+            moderator_token_accounts,
+            self.vault.to_account_info(),
+            self.escrow.to_account_info(),
+            self.token_program.to_account_info(),
+            signer_seeds,
+        )?;
+
         let to_initiator = if failed {
-            let paid = pay_panel(
-                &self.panel,
-                &self.escrow,
-                moderator_token_accounts,
-                self.vault.to_account_info(),
-                self.escrow.to_account_info(),
-                self.token_program.to_account_info(),
-                signer_seeds,
-            )?;
 
             // Cost recovery for the verification that ran. Clamped to the fee
             // actually escrowed so a legacy or malformed account can never take
@@ -151,13 +154,7 @@ impl<'info> Refund<'info> {
                 .and_then(|v| v.checked_sub(verification_fee))
                 .ok_or(EscrowError::MathOverflow)?
         } else {
-            // Nobody judged a ghosted deal, so nobody is paid — a caller passing
-            // moderator accounts here has misread the state.
-            require!(
-                moderator_token_accounts.is_empty(),
-                EscrowError::ModeratorConfigMismatch
-            );
-            total
+            total.checked_sub(paid).ok_or(EscrowError::MathOverflow)?
         };
 
         // Return the remaining deposit to the initiator.

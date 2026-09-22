@@ -9,7 +9,7 @@ import {
   platformConfigPda,
   usdcMint,
   panelPda,
-  readPanelVoters,
+  readPanelWallets,
 } from "../program";
 import { finalizeUnsigned } from "../buildTransaction";
 
@@ -26,11 +26,14 @@ export interface BuildReleaseParams {
  * Build the unsigned `release` transaction, signed by either party.
  *
  * Who is paid comes from the escrow's **panel**, read here rather than passed
- * in: each moderator that voted gets its own snapshotted price, and their token
- * accounts go in as remaining accounts **in panel order** — the program matches
- * each one against its own seat. A moderator that never voted is not paid and
- * its fee returns to the initiator, which is why the initiator's token account
- * is required even when nothing comes back to them.
+ * in: each moderator that voted gets its own snapshotted price. EVERY seat's
+ * token account goes in as a remaining account, **in panel order** — including
+ * seats that have not voted, because the voter list grows as votes land and a
+ * transaction built while the last moderator was still judging would arrive
+ * with the wrong number of accounts. The program matches each account against
+ * its own seat and skips the ones that did not vote; their fees return to the
+ * initiator, which is why the initiator's token account is required even when
+ * nothing comes back to them.
  *
  * Idempotent creates are prepended for every payout account, so each transfer
  * has somewhere to land. A no-mod escrow has an empty panel and adds none.
@@ -54,8 +57,8 @@ export async function buildRelease(p: BuildReleaseParams): Promise<string> {
     ),
   ];
 
-  const voters = await readPanelVoters(p.escrow);
-  const voterTokenAccounts = voters.map((moderator) => {
+  const seats = await readPanelWallets(p.escrow);
+  const seatTokenAccounts = seats.map((moderator) => {
     const ata = getAssociatedTokenAddressSync(usdcMint, moderator);
     ixs.push(
       createAssociatedTokenAccountIdempotentInstruction(p.signer, ata, moderator, usdcMint)
@@ -78,7 +81,7 @@ export async function buildRelease(p: BuildReleaseParams): Promise<string> {
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .remainingAccounts(
-      voterTokenAccounts.map((pubkey) => ({
+      seatTokenAccounts.map((pubkey) => ({
         pubkey,
         isSigner: false,
         isWritable: true,

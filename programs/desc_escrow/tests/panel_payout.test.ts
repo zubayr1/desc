@@ -192,7 +192,7 @@ describe("panel payout", () => {
       await releaseEscrow(s, {
         signer: committer,
         committerTokenAccount: committerAta,
-        moderatorAtas: [seats[0].ata, seats[0].ata],
+        moderatorAtas: [seats[0].ata, seats[0].ata, seats[2].ata],
       });
       assert.fail("expected Unauthorized");
     } catch (e) {
@@ -200,20 +200,45 @@ describe("panel payout", () => {
     }
   });
 
-  it("rejects a release that skips a voting moderator's account", async () => {
+  it("rejects a release that does not carry one account per seat", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
     await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
     await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
 
+    // Two accounts for a panel of three: the count is per SEAT, not per voter,
+    // so passing only the voters is rejected rather than silently mis-paid.
     try {
       await releaseEscrow(s, {
         signer: committer,
         committerTokenAccount: committerAta,
-        moderatorAtas: [seats[0].ata],
+        moderatorAtas: [seats[0].ata, seats[1].ata],
       });
       assert.fail("expected ModeratorConfigMismatch");
     } catch (e) {
       assert.include(e.toString(), "ModeratorConfigMismatch");
+    }
+  });
+
+  it("settles from a transaction built before the last vote landed", async () => {
+    const { s, committer, committerAta, seats } = await panelOfThree();
+    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
+    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
+
+    // The accounts are chosen while only two seats have voted — the shape a
+    // wallet would be handed the moment the Release button appears. The third
+    // vote then lands before the transaction does. One account per seat means
+    // the list is already right; one per voter would have been one short.
+    const atas = seats.map((x) => x.ata);
+    await recordVerdict(s, "pass", Array(32).fill(3), seats[2].wallet);
+
+    await releaseEscrow(s, {
+      signer: committer,
+      committerTokenAccount: committerAta,
+      moderatorAtas: atas,
+    });
+
+    for (const seat of seats) {
+      assert.equal((await tokenBalance(seat.ata)).toString(), seat.fee.toString());
     }
   });
 

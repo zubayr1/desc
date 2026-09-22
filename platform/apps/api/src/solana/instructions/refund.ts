@@ -9,7 +9,7 @@ import {
   platformConfigPda,
   usdcMint,
   panelPda,
-  readPanelVoters,
+  readPanelWallets,
 } from "../program";
 import { finalizeUnsigned } from "../buildTransaction";
 
@@ -27,18 +27,20 @@ export interface BuildRefundParams {
  *
  * On a Fail verdict every moderator that voted is paid its own price — the
  * outvoted one included, since it did the same work — and the treasury keeps the
- * verification fee. The voters come from the escrow's **panel**, read here, and
- * their token accounts go in as remaining accounts in panel order.
+ * verification fee. The panel is read here and EVERY seat's token account goes
+ * in as a remaining account, in panel order — not just the voters, whose number
+ * changes as votes land and would leave a transaction built moments earlier
+ * carrying the wrong count. The program skips seats that did not vote.
  *
- * On a ghost-timeout nobody judged, so the panel has no voters, the list is
- * empty and the full deposit returns.
+ * On a ghost-timeout no seat can hold a vote, so nobody is paid and the full
+ * deposit returns.
  */
 export async function buildRefund(p: BuildRefundParams): Promise<string> {
   const initiatorTokenAccount = getAssociatedTokenAddressSync(usdcMint, p.initiator);
 
   const ixs: TransactionInstruction[] = [];
-  const voters = await readPanelVoters(p.escrow);
-  const voterTokenAccounts = voters.map((moderator) => {
+  const seats = await readPanelWallets(p.escrow);
+  const seatTokenAccounts = seats.map((moderator) => {
     const ata = getAssociatedTokenAddressSync(usdcMint, moderator);
     ixs.push(
       createAssociatedTokenAccountIdempotentInstruction(
@@ -64,7 +66,7 @@ export async function buildRefund(p: BuildRefundParams): Promise<string> {
       tokenProgram: TOKEN_PROGRAM_ID,
     })
     .remainingAccounts(
-      voterTokenAccounts.map((pubkey) => ({
+      seatTokenAccounts.map((pubkey) => ({
         pubkey,
         isSigner: false,
         isWritable: true,

@@ -521,17 +521,17 @@ export async function recordVerdict(
 }
 
 /**
- * The token accounts of every moderator that VOTED on `s`, in panel order —
- * exactly what `release` / `refund` expect as `remainingAccounts`.
+ * The token account of EVERY seat on `s`'s panel, in panel order — exactly what
+ * `release` / `refund` expect as `remainingAccounts`.
  *
- * Read from the panel rather than from the test's own bookkeeping, so it stays
- * right when a moderator is outvoted, votes late, or never votes at all.
+ * One per seat, not one per voter: the voter list grows as votes land, so a
+ * settlement transaction built from it could arrive with the wrong number of
+ * accounts. Seats never change. The program skips the ones that did not vote.
  */
-export async function panelVoterAtas(s: EscrowSetup): Promise<PublicKey[]> {
+export async function panelAtas(s: EscrowSetup): Promise<PublicKey[]> {
   const panel = await program.account.panel.fetch(s.panel);
   const atas: PublicKey[] = [];
   for (const entry of panel.entries.slice(0, panel.count)) {
-    if (entry.vote === 0) continue; // never voted -> not paid
     atas.push(
       await fundedAta(
         s.world.mintAuthority,
@@ -549,8 +549,8 @@ const remaining = (keys: PublicKey[]) =>
   keys.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true }));
 
 /**
- * Release a passed escrow. Moderator token accounts default to whoever voted,
- * which is what production does after reading the panel.
+ * Release a passed escrow. Moderator token accounts default to every seat on the
+ * panel, which is what production does after reading it.
  */
 export async function releaseEscrow(
   s: EscrowSetup,
@@ -560,7 +560,7 @@ export async function releaseEscrow(
     moderatorAtas?: PublicKey[];
   }
 ) {
-  const atas = opts.moderatorAtas ?? (await panelVoterAtas(s));
+  const atas = opts.moderatorAtas ?? (await panelAtas(s));
   await program.methods
     .release()
     .accountsPartial({
@@ -581,14 +581,14 @@ export async function releaseEscrow(
 }
 
 /**
- * Refund an escrow. Moderator token accounts default to whoever voted — none on
- * a ghost-timeout, where the escrow never reached a verdict.
+ * Refund an escrow. Moderator token accounts default to every seat on the panel;
+ * the program pays only the seats that voted, which on a ghost-timeout is none.
  */
 export async function refundEscrow(
   s: EscrowSetup,
   opts?: { moderatorAtas?: PublicKey[] }
 ) {
-  const atas = opts?.moderatorAtas ?? (await panelVoterAtas(s));
+  const atas = opts?.moderatorAtas ?? (await panelAtas(s));
   await program.methods
     .refund()
     .accountsPartial({

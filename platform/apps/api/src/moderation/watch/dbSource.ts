@@ -51,9 +51,13 @@ export function dbWorkSource(): WorkSource {
           SELECT c.id, ${wallet}, 'in_progress', 1, now(), now()
           FROM contracts c
           WHERE c.status = 'submitted'
-            -- The chain has recorded no verdict yet (cached; mod-run re-reads
-            -- it on chain before spending anything).
-            AND c.outcome IS NULL
+            -- Deliberately NOT "and no verdict yet". A panel of three settles on
+            -- the second agreeing vote, so the third moderator arrives at a
+            -- contract that is already decided — and its vote is still recorded
+            -- and still paid. Filtering on the cached outcome would hide that
+            -- work the moment the reconciler caught up, and the seat would never
+            -- be claimed. Re-judging is prevented by the per-seat claim row, and
+            -- a settled escrow leaves 'submitted' anyway.
             -- Nothing to judge until the ciphertext is actually uploaded.
             AND c.deliverable_storage_key IS NOT NULL
             -- A seat on this contract's panel. The legacy column covers rows

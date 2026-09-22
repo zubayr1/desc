@@ -74,9 +74,30 @@ solana program deploy ../desc_moderation/target/deploy/desc_moderation.so \
   --program-id ../desc_moderation/target/deploy/desc_moderation-keypair.json \
   --use-rpc -u localhost
 ```
-Both, every time: started directly, surfpool loads nothing at genesis, so the
-`[[test.genesis]]` entry in `Anchor.toml` (which puts `desc_moderation` on the
-chain for `anchor test`) does not apply here.
+**Except `desc_moderation`, which you cannot deploy here at all.**
+`--legacy-anchor-compatibility` makes surfpool read `Anchor.toml` and load the
+`[[test.genesis]]` entry at **genesis** — and a genesis program is immutable:
+
+```
+$ solana program show AHGBmn… -u localhost
+Authority: 11111111111111111111111111111111   ← none
+Last Deployed In Slot: 0                       ← genesis
+$ solana program deploy …/desc_moderation.so
+Error: Program's authority Some(111…) does not match authority provided …
+```
+
+Genesis reads the `.so` **from disk at startup**, so the way to update
+`desc_moderation` is to rebuild it and **restart surfpool** — never a deploy:
+
+```bash
+cd programs/desc_moderation && anchor build
+# then restart surfpool (fresh chain — see "Reset local state")
+```
+
+A stale `desc_moderation` fails loudly but confusingly: its account list is
+positional, so a client sending the newer list has every account after the added
+one shifted by a slot, and you get `InvalidProgramId` comparing a data account
+against a program id.
 
 Deploying explicitly is the only way your Rust reaches the chain. A validator
 started against an existing ledger silently keeps running the **old** binary —
@@ -148,7 +169,8 @@ docker compose up → surfpool (clock) → deploy BOTH programs → pnpm bootstr
 Restarting surfpool gives a **fresh chain** (no escrows), but Postgres
 **persists** — so the dashboard would show stale contracts pointing at accounts
 that no longer exist. After a validator restart, clear the DB so the two stay in
-sync:
+sync — and redo steps 3-5 plus the moderator registrations, since Config, the
+USDC mint and the `Moderator` accounts are all gone with the chain:
 
 ```bash
 # wipe contract rows (keeps the schema)

@@ -129,13 +129,18 @@ export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
 }
 
 /**
- * The moderators that voted, in panel order — exactly the accounts `release`
- * and `refund` expect as remaining accounts, in exactly that order.
+ * Every moderator seated on the panel, in order — the accounts `release` and
+ * `refund` expect as remaining accounts, one per seat.
  *
- * Empty on a no-mod escrow and on a ghost-timeout, where nobody judged.
+ * Deliberately not "the ones that voted": the voter list grows as votes land, so
+ * a settlement transaction built while the last moderator was still judging
+ * would arrive with the wrong number of accounts and fail. Seats never change
+ * after creation. The program skips seats that did not vote.
+ *
+ * Empty only on a no-mod escrow.
  */
-export async function readPanelVoters(escrow: PublicKey): Promise<PublicKey[]> {
-  return (await readPanel(escrow)).filter((s) => s.vote !== null).map((s) => s.moderator);
+export async function readPanelWallets(escrow: PublicKey): Promise<PublicKey[]> {
+  return (await readPanel(escrow)).map((s) => s.moderator);
 }
 
 /**

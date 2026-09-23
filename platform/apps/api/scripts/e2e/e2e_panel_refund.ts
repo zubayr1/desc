@@ -43,7 +43,8 @@ import {
   pickPanel,
 } from "./_shared";
 
-const USDC_MINT = new PublicKey(process.env.USDC_MINT!);
+import { usdcMint } from "../../src/config/cluster";
+const USDC_MINT = new PublicKey(usdcMint());
 const AMOUNT = 1_000_000_000; // 1000 USDC
 const FUNDING = 1_200_000_000;
 

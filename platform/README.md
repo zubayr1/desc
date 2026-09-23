@@ -130,6 +130,41 @@ USDC_MINT=...
 PDA** (no hot key — the api holds no signing key). Re-running on an existing Config just
 reprints these (incl. the current `USDC_MINT`).
 
+#### Switching environments — one variable
+
+`DESC_ENV` in `apps/api/.env` selects the chain: `local`, `devnet` or `mainnet`.
+Everything public about a cluster — RPC, program ids, and the real USDC mint on
+mainnet — is looked up from `packages/shared/src/clusters.ts`, in version
+control, rather than retyped into a `.env` nobody reviews. `.env` keeps only
+secrets and per-machine values.
+
+```bash
+DESC_ENV=devnet     # the api, the moderators and the web all follow
+```
+
+- **The moderators inherit it** — `mod-run` and `mod-watch` run in the same
+  package, so they read the same cluster.
+- **The web asks the api.** `GET /config/chain` reports the cluster, RPC, mint
+  and program ids, and the frontend fetches it at boot. It has no `VITE_`
+  cluster variables to keep in step, and only `VITE_API_URL` remains — Vite
+  bakes those in at build time, so a frontend built for one cluster could
+  otherwise be served against another.
+- **`RPC_URL` still overrides** the cluster default, for a paid endpoint.
+- **`USDC_MINT` is required on local and devnet** (bootstrap creates it) and
+  **refused on mainnet**, which settles in the one real USDC.
+
+**It refuses to start rather than run a wrong configuration.** With
+`DESC_ENV=mainnet`:
+
+```
+Error: DESC_ENV=mainnet with DESC_MISCHIEF_MODS="mischief" — those moderators
+       submit the OPPOSITE verdict. Refusing to start.
+Error: DESC_ENV=mainnet needs DESC_JUDGE=claude or claude-api — got "manual",
+       which settles contracts by hand.
+Error: DESC_ENV=mainnet settles in EPjFW…TDt1v; USDC_MINT is set to 9F3FD…Hcbg.
+       Remove it — the mint is not an environment variable here.
+```
+
 ### 5. Apply the DB schema
 ```bash
 # in apps/api
@@ -278,7 +313,8 @@ DESC_MISCHIEF_MODS=mischief               # slugs that invert their verdict
 
 `DESC_MISCHIEF_MODS` is what actually makes Mischief misbehave: registering it
 on-chain only creates a normal moderator. Naming a slug here is the opt-in, and
-the judge refuses to start at all if `RPC_URL` looks like mainnet.
+the judge refuses to start at all unless `DESC_ENV` allows test moderators — and
+the api itself will not boot on mainnet while this is set.
 
 > **Register moderators BEFORE creating contracts.** A contract's panel is fixed
 > when it's created, and the committer seals the delivery to those moderators'

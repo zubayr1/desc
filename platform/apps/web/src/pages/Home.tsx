@@ -8,7 +8,7 @@ import { FlowDiagram } from "@/components/landing/FlowDiagram";
 import { Outcomes } from "@/components/landing/Outcomes";
 import { SectionHead } from "@/components/SectionHead";
 import { useFees } from "@/lib/fees";
-import { ESCROW_PROGRAM_ID, MODERATION_PROGRAM_ID, clusterLabel, explorerUrl } from "@/lib/chain";
+import { chain, explorerUrl } from "@/lib/chain";
 import { short } from "@/lib/utils";
 
 export function Home() {
@@ -79,11 +79,11 @@ export function Home() {
         <div className="glass flex flex-wrap items-center justify-between gap-4 px-5 py-4">
           <div className="flex items-center gap-2 text-sm">
             <span className="size-2 rounded-full bg-accent-2 shadow-[0_0_10px_var(--color-accent-2)]" />
-            Live on Solana <b className="font-medium">{clusterLabel}</b>
+            Live on Solana <b className="font-medium">{chain().label}</b>
           </div>
           <div className="flex flex-wrap gap-2">
-            <ProgramId label="Escrow program" id={ESCROW_PROGRAM_ID} />
-            <ProgramId label="Moderation program" id={MODERATION_PROGRAM_ID} />
+            <ProgramId label="Escrow program" id={chain().escrowProgramId} />
+            <ProgramId label="Moderation program" id={chain().moderationProgramId} />
           </div>
         </div>
       </Reveal>

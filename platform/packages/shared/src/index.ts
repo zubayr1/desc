@@ -15,6 +15,10 @@ export * from "./bundle";
 // the moderators; a moderator service decrypts.
 export * from "./crypto";
 
+// Which chain everything points at, selected by DESC_ENV. Cluster facts live in
+// version control rather than in a .env nobody reviews.
+export * from "./clusters";
+
 // ---------------------------------------------------------------------------
 // Primitives / constants
 // ---------------------------------------------------------------------------
@@ -259,6 +263,25 @@ export interface ContractModerator {
    *  `undefined` = never read yet · `null` = seated, has not voted ·
    *  `"pass"`/`"fail"` = its vote. */
   vote?: Outcome | null;
+}
+
+/**
+ * Where the api is pointing (`GET /config/chain`).
+ *
+ * The web gets this at boot instead of carrying its own copy of the cluster in
+ * build-time `VITE_` variables — Vite bakes those in, so a rebuilt frontend was
+ * one more thing to remember when switching environments. One `DESC_ENV` on the
+ * api now moves everything.
+ */
+export interface ChainConfig {
+  env: "local" | "devnet" | "mainnet";
+  /** Solana's own name for the cluster, for explorers and wallet adapters. */
+  cluster: "localnet" | "devnet" | "mainnet-beta";
+  label: string;
+  rpcUrl: Address;
+  usdcMint: Address;
+  escrowProgramId: Address;
+  moderationProgramId: Address;
 }
 
 /** Live fee parameters (`GET /config/fees`). The first three come from the

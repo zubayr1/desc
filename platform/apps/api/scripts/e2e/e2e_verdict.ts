@@ -27,10 +27,11 @@ import {
   signAndSubmit,
 } from "./_shared";
 
+import { rpcUrl, usdcMint } from "../../src/config/cluster";
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
-const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
+const RPC = rpcUrl;
 const BASE = `http://localhost:${process.env.PORT ?? "3000"}`;
-const USDC_MINT = new PublicKey(process.env.USDC_MINT!);
+const USDC_MINT = new PublicKey(usdcMint());
 const AUTHORITY_PATH = expand(
   process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
 );

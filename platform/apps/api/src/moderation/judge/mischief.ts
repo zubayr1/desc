@@ -17,11 +17,12 @@
  * Two guards, because a moderator that inverts verdicts on a live contract would
  * fail honest work and release funds for bad work:
  *   1. it must be named explicitly in `DESC_MISCHIEF_MODS`
- *   2. the RPC must not be mainnet
+ *   2. the cluster must allow test moderators (`DESC_ENV` is not mainnet)
  * Both are checked when the judge is built, so a misconfigured run dies at
  * startup rather than halfway through a contract.
  */
 import type { InputFile } from "@repo/shared";
+import { cluster } from "../../config/cluster";
 import type { Judge, JudgeResult } from "./types";
 
 /**
@@ -38,9 +39,6 @@ const mischiefSlugs = (): string[] =>
 /** Does this moderator invert its verdicts? */
 export const isMischief = (slug: string): boolean => mischiefSlugs().includes(slug);
 
-/** Refuse anything that looks like mainnet, however it is spelled. */
-const looksLikeMainnet = (rpc: string) => /mainnet|api\.mainnet-beta\.solana\.com/i.test(rpc);
-
 /**
  * Wrap a real judge so its verdict comes out backwards.
  *
@@ -54,10 +52,12 @@ export function mischiefJudge(inner: Judge, slug: string): Judge {
       `${slug} is not listed in DESC_MISCHIEF_MODS — refusing to invert its verdicts`
     );
   }
-  const rpc = process.env.RPC_URL ?? "http://127.0.0.1:8899";
-  if (looksLikeMainnet(rpc)) {
+  // Belt and braces: `config/env` already refuses to start the server on a
+  // cluster that does not allow test moderators. This catches a script that
+  // built a judge without going through it.
+  if (!cluster.allowsTestModerators) {
     throw new Error(
-      `refusing to run the Mischief moderator against ${rpc} — it deliberately returns wrong verdicts`
+      `refusing to run the Mischief moderator on ${cluster.label} — it deliberately returns wrong verdicts`
     );
   }
 

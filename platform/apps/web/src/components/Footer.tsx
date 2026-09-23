@@ -1,5 +1,5 @@
 import { ExternalLink } from "lucide-react";
-import { ESCROW_PROGRAM_ID, MODERATION_PROGRAM_ID, REPO_URL, explorerUrl } from "@/lib/chain";
+import { REPO_URL, chain, explorerUrl } from "@/lib/chain";
 import { short } from "@/lib/utils";
 import { Logo } from "./Logo";
 
@@ -12,8 +12,8 @@ export function Footer() {
           desc
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <ProgramLink label="escrow" id={ESCROW_PROGRAM_ID} />
-          <ProgramLink label="moderation" id={MODERATION_PROGRAM_ID} />
+          <ProgramLink label="escrow" id={chain().escrowProgramId} />
+          <ProgramLink label="moderation" id={chain().moderationProgramId} />
           <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-ink">
             GitHub
           </a>

@@ -31,11 +31,12 @@ import {
   moderatorPda,
 } from "../../src/solana/moderation";
 
+import { rpcUrl } from "../../src/config/cluster";
 const _ = anchorPkg; // keep the CJS default import referenced under ESM
 
 export const expand = (p: string) =>
   p.startsWith("~") ? p.replace(/^~/, homedir()) : p;
-export const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
+export const RPC = rpcUrl;
 export const BASE = `http://localhost:${process.env.PORT ?? "3000"}`;
 export const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
 

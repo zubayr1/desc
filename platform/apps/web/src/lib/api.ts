@@ -26,7 +26,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => req<T>(path),
+  get: <T>(path: string, opts?: RequestInit) => req<T>(path, opts),
   post: <T>(path: string, body?: unknown) =>
     req<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) }),
 };

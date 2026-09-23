@@ -31,8 +31,9 @@ import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import idl from "../src/solana/idl/desc_moderation.json";
 import escrowIdl from "../src/solana/idl/desc_escrow.json";
 
+import { rpcUrl } from "../src/config/cluster";
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
-const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
+const RPC = rpcUrl;
 const AUTHORITY_PATH = expand(
   process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
 );

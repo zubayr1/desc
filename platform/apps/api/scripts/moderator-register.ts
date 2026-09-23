@@ -44,8 +44,9 @@ import { modelEnvName } from "../src/moderation/moderatorModel";
 import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import idl from "../src/solana/idl/desc_moderation.json";
 
+import { rpcUrl, usdcMint } from "../src/config/cluster";
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
-const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
+const RPC = rpcUrl;
 const AUTHORITY_PATH = expand(
   process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
 );
@@ -87,9 +88,9 @@ async function main() {
   const feePerKb = intFlag("--fee-per-kb", 0);
   const maxBundleKb = intFlag("--max-bundle-kb", 0);
 
-  const usdcMintStr = process.env.USDC_MINT;
-  if (!usdcMintStr) throw new Error("USDC_MINT not set — run `pnpm bootstrap` first.");
-  const usdcMint = new PublicKey(usdcMintStr);
+  // Fixed on mainnet, from `bootstrap` elsewhere — and it throws with a usable
+  // message rather than a null pubkey if the mint does not exist yet.
+  const mint = new PublicKey(usdcMint());
 
   const connection = new Connection(RPC, "confirmed");
   const admin = loadKeypair(AUTHORITY_PATH); // cold authority = moderation admin
@@ -117,7 +118,7 @@ async function main() {
   const usdcAta = await getOrCreateAssociatedTokenAccount(
     connection,
     admin, // payer for the ATA rent
-    usdcMint,
+    mint,
     wallet.publicKey
   );
 

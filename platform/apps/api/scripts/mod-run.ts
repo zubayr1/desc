@@ -40,7 +40,8 @@ import {
   moderatorPda,
 } from "../src/solana/moderation";
 
-const RPC = process.env.RPC_URL ?? "http://127.0.0.1:8899";
+import { rpcUrl } from "../src/config/cluster";
+const RPC = rpcUrl;
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
 
 // --- parse args (positional ref + outcome; --mod / --note flags) ---

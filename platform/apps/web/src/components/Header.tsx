@@ -3,7 +3,7 @@ import { Link, NavLink } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { ConnectButton } from "./ConnectButton";
 import { Logo } from "./Logo";
-import { clusterLabel } from "@/lib/chain";
+import { chain } from "@/lib/chain";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -97,7 +97,7 @@ export function NetworkPill({ className }: { className?: string }) {
       )}
     >
       <span className="size-1.5 rounded-full bg-accent-2 shadow-[0_0_10px_var(--color-accent-2)]" />
-      {clusterLabel}
+      {chain().label}
     </span>
   );
 }

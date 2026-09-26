@@ -84,6 +84,13 @@ services:
       # Same origin as the site, so no cross-origin requests happen at all.
       CORS_ORIGIN: https://${DESC_DOMAIN:?set your domain}
       # No judge here: the api never judges. Only the moderators do.
+      #
+      # It does need to know WHICH moderators invert their verdicts, though —
+      # `GET /config/fees` marks them so the picker can warn before anyone
+      # chooses one. Without it a test moderator is advertised as a normal one,
+      # which is the dangerous way to get this wrong. Display only; the
+      # inversion happens in the moderator's own container.
+      DESC_MISCHIEF_MODS: ${DESC_MISCHIEF_MODS:-}
     volumes:
       - deliverables:/storage
     healthcheck:

@@ -63,6 +63,21 @@ export function humanizeError(err: unknown): Humanized {
     return { status: 400, message: anchor[1].trim() };
   }
 
+  // A blockhash the cluster does not recognise. Two causes, same fix:
+  //   - it expired (a transaction is valid for ~150 slots, about a minute)
+  //   - the RPC pool is inconsistent — a public endpoint is many nodes behind
+  //     one address, and the node we submitted to had not seen the block the
+  //     node we fetched the blockhash from was on
+  // Neither is the user's balance, and saying so sends them hunting for money
+  // they already have. It is also simply retryable.
+  if (/blockhash not found|block height exceeded/i.test(blob)) {
+    return {
+      status: 409,
+      message:
+        "The transaction expired before it reached the network — nothing was charged. Please try again.",
+    };
+  }
+
   // Any other chain simulation failure
   if (msg.includes("Simulation failed") || (e?.transactionLogs?.length ?? 0) > 0) {
     return {

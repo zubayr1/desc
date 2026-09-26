@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+# The runtime bundle dir and the moderator keys — NOT `src/storage`, which is
+# the driver source. A bare `**/storage` silently excluded that and the image
+# failed to boot.
+apps/api/storage
+apps/api/moderators
+**/*.log
+.git

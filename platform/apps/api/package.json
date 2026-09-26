@@ -31,7 +31,8 @@
     "db:push": "drizzle-kit push",
     "claude-check": "tsx scripts/claude-check.ts",
     "test:judge": "tsx scripts/judge-check.ts",
-    "mod-watch": "tsx scripts/mod-watch.ts"
+    "mod-watch": "tsx scripts/mod-watch.ts",
+    "judge-auth": "tsx scripts/judge-auth.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
@@ -41,6 +42,7 @@
     "@repo/shared": "workspace:*",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.0",
+    "aws4fetch": "^1.0.20",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.3",
     "fastify": "^5.2.1",

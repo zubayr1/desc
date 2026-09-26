@@ -22,6 +22,12 @@ x-moderator: &moderator
   environment: &moderator-env
     DESC_ENV: ${DESC_ENV:-devnet}
     DATABASE_URL: postgres://desc:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/desc
+    # A moderator loads the same config module the api does — it reads the
+    # escrow's Config PDA and the settlement mint to submit a verdict — so it
+    # needs these too, not just the api.
+    CONFIG_AUTHORITY: ${CONFIG_AUTHORITY:?from `pnpm bootstrap`}
+    USDC_MINT: ${USDC_MINT:?from `pnpm bootstrap`}
+    RPC_URL: ${RPC_URL:-}
     # The judge runs on the Claude subscription via Claude Code, headless.
     # `claude setup-token` on a machine you can log in to; never an API key.
     DESC_JUDGE: ${DESC_JUDGE:-claude}

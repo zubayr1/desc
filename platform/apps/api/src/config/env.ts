@@ -60,7 +60,15 @@ const schema = z.object({
   DESC_JUDGE: z.string().optional(),
 });
 
-const raw = schema.parse(process.env);
+// Docker Compose turns an unset `${VAR:-}` into an EMPTY STRING rather than
+// leaving the variable out, and zod's `.optional()` only accepts `undefined` —
+// so an unset optional arrived as "" and failed `.min(1)`, taking the whole
+// process down over a value nobody had set. Treat empty as absent.
+const present = Object.fromEntries(
+  Object.entries(process.env).filter(([, v]) => v !== "")
+);
+
+const raw = schema.parse(present);
 
 export { cluster, descEnv } from "./cluster";
 

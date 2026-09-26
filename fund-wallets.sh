@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 #
-# Fund the localnet test wallets: SOL (fees/rent) + a USDC token account minted full.
+# Fund test wallets: SOL (fees/rent) + a USDC token account minted full.
 # The USDC mint comes from `pnpm bootstrap` and is passed as the first argument.
 #
 #   ./fund-wallets.sh <USDC_MINT> [amount]
+#   SOLANA_URL=devnet WALLETS="<pubkey>" ./fund-wallets.sh <USDC_MINT> 1000
 #
 # - <USDC_MINT>  (required) the dev mint printed by bootstrap
 # - [amount]     (optional) USDC to mint per wallet (default 1_000_000)
+# - SOLANA_URL   (optional) cluster: localhost (default) | devnet
+# - WALLETS      (optional) space-separated pubkeys, replacing the defaults.
+#                Use this for a browser wallet when testing a deployment —
+#                the built-in two only exist on the local validator.
 #
 # The deployer keypair (~/.config/solana/id.json) is the fee payer AND mint
 # authority. spl-token needs --fee-payer explicitly (it ignores `solana config`
@@ -21,13 +26,25 @@ if [[ -z "$USDC_MINT" ]]; then
 fi
 
 FEE_PAYER="$HOME/.config/solana/id.json"
-URL="localhost"
-SOL=2
+URL="${SOLANA_URL:-localhost}"
+# A local validator's faucet is endless; devnet's is rate-limited and shared,
+# so ask it for far less and expect a refusal now and then.
+if [[ -n "${SOL_PER_WALLET:-}" ]]; then SOL="$SOL_PER_WALLET"
+elif [[ "$URL" == "localhost" ]]; then SOL=2
+else SOL=0.2
+fi
 
-WALLETS=(
-  tvewhNeSPrqRXRMGSiKRdRZVo2yHjHBHLhfL2QfkUav
-  DYD14Q9hked8pWxFHPLpJdTcXpSX4S4in9FYd82nnfFE
-)
+if [[ -n "${WALLETS:-}" ]]; then
+  read -r -a WALLETS <<< "$WALLETS"
+else
+  WALLETS=(
+    tvewhNeSPrqRXRMGSiKRdRZVo2yHjHBHLhfL2QfkUav
+    DYD14Q9hked8pWxFHPLpJdTcXpSX4S4in9FYd82nnfFE
+  )
+fi
+
+echo "cluster: $URL · mint: $USDC_MINT · ${#WALLETS[@]} wallet(s)"
+echo
 
 for w in "${WALLETS[@]}"; do
   echo "== funding $w =="

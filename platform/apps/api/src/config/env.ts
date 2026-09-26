@@ -33,8 +33,27 @@ const schema = z.object({
   /** Bearer token gating the /admin/* routes. If unset, admin is fail-closed
    *  (every admin request is rejected). Set a long random value in prod. */
   ADMIN_TOKEN: z.string().min(1).optional(),
-  /** Local object-storage dir for deliverable bundles (dev). Swap for S3/R2. */
+  /**
+   * Where deliverable bundles are stored.
+   *
+   * `fs` is the local filesystem — fine on a dev box or a server with a real
+   * disk. On a container platform the filesystem is ephemeral, so a restart
+   * would silently lose every deliverable and moderators would have nothing to
+   * judge: use `s3` there.
+   */
+  STORAGE_DRIVER: z.enum(["fs", "s3"]).default("fs"),
+  /** `fs` driver: where the bundles go. */
   STORAGE_DIR: z.string().default("./storage"),
+  /** `s3` driver: any S3-compatible endpoint (R2, S3, B2, MinIO). */
+  S3_ENDPOINT: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  /** R2 ignores it, but SigV4 must still sign a region. */
+  S3_REGION: z.string().default("auto"),
+  /** Browser origins allowed to call the api. Comma-separated; unset reflects
+   *  any origin, which is right for local development and wrong in production. */
+  CORS_ORIGIN: z.string().optional(),
   /** Moderator slugs that submit the OPPOSITE verdict. See judge/mischief.ts. */
   DESC_MISCHIEF_MODS: z.string().optional(),
   /** claude | claude-api | anything else (manual). See moderation/judge. */
@@ -76,6 +95,22 @@ function assertSafe() {
   }
 }
 assertSafe();
+
+/**
+ * A half-configured object store fails at the worst moment — when a committer
+ * uploads a deliverable, long after the deploy looked healthy. Check it at
+ * startup instead.
+ */
+if (raw.STORAGE_DRIVER === "s3") {
+  const missing = (
+    ["S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const
+  ).filter((k) => !raw[k]);
+  if (missing.length) {
+    throw new Error(
+      `STORAGE_DRIVER=s3 needs ${missing.join(", ")} — set them or use STORAGE_DRIVER=fs.`
+    );
+  }
+}
 
 export const env = {
   ...raw,

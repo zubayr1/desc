@@ -83,6 +83,26 @@ function loadKeypair(path: string): Keypair {
   return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
 }
 
+/**
+ * Top the new moderator up with gas for its verdict transactions.
+ *
+ * Tries the faucet and gives up gracefully. It does NOT fall back to moving
+ * funds from the admin wallet: a script that quietly spends the cold key is a
+ * problem on mainnet, where there is no faucet and every such transfer is real
+ * money. Fund it yourself when this says so — registration has already
+ * succeeded by then, and the wallet address is printed below.
+ */
+async function fundGas(connection: Connection, wallet: PublicKey): Promise<boolean> {
+  try {
+    const sig = await connection.requestAirdrop(wallet, GAS_SOL * LAMPORTS_PER_SOL);
+    await connection.confirmTransaction(sig, "confirmed");
+    return true;
+  } catch {
+    // Rate-limited (devnet caps airdrops per IP) or no faucet at all (mainnet).
+    return false;
+  }
+}
+
 async function main() {
   const baseBps = intFlag("--base-bps");
   const feePerKb = intFlag("--fee-per-kb", 0);
@@ -110,11 +130,11 @@ async function main() {
   writeFileSync(identityPath, identity);
 
   // 2. fund the wallet: SOL for gas + a USDC token account for rewards
-  const airdrop = await connection.requestAirdrop(
-    wallet.publicKey,
-    GAS_SOL * LAMPORTS_PER_SOL
-  );
-  await connection.confirmTransaction(airdrop, "confirmed");
+  //
+  // Never fatal: the wallet file is already on disk, so throwing here would
+  // leave an orphan keypair and an unregistered moderator, and re-running would
+  // mint a different wallet. Registration continues; you fund it by hand.
+  const funded = await fundGas(connection, wallet.publicKey);
   const usdcAta = await getOrCreateAssociatedTokenAccount(
     connection,
     admin, // payer for the ATA rent
@@ -152,6 +172,13 @@ async function main() {
   console.log(`\nRegistered moderator "${label}" on-chain — now active.`);
   console.log("  moderator PDA   :", moderator.toBase58());
   console.log("  wallet (signer) :", wallet.publicKey.toBase58(), `→ ${walletPath}`);
+  console.log(
+    "  gas             :",
+    funded
+      ? `${GAS_SOL} SOL (airdrop)`
+      : `NONE — the faucet refused. Send it ~${GAS_SOL} SOL or it cannot sign verdicts:\n` +
+        `                    solana transfer ${wallet.publicKey.toBase58()} ${GAS_SOL} --allow-unfunded-recipient`
+  );
   console.log("  USDC account    :", usdcAta.address.toBase58());
   console.log("  recipient (age) :", recipient);
   console.log(

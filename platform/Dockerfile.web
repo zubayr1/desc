@@ -1,0 +1,30 @@
+# The web app, and the reverse proxy in front of everything.
+#
+# One image: the built SPA plus Caddy, which also terminates TLS and forwards
+# /api to the api container. Fewer moving parts than a separate static host, and
+# it puts the site and the api on one origin (see Caddyfile).
+#
+#   docker build -f platform/Dockerfile.web -t desc-web platform
+
+FROM node:24-alpine AS build
+WORKDIR /app
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --filter web...
+
+COPY packages/shared ./packages/shared
+COPY apps/web ./apps/web
+
+# The ONLY build-time setting the frontend has. Relative, because the api is
+# behind the same hostname — everything else (cluster, RPC, mint, program ids)
+# the app fetches from /api/config/chain at boot.
+ENV VITE_API_URL=/api
+RUN pnpm --filter web build
+
+FROM caddy:2-alpine AS runtime
+COPY --from=build /app/apps/web/dist /srv
+COPY Caddyfile /etc/caddy/Caddyfile
+EXPOSE 80 443

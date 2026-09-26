@@ -1,0 +1,46 @@
+# A moderator worker: one `mod-watch` loop, judging with the Claude subscription.
+#
+# Separate from the api image because it needs Claude Code installed and the
+# api does not, and because it scales differently — one container per moderator
+# on the panel, each with its own wallet, model and slug.
+#
+# Authentication is a TOKEN, not an interactive login: `claude setup-token` on a
+# machine you can log in to, then pass the result as CLAUDE_CODE_OAUTH_TOKEN.
+# Nothing here ever prompts.
+#
+#   docker build -f platform/Dockerfile.moderator -t desc-mod platform
+#   docker run --rm -e CLAUDE_CODE_OAUTH_TOKEN=... desc-mod pnpm judge-auth
+#   docker run -d  -e CLAUDE_CODE_OAUTH_TOKEN=... desc-mod pnpm mod-watch --mod hikaru-mod-claude-haiku
+
+FROM node:24-alpine AS deps
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json apps/api/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --filter api...
+
+FROM node:24-alpine AS runtime
+WORKDIR /app
+RUN corepack enable
+ENV NODE_ENV=production
+
+# Claude Code itself. The judge looks for `claude` on PATH (then CLAUDE_BIN),
+# spawns it headless, and reads a JSON verdict back.
+RUN npm install -g @anthropic-ai/claude-code && claude --version
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY package.json pnpm-workspace.yaml ./
+COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
+
+WORKDIR /app/apps/api
+
+# The moderator's wallet and age identity are mounted or injected at runtime,
+# never baked in: whoever holds them can sign that moderator's verdicts and
+# decrypt everything sealed to it.
+VOLUME ["/app/apps/api/moderators"]
+
+CMD ["pnpm", "mod-watch"]

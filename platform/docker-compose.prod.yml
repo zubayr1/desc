@@ -1,0 +1,132 @@
+# The whole platform on one host.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Six services: Postgres, the api, the web (which also terminates TLS and
+# proxies /api), and one moderator per seat on the panel. A single box runs the
+# lot for the price of a coffee, and every service here is a plain container —
+# nothing ties this to one hosting provider.
+#
+# The moderators are separate services, not threads in the api: each holds a
+# DIFFERENT wallet and age identity, judges with a different model, and must be
+# able to fail, restart or be stopped without touching the others. That is also
+# what makes "no single party decides" true at runtime and not just on-chain.
+
+x-moderator: &moderator
+  build:
+    context: .
+    dockerfile: Dockerfile.moderator
+  restart: unless-stopped
+  depends_on:
+    postgres: { condition: service_healthy }
+  environment: &moderator-env
+    DESC_ENV: ${DESC_ENV:-devnet}
+    DATABASE_URL: postgres://desc:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/desc
+    # The judge runs on the Claude subscription via Claude Code, headless.
+    # `claude setup-token` on a machine you can log in to; never an API key.
+    DESC_JUDGE: ${DESC_JUDGE:-claude}
+    CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?run `claude setup-token`}
+    MOD_DIR: /moderators
+    # `fs` storage: the moderator reads the SAME deliverable files the api
+    # wrote, so it mounts the same volume.
+    STORAGE_DRIVER: ${STORAGE_DRIVER:-fs}
+    STORAGE_DIR: /storage
+    MODEL_OLYMPUS_MOD_CLAUDE_OPUS: ${MODEL_OLYMPUS_MOD_CLAUDE_OPUS:-claude-opus-5}
+    MODEL_SONGOKU_MOD_CLAUDE_SONNET: ${MODEL_SONGOKU_MOD_CLAUDE_SONNET:-claude-sonnet-5}
+    MODEL_HIKARU_MOD_CLAUDE_HAIKU: ${MODEL_HIKARU_MOD_CLAUDE_HAIKU:-claude-haiku-4-5}
+    MODEL_MISCHIEF: ${MODEL_MISCHIEF:-claude-haiku-4-5}
+  volumes:
+    # Read-only: a moderator needs its keys, it never writes them.
+    - ./apps/api/moderators/${MOD_SET:-devnet}:/moderators:ro
+    - deliverables:/storage
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: desc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: desc
+    volumes:
+      - desc_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U desc"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Deliberately not published: only other containers reach it.
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DESC_ENV: ${DESC_ENV:-devnet}
+      DATABASE_URL: postgres://desc:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/desc
+      CONFIG_AUTHORITY: ${CONFIG_AUTHORITY:?from `pnpm bootstrap`}
+      USDC_MINT: ${USDC_MINT:?from `pnpm bootstrap`}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set a long random value}
+      RPC_URL: ${RPC_URL:-}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-fs}
+      STORAGE_DIR: /storage
+      # Same origin as the site, so no cross-origin requests happen at all.
+      CORS_ORIGIN: https://${DESC_DOMAIN:?set your domain}
+      # No judge here: the api never judges. Only the moderators do.
+    volumes:
+      - deliverables:/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      DESC_DOMAIN: ${DESC_DOMAIN:?set your domain}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # The certificate and its renewals. Lose this and Let's Encrypt will
+      # rate-limit you for re-issuing too often.
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # --- the panel: one container per moderator -------------------------------
+  mod-olympus:
+    <<: *moderator
+    command: ["pnpm", "mod-watch", "--mod", "olympus-mod-claude-opus"]
+
+  mod-songoku:
+    <<: *moderator
+    command: ["pnpm", "mod-watch", "--mod", "songoku-mod-claude-sonnet"]
+
+  mod-hikaru:
+    <<: *moderator
+    command: ["pnpm", "mod-watch", "--mod", "hikaru-mod-claude-haiku"]
+
+  # Judges honestly and then submits the OPPOSITE verdict, so a three-moderator
+  # panel can be seen outvoting a bad panellist. ONLY this service gets the flag
+  # that makes it misbehave, and `DESC_ENV=mainnet` refuses to start with it set.
+  mod-mischief:
+    <<: *moderator
+    environment:
+      <<: *moderator-env
+      DESC_MISCHIEF_MODS: mischief
+    command: ["pnpm", "mod-watch", "--mod", "mischief"]
+
+volumes:
+  desc_pg:
+  deliverables:
+  caddy_data:
+  caddy_config:

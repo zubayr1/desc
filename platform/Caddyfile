@@ -1,0 +1,27 @@
+# TLS, static site and api on ONE origin.
+#
+# Serving the web and the api from the same hostname is not just tidy: a browser
+# on https:// refuses to call an http:// api (mixed content), and a separate api
+# host would need its own certificate and a CORS allow-list. Same origin, and
+# both problems stop existing.
+#
+# Caddy gets and renews the certificate itself — no certbot, no cron.
+
+{$DESC_DOMAIN} {
+	encode zstd gzip
+
+	# /api/* → the api, with the prefix stripped: the api serves /config/chain,
+	# the browser asks for /api/config/chain.
+	handle_path /api/* {
+		reverse_proxy api:3000
+	}
+
+	# Everything else is the single-page app. Unknown paths fall back to
+	# index.html so client-side routes (/c/<token>, /contracts/<id>) survive a
+	# reload rather than 404ing.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

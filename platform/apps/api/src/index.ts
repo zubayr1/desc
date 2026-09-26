@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import { env } from "./config/env";
+import { cluster, env } from "./config/env";
 import { pool } from "./db/client";
 import { program, platformConfigPda } from "./solana/program";
 import { registerContractRoutes } from "./routes/contracts";
@@ -10,11 +10,19 @@ import { registerAdminRoutes } from "./routes/admin";
 import { registerConfigRoutes } from "./routes/config";
 import { humanizeError } from "./errors";
 import { startReconciler } from "./contracts/reconciler";
+import { describe as describeStorage } from "./storage";
 
 const app = Fastify({ logger: true });
 
 // Allow the web/admin frontends (different origin) to call the api.
-await app.register(cors, { origin: true });
+//
+// `CORS_ORIGIN` is a comma-separated allow-list. Unset reflects whatever origin
+// asks, which is convenient locally and wrong once the api is on the internet:
+// set it to the deployed frontend's URL.
+const corsOrigins = env.CORS_ORIGIN?.split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+await app.register(cors, { origin: corsOrigins?.length ? corsOrigins : true });
 
 // Basic DoS guard: per-IP request cap. Default applies to every route; the
 // draft-creating POST /contracts gets a tighter override (see routes/contracts).
@@ -32,14 +40,32 @@ registerLinkRoutes(app);
 registerAdminRoutes(app);
 registerConfigRoutes(app);
 
-app.get("/health", async () => {
+/**
+ * Liveness: is the process up?
+ *
+ * Deliberately dependency-free. Hosting platforms poll a health path and refuse
+ * to route traffic — or roll the deploy back — when it fails, so a probe that
+ * touches the database and the chain would mark the api dead over a slow RPC or
+ * a database still waking. Worse, it would fail before `bootstrap` has run,
+ * making a first deploy impossible. `/health/deep` is the one that checks
+ * everything, for humans.
+ */
+app.get("/health", async () => ({
+  status: "ok",
+  env: cluster.env,
+  storage: describeStorage(),
+}));
+
+app.get("/health/deep", async () => {
   // DB reachable?
   await pool.query("select 1");
   // Chain reachable + config present?
   const cfg = await program.account.config.fetch(platformConfigPda);
   return {
     status: "ok",
+    env: cluster.env,
     rpc: env.RPC_URL,
+    storage: describeStorage(),
     config: {
       address: platformConfigPda.toBase58(),
       authority: cfg.authority.toBase58(),

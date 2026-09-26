@@ -1,7 +1,11 @@
 
-# local deliverable storage (dev)
-storage/
+# local deliverable storage (dev) — the RUNTIME dir only.
+# A bare `storage/` also matched `apps/api/src/storage/`, so the storage driver
+# itself was never committed and a fresh clone could not start.
 apps/api/storage/
 
 # decrypt CLI plaintext output (dev only)
 decrypted/
+
+# production secrets — the example is committed, the filled-in one never is
+.env.production

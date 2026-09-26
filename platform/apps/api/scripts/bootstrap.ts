@@ -37,7 +37,7 @@ import type { DescEscrow } from "../src/solana/idl/desc_escrow";
 import idl from "../src/solana/idl/desc_escrow.json";
 import moderationIdl from "../src/solana/idl/desc_moderation.json";
 
-import { rpcUrl } from "../src/config/cluster";
+import { cluster, descEnv, rpcUrl } from "../src/config/cluster";
 const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
 
 const RPC = rpcUrl;
@@ -86,21 +86,60 @@ async function main() {
   );
   const settlementAuthority = verdictAuthorityPda(authority.publicKey);
 
-  // Idempotent: initialize_config is one-shot — if the Config exists, just reprint.
+  // Idempotent: initialize_config is one-shot — if the Config exists, check it
+  // still points at a treasury for the right mint, and reprint.
   const existing = await program.account.config.fetchNullable(config);
   if (existing) {
     const treasuryAcc = await getAccount(connection, existing.treasury);
+    const want = cluster.usdcMint;
+
+    // The treasury is a token account, so it holds exactly ONE mint. If the
+    // cluster's settlement mint has changed under it — moving devnet from a
+    // stand-in to Circle's real USDC, say — every `release` would fail on
+    // `treasury.mint == escrow.mint` with the money already in the vault. Fix
+    // it here rather than leaving a trap for the first settlement.
+    if (want && treasuryAcc.mint.toBase58() !== want) {
+      console.log(
+        `Treasury holds ${treasuryAcc.mint.toBase58()} but ${descEnv} settles in ${want}.`
+      );
+      const fixed = await getOrCreateAssociatedTokenAccount(
+        connection,
+        authority,
+        new PublicKey(want),
+        authority.publicKey
+      );
+      await program.methods
+        .updateConfig(null, fixed.address, null, null, null, null)
+        .accountsPartial({ authority: authority.publicKey, config })
+        .rpc();
+      console.log("  repointed treasury  :", fixed.address.toBase58());
+    }
+
+    const finalCfg = await program.account.config.fetch(config);
+    const finalTreasury = await getAccount(connection, finalCfg.treasury);
     console.log("Config already initialized — nothing else to do.");
     console.log("  authority (cold)    :", authority.publicKey.toBase58());
     console.log("  config              :", config.toBase58());
-    console.log("  settlement authority:", existing.settlementAuthority.toBase58());
-    console.log("  treasury            :", existing.treasury.toBase58());
-    console.log("  USDC_MINT=" + treasuryAcc.mint.toBase58());
+    console.log("  settlement authority:", finalCfg.settlementAuthority.toBase58());
+    console.log("  treasury            :", finalCfg.treasury.toBase58());
+    console.log("  min amount          :", finalCfg.minAmount.toString());
+    console.log("  fee floor           :", finalCfg.protocolFeeMin.toString());
+    console.log(
+      cluster.usdcMint
+        ? `  mint                : ${cluster.usdcMint} (fixed for ${descEnv} — do NOT set USDC_MINT)`
+        : "  USDC_MINT=" + finalTreasury.mint.toBase58()
+    );
     return;
   }
 
-  // First-time setup: dev USDC mint + treasury + initialize_config.
-  const mint = await createMint(connection, authority, authority.publicKey, null, 6);
+  // First-time setup. On a cluster with a real settlement currency we use it;
+  // only localnet gets a stand-in, because there is nothing else there.
+  const mint = cluster.usdcMint
+    ? new PublicKey(cluster.usdcMint)
+    : await createMint(connection, authority, authority.publicKey, null, 6);
+  if (cluster.usdcMint) {
+    console.log(`Settling in ${descEnv}'s own USDC: ${cluster.usdcMint}`);
+  }
   const treasury = await getOrCreateAssociatedTokenAccount(
     connection,
     authority,
@@ -133,6 +172,11 @@ async function main() {
   console.log("  treasury            :", treasury.address.toBase58());
   console.log("\nSet these in apps/api/.env:");
   console.log("  CONFIG_AUTHORITY=" + authority.publicKey.toBase58());
+  if (cluster.usdcMint) {
+    console.log(
+      `  (no USDC_MINT — ${descEnv} settles in ${cluster.usdcMint}, pinned in clusters.ts)`
+    );
+  }
   console.log("  USDC_MINT=" + mint.toBase58());
   console.log("\nNext: deploy desc_moderation + `pnpm moderation-init` (the PDA above");
   console.log("can sign verdicts once the ModerationConfig is initialized).");

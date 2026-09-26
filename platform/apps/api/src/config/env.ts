@@ -95,14 +95,22 @@ function assertSafe() {
         `"${raw.DESC_JUDGE ?? "unset"}", which settles contracts by hand.`
     );
   }
-  if (raw.USDC_MINT && raw.USDC_MINT !== cluster.usdcMint) {
-    throw new Error(
-      `DESC_ENV=${descEnv} settles in ${cluster.usdcMint}; USDC_MINT is set to ` +
-        `${raw.USDC_MINT}. Remove it — the mint is not an environment variable here.`
-    );
-  }
 }
 assertSafe();
+
+/**
+ * A cluster with a pinned mint must not be quietly pointed at another one.
+ *
+ * Checked separately from the mainnet guards above, because devnet has a fixed
+ * mint too (Circle's real devnet USDC) — and a stale `USDC_MINT` left over from
+ * localnet would otherwise send every contract to a token nobody else holds.
+ */
+if (cluster.usdcMint && raw.USDC_MINT && raw.USDC_MINT !== cluster.usdcMint) {
+  throw new Error(
+    `DESC_ENV=${descEnv} settles in ${cluster.usdcMint}; USDC_MINT is set to ` +
+      `${raw.USDC_MINT}. Remove it — the mint is not an environment variable here.`
+  );
+}
 
 /**
  * A half-configured object store fails at the worst moment — when a committer

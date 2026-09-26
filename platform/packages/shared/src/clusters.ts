@@ -26,12 +26,12 @@ export interface ClusterConfig {
   rpcUrl: string;
   escrowProgramId: string;
   moderationProgramId: string;
-  /**
+   /**
    * The settlement mint, where it is a fixed public fact.
    *
-   * `null` on local and devnet: there is no real USDC there, so `bootstrap`
-   * creates a dev mint and its address goes in `.env`. On mainnet it is the
-   * one real USDC and must never come from an environment variable — that is
+   * `null` only on localnet, where no real USDC exists and `bootstrap` creates
+   * a stand-in whose address goes in `.env`. Everywhere else it is pinned here
+   * rather than configured: the mint decides what the money IS, and it is
    * exactly the value you do not want a typo in.
    */
   usdcMint: string | null;
@@ -41,6 +41,15 @@ export interface ClusterConfig {
 
 /** Canonical USDC on Solana mainnet. */
 const MAINNET_USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+/**
+ * Circle's own USDC on devnet — the real article, 6 decimals, classic SPL Token
+ * program. Anyone can top up a wallet from faucet.circle.com (20 USDC per two
+ * hours), which is why it beats a mint we control: a stranger can try the app
+ * without us funding them first. The trade is that we are NOT the mint
+ * authority here and cannot top anyone up.
+ */
+const DEVNET_USDC = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
 // The programs deploy under the same keypairs everywhere today, so the ids do
 // not vary. They are listed per cluster anyway: the day one differs, this is
@@ -66,7 +75,7 @@ export const CLUSTERS: Record<DescEnv, ClusterConfig> = {
     rpcUrl: "https://api.devnet.solana.com",
     escrowProgramId: ESCROW_PROGRAM_ID,
     moderationProgramId: MODERATION_PROGRAM_ID,
-    usdcMint: null,
+    usdcMint: DEVNET_USDC,
     allowsTestModerators: true,
   },
   mainnet: {

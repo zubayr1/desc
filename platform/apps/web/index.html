@@ -14,7 +14,36 @@
       rel="stylesheet"
     />
     <meta name="theme-color" content="#030305" />
-    <title>desc — escrow on Solana, judged by AI</title>
+
+    <title>desc — bounty escrow on Solana, judged by AI</title>
+    <meta
+      name="description"
+      content="Bounty escrow that can actually decide. USDC locked on Solana, released by a panel of AI moderators judging the delivered work against criteria both sides agreed up front."
+    />
+
+    <!-- Link previews. Absolute urls on purpose: a scraper has no page context
+         to resolve a relative path against. %SITE_URL% is filled at build time
+         from DESC_DOMAIN (see vite.config.ts). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="desc" />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:title" content="desc — bounty escrow on Solana, judged by AI" />
+    <meta
+      property="og:description"
+      content="USDC locked on Solana, released by a panel of AI moderators judging the delivered work against criteria both sides agreed up front."
+    />
+    <meta property="og:image" content="%SITE_URL%/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="desc — bounty escrow that can actually decide" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="desc — bounty escrow on Solana, judged by AI" />
+    <meta
+      name="twitter:description"
+      content="USDC locked on Solana, released by a panel of AI moderators judging the delivered work against criteria both sides agreed up front."
+    />
+    <meta name="twitter:image" content="%SITE_URL%/og.png" />
   </head>
   <body>
     <div id="root"></div>

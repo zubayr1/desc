@@ -18,10 +18,17 @@ RUN pnpm install --frozen-lockfile --filter web...
 COPY packages/shared ./packages/shared
 COPY apps/web ./apps/web
 
-# The ONLY build-time setting the frontend has. Relative, because the api is
-# behind the same hostname — everything else (cluster, RPC, mint, program ids)
-# the app fetches from /api/config/chain at boot.
+# The ONLY build-time settings the frontend has. VITE_API_URL is relative,
+# because the api is behind the same hostname — everything else (cluster, RPC,
+# mint, program ids) the app fetches from /api/config/chain at boot.
+#
+# DESC_DOMAIN is the exception that cannot be deferred to runtime: link previews
+# need ABSOLUTE urls in the HTML, because a scraper reading the page has no
+# context to resolve a relative one against. Same variable as the certificate
+# and the api's CORS origin, so the site still moves as one.
+ARG DESC_DOMAIN
 ENV VITE_API_URL=/api
+ENV DESC_DOMAIN=${DESC_DOMAIN}
 RUN pnpm --filter web build
 
 FROM caddy:2-alpine AS runtime

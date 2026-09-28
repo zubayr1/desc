@@ -104,6 +104,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        # Baked into the HTML for link previews — see Dockerfile.web.
+        DESC_DOMAIN: ${DESC_DOMAIN:?set your domain}
     restart: unless-stopped
     depends_on: [api]
     environment:

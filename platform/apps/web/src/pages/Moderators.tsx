@@ -1,4 +1,5 @@
 import { ExternalLink, Loader2 } from "lucide-react";
+import { ModeratorWaitlist } from "@/components/ModeratorWaitlist";
 import { Reveal } from "@/components/landing/Reveal";
 import { SectionHead } from "@/components/SectionHead";
 import { useFees } from "@/lib/fees";
@@ -109,6 +110,10 @@ export function Moderators() {
           </Reveal>
         ))}
       </section>
+
+      {/* Third-party operators. Renders nothing unless the api says the
+          waitlist is open, so it cannot break this page. */}
+      <ModeratorWaitlist />
     </div>
   );
 }

@@ -163,3 +163,23 @@ export const moderationClaims = pgTable(
 );
 
 export type ModerationClaimRow = typeof moderationClaims.$inferSelect;
+
+/**
+ * Moderator waitlist — people who want to operate their own moderator when
+ * registration opens.
+ *
+ * An island: references nothing, referenced by nothing, read by nothing in the
+ * contract lifecycle. `contact` is personal data, so no route ever returns it —
+ * read it with psql when you want to email someone.
+ */
+export const moderatorWaitlist = pgTable("moderator_waitlist", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  /** Lower-cased on the way in, so one address signs up once. */
+  contact: text("contact").notNull().unique(),
+  model: text("model"),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

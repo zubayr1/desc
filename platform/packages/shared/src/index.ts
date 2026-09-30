@@ -353,3 +353,22 @@ export interface RecordVerdictRequest {
   /** Optional reviewer note for the audit trail. */
   note?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Moderator waitlist (off-chain only — nothing here touches an escrow)
+// ---------------------------------------------------------------------------
+
+/** Someone who wants to run their own moderator once registration opens. */
+export interface ModeratorWaitlistRequest {
+  name: string;
+  /** Email or handle. Never returned by any route. */
+  contact: string;
+  /** What they'd judge with — "Claude Sonnet 5", a fine-tune. */
+  model?: string;
+  note?: string;
+}
+
+/** `GET|POST /waitlist/moderators` — the only thing the page needs back. */
+export interface ModeratorWaitlistCount {
+  count: number;
+}

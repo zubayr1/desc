@@ -8,6 +8,7 @@ import { registerContractRoutes } from "./routes/contracts";
 import { registerLinkRoutes } from "./routes/links";
 import { registerAdminRoutes } from "./routes/admin";
 import { registerConfigRoutes } from "./routes/config";
+import { registerWaitlistRoutes } from "./routes/waitlist";
 import { humanizeError } from "./errors";
 import { startReconciler } from "./contracts/reconciler";
 import { describe as describeStorage } from "./storage";
@@ -39,6 +40,7 @@ registerContractRoutes(app);
 registerLinkRoutes(app);
 registerAdminRoutes(app);
 registerConfigRoutes(app);
+registerWaitlistRoutes(app);
 
 /**
  * Liveness: is the process up?

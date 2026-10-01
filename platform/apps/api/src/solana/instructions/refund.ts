@@ -9,6 +9,7 @@ import {
   platformConfigPda,
   usdcMint,
   panelPda,
+  panelSettlementAccounts,
   readPanelWallets,
 } from "../program";
 import { finalizeUnsigned } from "../buildTransaction";
@@ -65,8 +66,12 @@ export async function buildRefund(p: BuildRefundParams): Promise<string> {
       treasury: p.treasury,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
+    // Two per seat: token accounts, then reputation PDAs (see `pay_panel`).
+    // Every seat's reputation account must already exist — `moderator-register`
+    // creates it, and a missing one makes settlement fail rather than be
+    // skipped, because money must not move on a half-recorded panel.
     .remainingAccounts(
-      seatTokenAccounts.map((pubkey) => ({
+      panelSettlementAccounts(seats, seatTokenAccounts).map((pubkey) => ({
         pubkey,
         isSigner: false,
         isWritable: true,

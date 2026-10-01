@@ -1,6 +1,12 @@
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import { CONTRACT_STATUSES, OUTCOMES, type ContractStatus, type Outcome } from "@repo/shared";
+import {
+  CONTRACT_STATUSES,
+  OUTCOMES,
+  type ContractStatus,
+  type ModeratorReputation,
+  type Outcome,
+} from "@repo/shared";
 import type { DescEscrow } from "./idl/desc_escrow";
 import idl from "./idl/desc_escrow.json";
 import { env } from "../config/env";
@@ -38,6 +44,14 @@ export const escrowPda = (initiator: PublicKey, contractId: Buffer) =>
 export const panelPda = (escrow: PublicKey) =>
   PublicKey.findProgramAddressSync(
     [Buffer.from("panel"), escrow.toBuffer()],
+    programId
+  )[0];
+
+/** A moderator's lifetime reputation record. One per moderator wallet, created
+ *  once by `init_moderator_reputation` and written by every settlement. */
+export const moderatorReputationPda = (moderator: PublicKey) =>
+  PublicKey.findProgramAddressSync(
+    [Buffer.from("mod_rep"), moderator.toBuffer()],
     programId
   )[0];
 
@@ -197,4 +211,50 @@ export async function readEscrows(
     });
   }
   return out;
+}
+
+/**
+ * Read several moderators' reputation records in one round-trip, keyed by
+ * moderator wallet.
+ *
+ * A moderator with no entry has no account yet — either it registered before
+ * reputation shipped and has not been backfilled, or it has simply never been
+ * created. Callers must render that as "no record yet" and never as zero, which
+ * would read as a moderator that has judged and always been wrong.
+ */
+export async function readModeratorReputations(
+  moderators: PublicKey[]
+): Promise<Map<string, ModeratorReputation>> {
+  const out = new Map<string, ModeratorReputation>();
+  if (!moderators.length) return out;
+
+  const accs = await program.account.moderatorReputation.fetchMultiple(
+    moderators.map(moderatorReputationPda)
+  );
+  accs.forEach((acc, i) => {
+    if (!acc) return;
+    out.set(moderators[i].toBase58(), {
+      verdictsCast: acc.verdictsCast,
+      panelVerdicts: acc.panelVerdicts,
+      majorityAgreements: acc.majorityAgreements,
+      failVotes: acc.failVotes,
+    });
+  });
+  return out;
+}
+
+/**
+ * The accounts `release` and `refund` take as remaining accounts: TWO per panel
+ * seat, in seat order — every seat's token account first, then every seat's
+ * reputation PDA. Mirrors `pay_panel`, which splits the slice at the seat count.
+ *
+ * Per SEAT and not per voter: the voter list grows as votes land, so a list
+ * sized to the voters would be the wrong length by the time the transaction
+ * reached the chain. The program skips seats that did not vote.
+ */
+export function panelSettlementAccounts(
+  seats: PublicKey[],
+  seatTokenAccounts: PublicKey[]
+): PublicKey[] {
+  return [...seatTokenAccounts, ...seats.map(moderatorReputationPda)];
 }

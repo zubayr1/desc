@@ -25,8 +25,9 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel};
 /// and for escrows created before the field existed, which reproduces the older
 /// fee-on-Pass-only behaviour exactly.
 ///
-/// The voting moderators' token accounts arrive as `remaining_accounts`: one per
-/// VOTED seat, in panel order (see `pay_panel`). A ghost-timeout pays nobody and
+/// The panel's accounts arrive as `remaining_accounts`: two per SEAT, in panel
+/// order — every seat's token account first, then every seat's
+/// `ModeratorReputation` PDA (see `pay_panel`). A ghost-timeout pays nobody and
 /// passes none.
 ///
 /// Vault and panel are closed (both rents -> initiator); escrow kept as a
@@ -88,7 +89,7 @@ pub struct Refund<'info> {
 }
 
 impl<'info> Refund<'info> {
-    pub fn refund(&mut self, moderator_token_accounts: &[AccountInfo<'info>]) -> Result<()> {
+    pub fn refund(&mut self, panel_accounts: &'info [AccountInfo<'info>]) -> Result<()> {
         // A stale program reading a newer account decodes silently and wrongly.
         self.escrow.check_version()?;
         self.config.check_version()?;
@@ -116,12 +117,13 @@ impl<'info> Refund<'info> {
         // treasury keeps the verification fee; the rest — including the fees of
         // any moderator that never voted — goes back to the initiator. On a
         // ghost-timeout the full vault does.
-        // Pays every moderator that voted. Zero on a ghost-timeout: the escrow
-        // never reached `Submitted`, so no seat can hold a vote.
+        // Pays AND scores every moderator that voted. Zero on a ghost-timeout:
+        // the escrow never reached `Submitted`, so no seat can hold a vote, and
+        // nobody is either paid or scored for a deal nobody judged.
         let paid = pay_panel(
             &self.panel,
             &self.escrow,
-            moderator_token_accounts,
+            panel_accounts,
             self.vault.to_account_info(),
             self.escrow.to_account_info(),
             self.token_program.to_account_info(),

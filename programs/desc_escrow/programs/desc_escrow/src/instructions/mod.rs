@@ -1,6 +1,7 @@
 pub mod accept;
 pub mod cancel;
 pub mod create_escrow;
+pub mod init_moderator_reputation;
 pub mod initialize_config;
 pub mod mutual_cancel;
 pub mod record_verdict;
@@ -12,6 +13,7 @@ pub mod update_config;
 pub use accept::*;
 pub use cancel::*;
 pub use create_escrow::*;
+pub use init_moderator_reputation::*;
 pub use initialize_config::*;
 pub use mutual_cancel::*;
 pub use record_verdict::*;

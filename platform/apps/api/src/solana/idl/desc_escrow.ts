@@ -333,6 +333,68 @@ export type DescEscrow = {
       ]
     },
     {
+      "name": "initModeratorReputation",
+      "docs": [
+        "Create a moderator's reputation account. Permissionless, caller pays —",
+        "see `InitModeratorReputation` for why that is safe."
+      ],
+      "discriminator": [
+        181,
+        95,
+        25,
+        52,
+        201,
+        65,
+        173,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Whoever is paying. Has no authority over the account afterwards —",
+            "nobody does."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "reputation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  111,
+                  100,
+                  95,
+                  114,
+                  101,
+                  112
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "moderator"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "moderator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "initializeConfig",
       "discriminator": [
         208,
@@ -1014,6 +1076,19 @@ export type DescEscrow = {
       ]
     },
     {
+      "name": "moderatorReputation",
+      "discriminator": [
+        175,
+        32,
+        46,
+        220,
+        208,
+        191,
+        165,
+        208
+      ]
+    },
+    {
       "name": "panel",
       "discriminator": [
         223,
@@ -1571,6 +1646,105 @@ export type DescEscrow = {
           },
           {
             "name": "cancelled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "moderatorReputation",
+      "docs": [
+        "A moderator's lifetime record (PDA, seeds = [b\"mod_rep\", moderator]).",
+        "",
+        "Counters only. No authority, no funds, nothing to pause or steal — the worst",
+        "an attacker who could write it arbitrarily would achieve is a wrong number on",
+        "a web page. It is written exclusively by `release` / `refund`, as each panel",
+        "seat is paid.",
+        "",
+        "It lives in THIS program, not in `desc_moderation` alongside `Moderator`,",
+        "because `desc_moderation` already depends on this crate to CPI into",
+        "`record_verdict` — the reverse would be circular. Both halves of the",
+        "comparison (the settled `Escrow::outcome` and each seat's vote on the",
+        "`Panel`) are accounts of this program anyway.",
+        "",
+        "Why it has to exist at all: `release`, `refund` and `cancel` all close the",
+        "escrow and the panel, and neither program emits an event. Once a deal",
+        "settles the chain keeps no record that it happened, so without this account",
+        "a moderator's track record would be our database's word.",
+        "",
+        "Backward-compat discipline:",
+        "- `version` is the first field (byte 8) for version dispatch / migrations.",
+        "- `reserved` is the LAST field. New fields are inserted immediately before",
+        "it and shrink it by their exact size, so the account size stays constant",
+        "(no `realloc`). Freed bytes are zeroed, so an added `Option<T>` reads None."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "docs": [
+              "Schema version of this account. Set to `VERSION` at init."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "moderator",
+            "docs": [
+              "The moderator wallet this scores. Also the PDA seed, so the account",
+              "cannot be pointed at a different moderator after creation."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "verdictsCast",
+            "docs": [
+              "Every vote this moderator has had paid, on any panel size. Volume, not",
+              "quality — and cheap to inflate, since a moderator can be seated on",
+              "contracts it creates itself. Not a number to show on its own."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "panelVerdicts",
+            "docs": [
+              "Votes cast on a panel of three or more: the accuracy denominator.",
+              "Separate from `verdicts_cast` because a panel of one has no majority to",
+              "agree with (see `MIN_PANEL_FOR_ACCURACY`)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "majorityAgreements",
+            "docs": [
+              "Of those, how many matched the outcome the panel actually settled on."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "failVotes",
+            "docs": [
+              "How many of ALL votes were Fail. A moderator that fails everything earns",
+              "the same fee for near-zero work, so the bias is worth seeing long before",
+              "there is any stake to slash for it."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Forward-compat padding (V2: stake, slashing history, …). Carve new",
+              "fields from here; keep it LAST."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                48
+              ]
+            }
           }
         ]
       }

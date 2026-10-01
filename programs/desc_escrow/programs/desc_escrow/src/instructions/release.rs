@@ -4,7 +4,9 @@ use anchor_spl::token::spl_token::state::Account as SplTokenAccount;
 use anchor_spl::token::{close_account, transfer, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel, VOTE_NONE};
+use crate::states::{
+    Config, Escrow, EscrowStatus, ModeratorReputation, Outcome, Panel, VOTE_NONE,
+};
 
 /// Pay out a passed escrow. Signed by EITHER party (initiator or committer), so
 /// the payout never depends on any one party — or the settlement authority —
@@ -22,8 +24,9 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel, VOTE_NONE};
 /// goes back to the initiator — hence `initiator_token_account`, which a
 /// single-moderator release never needed.
 ///
-/// The voting moderators' token accounts arrive as `remaining_accounts`: one per
-/// VOTED seat, in panel order (see `pay_panel`). A no-mod escrow has an empty
+/// The panel's accounts arrive as `remaining_accounts`: two per SEAT, in panel
+/// order — every seat's token account first, then every seat's
+/// `ModeratorReputation` PDA (see `pay_panel`). A no-mod escrow has an empty
 /// panel and passes none.
 #[derive(Accounts)]
 pub struct Release<'info> {
@@ -93,7 +96,7 @@ pub struct Release<'info> {
 }
 
 impl<'info> Release<'info> {
-    pub fn release(&mut self, moderator_token_accounts: &[AccountInfo<'info>]) -> Result<()> {
+    pub fn release(&mut self, panel_accounts: &'info [AccountInfo<'info>]) -> Result<()> {
         // A stale program reading a newer account decodes silently and wrongly.
         self.escrow.check_version()?;
         self.config.check_version()?;
@@ -163,7 +166,7 @@ impl<'info> Release<'info> {
         let paid = pay_panel(
             &self.panel,
             &self.escrow,
-            moderator_token_accounts,
+            panel_accounts,
             self.vault.to_account_info(),
             self.escrow.to_account_info(),
             self.token_program.to_account_info(),
@@ -216,20 +219,33 @@ impl<'info> Release<'info> {
 /// was outvoted, or one whose vote landed after the majority had already
 /// decided, since both did the same work.
 ///
-/// `token_accounts` holds one account per SEAT, in panel order — including seats
-/// that have not voted, whose entry is ignored. One per *voter* would be
-/// smaller, but the voter list changes as votes land: a settlement transaction
-/// built while the last moderator was still judging would arrive with the wrong
-/// number of accounts and fail. Seats are fixed at creation, so this list cannot
-/// drift between building the transaction and landing it.
+/// It also SCORES each seat it pays, in the same pass — so payment and
+/// reputation can never disagree about who did the work. A moderator is scored
+/// exactly when it is paid, and an escrow that never settles does neither.
+///
+/// `panel_accounts` holds **two** accounts per SEAT, in panel order:
+///
+/// | Range | Contents |
+/// |---|---|
+/// | `0 .. count` | the seat's token account — where its fee is paid |
+/// | `count .. 2*count` | the seat's `ModeratorReputation` PDA |
+///
+/// Per SEAT and not per *voter*, including seats that never voted, whose entries
+/// are ignored. One per voter would be smaller, but the voter list changes as
+/// votes land: a settlement transaction built while the last moderator was still
+/// judging would arrive with the wrong number of accounts and fail. Seats are
+/// fixed at creation, so this list cannot drift between building the transaction
+/// and landing it.
 ///
 /// Each paid account is checked to be a real token account of the escrow's mint
 /// OWNED BY that seat's moderator, so a caller cannot redirect another
-/// moderator's fee to itself.
+/// moderator's fee to itself. Each reputation account is checked to be the PDA
+/// derived from that seat's moderator, so a caller cannot credit its own record
+/// with someone else's verdict.
 pub fn pay_panel<'info>(
     panel: &Panel,
     escrow: &Escrow,
-    token_accounts: &[AccountInfo<'info>],
+    panel_accounts: &'info [AccountInfo<'info>],
     vault: AccountInfo<'info>,
     authority: AccountInfo<'info>,
     token_program: AccountInfo<'info>,
@@ -237,12 +253,19 @@ pub fn pay_panel<'info>(
 ) -> Result<u64> {
     let count = panel.count as usize;
     require!(
-        token_accounts.len() == count,
+        panel_accounts.len() == count * 2,
         EscrowError::ModeratorConfigMismatch
     );
+    // Token accounts first, reputation accounts after. Split here rather than at
+    // the two call sites so `release` and `refund` cannot disagree on the order.
+    let (token_accounts, reputation_accounts) = panel_accounts.split_at(count);
 
     let mut paid: u64 = 0;
-    for (entry, token_account) in panel.entries[..count].iter().zip(token_accounts) {
+    for ((entry, token_account), reputation) in panel.entries[..count]
+        .iter()
+        .zip(token_accounts)
+        .zip(reputation_accounts)
+    {
         // Seated but silent: not paid, and its account is never even read. Its
         // fee returns to the initiator (see `release`).
         if entry.vote == VOTE_NONE {
@@ -281,6 +304,35 @@ pub fn pay_panel<'info>(
         paid = paid
             .checked_add(entry.fee)
             .ok_or(EscrowError::MathOverflow)?;
+
+        // Score the seat we just paid.
+        //
+        // `outcome` is always Some here in practice: every path that reaches
+        // this loop with a vote on the panel has a settled outcome, and a
+        // ghost-timeout refund has no votes at all so the `continue` above has
+        // already fired for every seat. Guarded anyway — a payout must never
+        // fail because a counter could not be updated.
+        if let Some(outcome) = escrow.outcome {
+            let mut rep = Account::<ModeratorReputation>::try_from(reputation)?;
+            rep.check_version()?;
+            // The account is owned by this program and carries the right
+            // discriminator (checked by `try_from`), but that alone does not say
+            // it is THIS seat's. Re-derive it from the seat's moderator, so a
+            // caller cannot pass its own record and collect the credit.
+            let expected = Pubkey::create_program_address(
+                &[
+                    ModeratorReputation::SEED_PREFIX,
+                    entry.moderator.as_ref(),
+                    &[rep.bump],
+                ],
+                &crate::ID,
+            )
+            .map_err(|_| error!(EscrowError::Unauthorized))?;
+            require_keys_eq!(expected, reputation.key(), EscrowError::Unauthorized);
+
+            rep.record(entry.vote, outcome, panel.count);
+            rep.exit(&crate::ID)?;
+        }
     }
 
     Ok(paid)

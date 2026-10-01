@@ -50,6 +50,16 @@ pub mod desc_escrow {
         )
     }
 
+    /// Create a moderator's reputation account. Permissionless, caller pays —
+    /// see `InitModeratorReputation` for why that is safe.
+    pub fn init_moderator_reputation(
+        ctx: Context<InitModeratorReputation>,
+        moderator: Pubkey,
+    ) -> Result<()> {
+        ctx.accounts
+            .init_moderator_reputation(moderator, &ctx.bumps)
+    }
+
     pub fn create_escrow<'info>(
         // `'info` is spelled out because the chosen moderators arrive as
         // `remaining_accounts`, which must share the accounts' lifetime.
@@ -95,17 +105,21 @@ pub mod desc_escrow {
     }
 
     pub fn release<'info>(
-        // `'info` is spelled out because the voting moderators' token accounts
-        // arrive as `remaining_accounts`, which must share the accounts' lifetime.
-        ctx: Context<'_, '_, '_, 'info, Release<'info>>,
+        // `'info` is spelled out because the panel's accounts arrive as
+        // `remaining_accounts`, which must share the accounts' lifetime.
+        // The third lifetime is `'info` too: the reputation accounts are
+        // deserialized as `Account<'info, _>` inside `pay_panel`, so the
+        // remaining-accounts slice has to outlive the call.
+        ctx: Context<'_, '_, 'info, 'info, Release<'info>>,
     ) -> Result<()> {
-        // One token account per moderator that voted, in panel order.
+        // Two accounts per panel SEAT, in panel order: every seat's token
+        // account, then every seat's reputation PDA (see `pay_panel`).
         ctx.accounts.release(ctx.remaining_accounts)
     }
 
-    pub fn refund<'info>(ctx: Context<'_, '_, '_, 'info, Refund<'info>>) -> Result<()> {
-        // One token account per moderator that voted, in panel order. Empty on a
-        // ghost-timeout, where nobody judged.
+    pub fn refund<'info>(ctx: Context<'_, '_, 'info, 'info, Refund<'info>>) -> Result<()> {
+        // Two accounts per panel SEAT, in panel order (see `pay_panel`). Empty
+        // on a ghost-timeout, where nobody judged.
         ctx.accounts.refund(ctx.remaining_accounts)
     }
 

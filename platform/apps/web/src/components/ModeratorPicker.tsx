@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import type { ModeratorOffer } from "@repo/shared";
+import { reputationOf } from "@/lib/reputation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -103,6 +104,7 @@ export function ModeratorPicker({
             {list.length === 0 && <li className="px-3 py-4 text-center text-sm text-muted">No moderator matches.</li>}
             {list.map((m) => {
               const on = selected.includes(m.wallet);
+              const rep = reputationOf(m);
               return (
                 <li key={m.wallet} role="option" aria-selected={on}>
                   <button
@@ -133,6 +135,17 @@ export function ModeratorPicker({
                       </span>
                       <span className="block truncate font-mono text-[0.7rem] text-muted">
                         {m.wallet.slice(0, 4)}…{m.wallet.slice(-4)}
+                      </span>
+                      {/* The record, read from the chain. This is the only
+                          thing on the row that says whether a moderator is any
+                          good — the price only says what it costs. */}
+                      <span
+                        className={cn(
+                          "block truncate text-[0.7rem]",
+                          rep.failBias ? "text-fail" : rep.hasRecord ? "text-pass" : "text-zinc-600"
+                        )}
+                      >
+                        {rep.summary}
                       </span>
                     </span>
                     <span className="text-right">

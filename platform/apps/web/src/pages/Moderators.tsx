@@ -4,7 +4,8 @@ import { Reveal } from "@/components/landing/Reveal";
 import { SectionHead } from "@/components/SectionHead";
 import { useFees } from "@/lib/fees";
 import { explorerUrl } from "@/lib/chain";
-import { short } from "@/lib/utils";
+import { reputationOf } from "@/lib/reputation";
+import { cn, short } from "@/lib/utils";
 
 /**
  * The live moderator registry. Every row is a `Moderator` account read from
@@ -41,7 +42,9 @@ export function Moderators() {
               <div className="px-5 py-12 text-center text-sm text-muted">No active moderator is registered yet.</div>
             )}
 
-            {mods.map((m) => (
+            {mods.map((m) => {
+              const rep = reputationOf(m);
+              return (
               <div
                 key={m.wallet}
                 className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-white/[0.05] px-5 py-4 last:border-0 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto]"
@@ -59,12 +62,26 @@ export function Moderators() {
                         </span>
                       )}
                     </div>
-                    <div className="font-mono text-xs text-muted">
-                      {m.test
-                        ? "returns the OPPOSITE verdict"
-                        : Number(m.feePerKb) > 0
-                          ? "size-priced"
-                          : "flat rate"}
+                    {/* Its record once it has one — the only line here that says
+                        whether the moderator is any good. Falls back to the
+                        pricing shape while nobody has hired it yet. */}
+                    <div
+                      className={cn(
+                        "font-mono text-xs",
+                        rep.failBias
+                          ? "text-fail"
+                          : rep.hasRecord
+                            ? "text-pass"
+                            : "text-muted"
+                      )}
+                    >
+                      {rep.hasRecord
+                        ? rep.summary
+                        : m.test
+                          ? "returns the OPPOSITE verdict"
+                          : Number(m.feePerKb) > 0
+                            ? "size-priced"
+                            : "flat rate"}
                     </div>
                   </div>
                 </div>
@@ -81,10 +98,26 @@ export function Moderators() {
                 </span>
                 <span className="w-20 text-right font-mono text-xs text-pass">● active</span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </Reveal>
       </section>
+
+      {/* What the record means, stated plainly. On a panel where everyone is
+          honest everyone agrees, so a high number is mostly evidence of nothing
+          going wrong — claiming it as a quality score would be overselling it. */}
+      {mods.some((m) => reputationOf(m).hasRecord) && (
+        <div className="glass p-4 text-sm text-muted">
+          <span className="font-semibold text-ink">About the records.</span> Each
+          moderator's count comes from its own on-chain account, written as it is
+          paid — nothing here is our bookkeeping. Agreement is only counted on
+          panels of three, because a moderator judging alone is its own majority.
+          A panel where everyone is honest agrees every time, so "never outvoted"
+          means nothing has gone wrong rather than that one moderator is sharper
+          than another.
+        </div>
+      )}
 
       {mods.some((m) => m.test) && (
         <div className="glass border-fail/25 p-4 text-sm">

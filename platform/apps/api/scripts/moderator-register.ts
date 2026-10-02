@@ -5,6 +5,10 @@
  *   2. fund the wallet: SOL (gas) + a USDC token account (to receive its fee)
  *   3. register_moderator(wallet, recipient, label, price) — admin-signed; writes
  *      the `Moderator` account on-chain (recipient and price now live on-chain)
+ *   4. init_moderator_reputation(wallet) — creates its reputation account on the
+ *      ESCROW program. Not cosmetic: settlement takes one per panel seat, so a
+ *      moderator without one cannot be settled and its escrow's money would be
+ *      stuck. `pnpm moderator-reputation-init` backfills or repairs it.
  *
  * Hand the two files to that mod's runner: `wallet.json` is its signer (signs
  * `submit_verdict`), `identity.key` is its decrypt key. Both are gitignored.
@@ -41,6 +45,8 @@ import {
 } from "@solana/web3.js";
 import { generateModerationKeypair } from "@repo/shared";
 import { modelEnvName } from "../src/moderation/moderatorModel";
+import type { DescEscrow } from "../src/solana/idl/desc_escrow";
+import escrowIdl from "../src/solana/idl/desc_escrow.json";
 import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import idl from "../src/solana/idl/desc_moderation.json";
 
@@ -169,6 +175,31 @@ async function main() {
     })
     .rpc();
 
+  // 4. create its reputation account on the ESCROW program.
+  //
+  // Separate program, so a separate transaction. Not fatal if it fails: the
+  // moderator is already registered, and `pnpm moderator-reputation-init`
+  // creates whatever is missing. Left unsaid, though, the first escrow this
+  // moderator judges could not be settled — so it is reported loudly.
+  const escrowProgram = new Program<DescEscrow>(escrowIdl as DescEscrow, provider);
+  const [reputation] = PublicKey.findProgramAddressSync(
+    [Buffer.from("mod_rep"), wallet.publicKey.toBuffer()],
+    escrowProgram.programId
+  );
+  let reputationCreated = true;
+  try {
+    await escrowProgram.methods
+      .initModeratorReputation(wallet.publicKey)
+      .accountsPartial({
+        payer: admin.publicKey,
+        reputation,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+  } catch {
+    reputationCreated = false;
+  }
+
   console.log(`\nRegistered moderator "${label}" on-chain — now active.`);
   console.log("  moderator PDA   :", moderator.toBase58());
   console.log("  wallet (signer) :", wallet.publicKey.toBase58(), `→ ${walletPath}`);
@@ -180,6 +211,13 @@ async function main() {
         `                    solana transfer ${wallet.publicKey.toBase58()} ${GAS_SOL} --allow-unfunded-recipient`
   );
   console.log("  USDC account    :", usdcAta.address.toBase58());
+  console.log(
+    "  reputation      :",
+    reputationCreated
+      ? reputation.toBase58()
+      : "FAILED — run `pnpm moderator-reputation-init` before this moderator judges\n" +
+        "                    anything, or its first escrow cannot be settled."
+  );
   console.log("  recipient (age) :", recipient);
   console.log(
     "  price           :",

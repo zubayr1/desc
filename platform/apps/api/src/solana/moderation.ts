@@ -4,6 +4,7 @@ import type { ModeratorOffer } from "@repo/shared";
 import type { DescModeration } from "./idl/desc_moderation";
 import idl from "./idl/desc_moderation.json";
 import { env } from "../config/env";
+import { readModeratorReputations } from "./program";
 import { moderatorSlug } from "../moderation/moderatorModel";
 import { isMischief } from "../moderation/judge/mischief";
 
@@ -63,9 +64,21 @@ async function activeModerators() {
   );
 }
 
-/** Active moderators as public offers, for the fee quote and the picker. */
+/**
+ * Active moderators as public offers, for the fee quote and the picker.
+ *
+ * The reputation records live in the ESCROW program, not this one, so they are
+ * a second read — batched into a single round-trip rather than one call per
+ * moderator. A moderator without a record is left `undefined` here and reads as
+ * "no record yet" in the UI, which is not the same as a record of zero.
+ */
 export async function listModeratorOffers(): Promise<ModeratorOffer[]> {
-  return (await activeModerators()).map((m) => ({
+  const active = await activeModerators();
+  const reputations = await readModeratorReputations(
+    active.map((m) => m.account.authority)
+  );
+
+  return active.map((m) => ({
     wallet: m.account.authority.toBase58(),
     label: m.account.label,
     baseBps: m.account.baseBps,
@@ -75,6 +88,7 @@ export async function listModeratorOffers(): Promise<ModeratorOffer[]> {
     // env var the judge obeys, so a moderator can never be quietly inverting
     // verdicts while the site shows it as a normal one.
     test: isMischief(moderatorSlug(m.account.label)),
+    reputation: reputations.get(m.account.authority.toBase58()),
   }));
 }
 

@@ -312,6 +312,37 @@ export interface ModeratorOffer {
    *  verdict, to prove a panel outvotes a bad panellist. Only ever true on
    *  localnet and devnet — the judge refuses to run against mainnet. */
   test?: boolean;
+  /** Its on-chain track record. Undefined until the moderator's reputation
+   *  account exists — a moderator registered before reputation shipped reads
+   *  as "no record yet", not as "a bad record". */
+  reputation?: ModeratorReputation;
+}
+
+/** A moderator's on-chain counters, read from its `ModeratorReputation` PDA. */
+export interface ModeratorReputation {
+  /** Verdicts paid on any panel size. Volume — cheap to inflate, since a
+   *  moderator can be seated on contracts it creates itself. Never show alone. */
+  verdictsCast: number;
+  /** Verdicts on a panel of three or more: the accuracy denominator. */
+  panelVerdicts: number;
+  /** Of those, how many matched the outcome the panel settled on. */
+  majorityAgreements: number;
+  /** How many of ALL votes were Fail — the "fail everything for a free fee"
+   *  detector. */
+  failVotes: number;
+}
+
+/**
+ * Share of a moderator's panel verdicts that matched the majority, 0–1.
+ *
+ * `null` when it has never sat on a panel of three, which is NOT the same as
+ * zero: on a panel of one a moderator is its own majority, so agreement there
+ * would read 100% forever and mean nothing. Callers render the null case as
+ * "no record yet", never as a score.
+ */
+export function moderatorAccuracy(rep?: ModeratorReputation): number | null {
+  if (!rep || rep.panelVerdicts === 0) return null;
+  return rep.majorityAgreements / rep.panelVerdicts;
 }
 
 /** One page of `GET /contracts`. `total` counts every match, not just this page. */

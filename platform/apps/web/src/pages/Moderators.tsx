@@ -4,7 +4,7 @@ import { Reveal } from "@/components/landing/Reveal";
 import { SectionHead } from "@/components/SectionHead";
 import { useFees } from "@/lib/fees";
 import { explorerUrl } from "@/lib/chain";
-import { reputationOf } from "@/lib/reputation";
+import { reputationOf, TONE_CLASS } from "@/lib/reputation";
 import { cn, short } from "@/lib/utils";
 
 /**
@@ -65,16 +65,7 @@ export function Moderators() {
                     {/* Its record once it has one — the only line here that says
                         whether the moderator is any good. Falls back to the
                         pricing shape while nobody has hired it yet. */}
-                    <div
-                      className={cn(
-                        "font-mono text-xs",
-                        rep.failBias
-                          ? "text-fail"
-                          : rep.hasRecord
-                            ? "text-pass"
-                            : "text-muted"
-                      )}
-                    >
+                    <div className={cn("font-mono text-xs", rep.hasRecord ? TONE_CLASS[rep.tone] : "text-muted")}>
                       {rep.hasRecord
                         ? rep.summary
                         : m.test

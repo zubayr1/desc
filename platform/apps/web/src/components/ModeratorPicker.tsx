@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import type { ModeratorOffer } from "@repo/shared";
-import { reputationOf } from "@/lib/reputation";
+import { reputationOf, TONE_CLASS } from "@/lib/reputation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -139,12 +139,7 @@ export function ModeratorPicker({
                       {/* The record, read from the chain. This is the only
                           thing on the row that says whether a moderator is any
                           good — the price only says what it costs. */}
-                      <span
-                        className={cn(
-                          "block truncate text-[0.7rem]",
-                          rep.failBias ? "text-fail" : rep.hasRecord ? "text-pass" : "text-zinc-600"
-                        )}
-                      >
+                      <span className={cn("block truncate text-[0.7rem]", TONE_CLASS[rep.tone])}>
                         {rep.summary}
                       </span>
                     </span>

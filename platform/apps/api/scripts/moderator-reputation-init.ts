@@ -14,8 +14,9 @@
  *
  * Needs no special key. `init_moderator_reputation` is permissionless by design
  * — the caller only pays rent (~0.0015 SOL each) and gains no authority over
- * what it created — so anyone who notices a missing account can fix it. This
- * uses the admin keypair simply because it is the one already configured.
+ * what it created — so ANY funded keypair can run this. The keypair pays; it is
+ * `CONFIG_AUTHORITY` (a pubkey, not a secret) that says whose moderators to look
+ * at, exactly as the api resolves them.
  *
  * Run with: `pnpm moderator-reputation-init`  (add `--dry-run` to only report)
  *
@@ -57,8 +58,20 @@ async function main() {
 
   // Scoped to THIS platform's config, the same filter the api uses — otherwise
   // a moderator registered under somebody else's config would be funded here.
+  //
+  // Seeded by CONFIG_AUTHORITY and NOT by the payer: the two are the same person
+  // when the admin runs this, but the whole point of a permissionless repair is
+  // that somebody else can run it, and deriving the config from whoever happens
+  // to be paying would silently find zero moderators for them.
+  const authority = process.env.CONFIG_AUTHORITY;
+  if (!authority) {
+    throw new Error(
+      "CONFIG_AUTHORITY is not set — it seeds the moderation config, so without it " +
+        "there is no way to know whose moderators to back-fill."
+    );
+  }
   const [moderationConfig] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config"), payer.publicKey.toBuffer()],
+    [Buffer.from("config"), new PublicKey(authority).toBuffer()],
     moderation.programId
   );
 

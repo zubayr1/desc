@@ -41,7 +41,7 @@ const VERDICT_JSON_SCHEMA = (() => {
  * Find the Claude Code binary: `CLAUDE_BIN`, then `claude` on PATH, then the
  * copy bundled with the VS Code extension (newest first).
  */
-function claudeBinary(): string {
+export function claudeBinary(): string {
   if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN;
   for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     const p = join(dir, "claude");
@@ -61,7 +61,7 @@ function claudeBinary(): string {
 }
 
 /** Claude Code's `--output-format json` result — only the fields we use. */
-interface HeadlessResult {
+export interface HeadlessResult {
   is_error?: boolean;
   result?: string;
   api_error_status?: string | null;
@@ -75,7 +75,11 @@ interface HeadlessResult {
   };
 }
 
-function runHeadless(bin: string, args: string[], stdin: string): Promise<string> {
+export function runHeadless(
+  bin: string,
+  args: string[],
+  stdin: string
+): Promise<string> {
   const cwd = mkdtempSync(join(tmpdir(), "desc-judge-"));
   // No API credential and no `ant` profile in reach: Claude Code can only use
   // its own login, so a stray ANTHROPIC_API_KEY can never quietly bill the API.

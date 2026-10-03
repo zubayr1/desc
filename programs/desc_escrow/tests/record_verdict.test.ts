@@ -72,11 +72,12 @@ describe("record_verdict", () => {
     await recordVerdict(s, "pass");
     try {
       await recordVerdict(s, "fail");
-      assert.fail("expected VerdictAlreadyFinal");
+      assert.fail("expected AlreadyVoted");
     } catch (e) {
-      // Distinct from a failure: the outcome was already decided by a majority
-      // (here, the single moderator's own vote), so this one is not counted.
-      assert.include(e.toString(), "VerdictAlreadyFinal");
+      // One vote per SEAT. A decided escrow no longer rejects further votes —
+      // late ones from other moderators are recorded, paid and scored — so what
+      // stops this is the moderator having already used its own seat.
+      assert.include(e.toString(), "AlreadyVoted");
     }
   });
 

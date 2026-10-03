@@ -2,111 +2,79 @@ use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;
 
-/// On-chain lifecycle of an escrow — only the transitions that move money.
+/// On-chain lifecycle — only the transitions that move money. The richer
+/// off-chain states (draft, under_verification, disputed) have no on-chain form.
 ///
-/// The richer off-chain contract states (draft, under_verification, disputed)
-/// have no on-chain representation.
-///
-/// Invariant: once `Submitted`, funds are frozen until a verdict is recorded —
-/// the deadline is irrelevant from that point. Pass -> committer, Fail ->
-/// initiator, and nothing else can move the money.
-///
-/// APPEND-ONLY: borsh indexes variants by declaration order. New variants (e.g.
-/// a future `Disputed`) must be added at the END — never reorder or insert.
+/// Invariant: once `Submitted`, funds are frozen until a verdict is recorded.
+/// The deadline stops applying from that point.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum EscrowStatus {
-    /// Initiator deposited; awaiting a committer to accept.
-    /// Only state where the initiator may unilaterally `cancel`.
+    /// Funded, awaiting a committer. The only state the initiator may `cancel`.
     Funded,
-    /// Committer accepted -> working. No unilateral initiator cancel here.
-    /// If `now > deadline` and nothing was submitted, the committer has ghosted
-    /// and the initiator may `refund`.
+    /// Accepted, work in progress. Past `deadline` with nothing submitted, the
+    /// committer has ghosted and the initiator may `refund`.
     Active,
-    /// Committer submitted before the deadline -> funds frozen pending a verdict.
-    /// The deadline no longer applies; only `record_verdict` resolves this.
+    /// Submitted in time; frozen until `record_verdict`.
     Submitted,
-    /// Verdict Pass -> released to committer.
+    /// Pass — released to the committer.
     Settled,
-    /// Returned to initiator (ghosting timeout, failed verdict, or mutual cancel).
+    /// Returned to the initiator: ghosting, a Fail verdict, or mutual cancel.
     Refunded,
-    /// Initiator cancelled before any committer accepted.
+    /// Cancelled before any committer accepted.
     Cancelled,
 }
 
-/// Aggregated verdict result, attested on-chain by the settlement authority.
-/// The authority only *records* this; the parties themselves execute the
-/// transfer (so payout never depends on the authority being online).
-///
-/// APPEND-ONLY: add new variants at the END only (see `EscrowStatus`).
+/// The verdict, attested by the settlement authority. The authority only
+/// *records* it; the parties execute the transfer, so payout never depends on
+/// the authority being online.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum Outcome {
     Pass,
     Fail,
 }
 
-/// Per-deal escrow account (PDA, seeds = [b"escrow", initiator, contract_id]).
+/// Per-deal escrow (PDA, seeds = [b"escrow", initiator, contract_id]).
 ///
-/// Holds the funds-relevant state for one contract. Subjective data (the
-/// verdict reasoning, deliverable contents, criteria, moderator identities)
-/// stays off-chain in V1; this account records only the money, the lifecycle,
-/// and audit hashes of what was submitted and what verdict was acted on.
-///
-/// Backward-compat discipline:
-/// - `version` is the first field (byte 8) for version dispatch / migrations.
-/// - `reserved` is the LAST field. New fields are inserted immediately before
-///   it and shrink it by their exact size, so the account size stays constant
-///   (no `realloc`). Freed bytes are zeroed, so an added `Option<T>` reads None.
+/// Records the money, the lifecycle and audit hashes. Everything subjective —
+/// verdict reasoning, deliverable contents, criteria — stays off-chain.
 #[account]
 #[derive(InitSpace)]
 pub struct Escrow {
-    /// Schema version of this account. Set to `VERSION` at init.
     pub version: u8,
-    /// The protocol `Config` governing this escrow. Bound at creation so later
-    /// instructions load the *current* `settlement_authority` / `treasury` live
-    /// (keeping `settlement_authority` rotatable — the V1->V2 seam).
+    /// The governing `Config`. Bound at creation, but read live, so
+    /// `settlement_authority` and `treasury` stay rotatable.
     pub config: Pubkey,
     pub initiator: Pubkey,
-    /// None until the shareable link is accepted by a committer.
+    /// None until a committer accepts the shareable link.
     pub committer: Option<Pubkey>,
-    /// USDC mint used for this deal.
     pub mint: Pubkey,
-    /// PDA token account holding the deposited funds.
+    /// PDA token account holding the deposit.
     pub vault: Pubkey,
 
-    /// Payout to the committer on success (USDC, 1e6 base units).
+    /// Payout to the committer on success.
     pub amount: u64,
-    /// Protocol fee, snapshotted at creation so a later Config change can't
-    /// alter the agreed terms of an in-flight deal.
+    /// Snapshotted at creation, so a later `Config` change cannot alter the
+    /// terms of a live deal.
     pub protocol_fee: u64,
-    /// What the moderators earn on this contract, in total.
-    ///
-    /// Priced PER MODERATOR, not as a pot to divide: every moderator runs the
-    /// whole check — decrypt, rebuild, judge every criterion — so each is paid a
-    /// full fee. A contract with `n` moderators costs the initiator `n ×` the
-    /// per-moderator rate, and the alternative (one fee split `n` ways) is
-    /// rejected: it would pay the fifth moderator a fifth as much for identical
-    /// work, and no staked outside operator would take the job.
-    ///
-    /// V1 runs a single moderator, so this is that one fee and `release` pays it
-    /// whole to `moderator`. Dividing it across a k-of-n set is V2 work.
+    /// What the panel earns in total — the sum of each seat's own fee, never one
+    /// fee divided up. Every moderator runs the whole check, so each is paid in
+    /// full and `n` moderators cost `n ×` the rate.
     pub moderator_surcharge: u64,
-    /// Number of moderators on this contract. Always 1 in V1 (0 when `no_mod`).
+    /// Seats on the panel: 0 (no-mod), 1 or 3.
     pub moderator_count: u8,
 
     pub status: EscrowStatus,
-    /// Set by `record_verdict`; None until a verdict is attested.
+    /// None until a verdict is attested.
     pub outcome: Option<Outcome>,
-    /// Hash of the aggregated verdict JSON the settlement acted on (zeroed until
-    /// recorded). On-chain audit trail for the "neutral trust layer".
+    /// sha256 of the verdict acted on. Zeroed until recorded.
     pub verdict_hash: [u8; 32],
-    /// Hash of the deliverable the committer submitted (zeroed until submitted).
+    /// sha256 of the submitted deliverable. Zeroed until submitted.
     pub deliverable_hash: [u8; 32],
 
-    /// Unix timestamp — submission deadline. Governs the ghosting refund only.
+    /// Submission deadline. Governs the ghosting refund only.
     pub deadline: i64,
     pub created_at: i64,
-    /// When the committer submitted (None until `Submitted`). Off-chain SLA
-    /// clock starts here; not used as an on-chain timer.
+    /// Off-chain SLA clock; never used as an on-chain timer.
     pub submitted_at: Option<i64>,
 
     /// Links to the off-chain contract; also part of the PDA seed.
@@ -114,86 +82,52 @@ pub struct Escrow {
     pub bump: u8,
     pub vault_bump: u8,
 
-    /// The moderator ASSIGNED to this escrow, bound at `create_escrow` — the one
-    /// whose price was snapshotted, and the only one `record_verdict` accepts.
-    /// It is paid the surcharge on settle (`release` / `refund`).
-    /// `Pubkey::default()` on a no-mod escrow.
+    /// Set only on a ONE-seat escrow. `Pubkey::default()` on a panel of three
+    /// and on no-mod — read `panel` instead.
     pub moderator: Pubkey,
 
-    /// The non-refundable slice of `protocol_fee`, snapshotted at creation from
-    /// `Config::protocol_fee_min`.
+    /// The non-refundable slice of `protocol_fee`. Charged whenever a moderator
+    /// actually rendered a verdict, so the protocol recovers the cost of a Fail
+    /// without profiting from one. Zero means the old fee-on-Pass-only
+    /// behaviour.
     ///
-    /// Cost recovery for the verification itself: charged to the treasury
-    /// whenever a moderator actually rendered a verdict — on `release` (Pass, as
-    /// part of the full fee) and on `refund` (Fail, this slice only). The rest of
-    /// `protocol_fee` goes back to the initiator on a Fail, so the protocol never
-    /// *profits* from a failed deal but is never paid to *pass* one either.
-    ///
-    /// Zero when no floor is configured, and for escrows created before this
-    /// field existed (their `reserved` was zeroed) — both mean "charge nothing on
-    /// a Fail", i.e. the old fee-on-Pass-only behaviour. Carved from `reserved`.
-    ///
-    /// Invariant: `verification_fee <= protocol_fee`, since
-    /// `protocol_fee = max(bps_fee, protocol_fee_min)`.
+    /// Invariant: `verification_fee <= protocol_fee`.
     pub verification_fee: u64,
 
-    /// This escrow runs WITHOUT verification: the initiator opted out of
-    /// moderation at creation, accepting the risk. `submit` then records a Pass
-    /// straight away — there is no moderator, no surcharge, and no verification
-    /// fee. Immutable once set; both parties can see it.
-    ///
-    /// Zero (false) for escrows created before this field existed, which is the
-    /// moderated behaviour. Carved from `reserved`.
+    /// Initiator opted out of moderation. `submit` then records a Pass straight
+    /// away: no moderator, no surcharge, no verification fee.
     pub no_mod: bool,
 
-    // --- The assigned moderator's price, snapshotted at creation ------------
-    // Copied from the moderator's own account so a later price change cannot
-    // alter a deal already struck. `moderator_surcharge` is the resulting
-    // CEILING the initiator deposited:
-    //
-    //   ceiling = amount * base_bps / 10_000  +  fee_per_kb * max_bundle_kb
-    //
-    // V2 charges the real fee from the delivered size and refunds the rest;
-    // until then size pricing is rejected at creation, so ceiling == fee.
-    // All zero for a no-mod escrow. Carved from `reserved`.
-    /// Share of `amount` the moderator charges, in basis points.
+    // The assigned moderator's price, copied at creation so a later change
+    // cannot alter a struck deal. `moderator_surcharge` is the resulting
+    // CEILING; with size pricing rejected (V1) the ceiling IS the fee.
     pub base_bps: u16,
-    /// Per-KB of deliverable text. Always 0 until size pricing ships.
+    /// Always 0 until size pricing ships.
     pub fee_per_kb: u64,
-    /// Largest deliverable accepted, in KB. 0 = no limit.
+    /// 0 = no limit.
     pub max_bundle_kb: u32,
 
-    /// This escrow's `Panel` — the moderators judging it and their votes. One
-    /// exists for every escrow, including no-mod ones (`count == 0`), so there
-    /// is a single shape to settle. Carved from `reserved`.
+    /// This escrow's `Panel`. One exists for every escrow, including no-mod
+    /// (`count == 0`), so settlement has a single shape to handle.
     pub panel: Pubkey,
 
-    /// Forward-compat padding so V2 fields (e.g. `parent`, `dispute_account`)
-    /// can be added without a risky `realloc`. Carve new fields from here;
-    /// keep this the LAST field.
     pub reserved: [u8; 41],
 }
 
 impl Escrow {
-    /// Current schema version.
-    ///
-    /// Bump whenever a field is carved from `reserved`. Still 1: everything
-    /// added so far predates any deployment that outlives a validator reset, so
-    /// no account with an older layout exists anywhere to distinguish.
+    /// Bump whenever a field is carved from `reserved`. Still 1: nothing added
+    /// so far outlived a validator reset, so no older layout exists anywhere.
     pub const VERSION: u8 = 1;
 
-    /// Reject an account written by a program NEWER than this one.
+    /// Seed prefix; full seeds = [SEED_PREFIX, initiator, contract_id].
+    pub const SEED_PREFIX: &'static [u8] = b"escrow";
+
+    /// Reject an account written by a NEWER program than this one.
     ///
-    /// Deliberately `<=`, never `==`: old accounts stay readable because fields
-    /// are only ever carved from zeroed `reserved` bytes, so an older layout
-    /// decodes correctly with the new fields reading as zero. An `==` check
-    /// would brick every escrow created before a bump — funds locked, no
-    /// instruction callable.
-    ///
-    /// The case this DOES catch is a stale deployment: an older program reading
-    /// accounts a newer one wrote. Anchor's borsh silently ignores trailing
-    /// bytes it does not know about, so without this the program does not fail —
-    /// it quietly behaves as though the newer fields were never set.
+    /// `<=` and never `==`: old accounts must stay readable, and `==` would
+    /// brick every escrow created before a bump — funds locked, no instruction
+    /// callable. What this catches is the reverse, a stale deployment, which
+    /// borsh would otherwise hide by ignoring trailing bytes.
     pub fn check_version(&self) -> Result<()> {
         require!(
             self.version <= Self::VERSION,
@@ -202,8 +136,7 @@ impl Escrow {
         Ok(())
     }
 
-    /// The most a moderator can charge on this escrow: what the initiator must
-    /// lock up front. With size pricing disabled (V1) this is exactly the fee.
+    /// The most a moderator can charge here — what the initiator locks up front.
     pub fn moderation_ceiling(
         amount: u64,
         base_bps: u16,
@@ -219,7 +152,4 @@ impl Escrow {
             .and_then(|v| u64::try_from(v).ok())
             .ok_or(error!(EscrowError::MathOverflow))
     }
-
-    /// Seed prefix; full seeds = [SEED_PREFIX, initiator, contract_id].
-    pub const SEED_PREFIX: &'static [u8] = b"escrow";
 }

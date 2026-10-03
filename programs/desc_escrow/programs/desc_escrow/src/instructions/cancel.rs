@@ -10,9 +10,8 @@ use crate::states::{Escrow, EscrowStatus, Panel};
 /// funds. The vault and the panel are closed; the escrow is kept as a
 /// `Cancelled` record.
 ///
-/// The moderator fees need no special handling: the whole vault sweeps back to
-/// the initiator, and a `Funded` escrow was never accepted, so no moderator can
-/// have voted.
+/// Moderator fees need no handling: the whole vault sweeps back, and a `Funded`
+/// escrow was never accepted, so nobody can have voted.
 #[derive(Accounts)]
 pub struct Cancel<'info> {
     #[account(mut)]
@@ -28,13 +27,8 @@ pub struct Cancel<'info> {
     )]
     pub escrow: Box<Account<'info, Escrow>>,
 
-    /// The escrow's panel — created for every escrow, so a cancelled one has to
-    /// close it or the initiator's rent is orphaned on chain. Rent goes back to
-    /// the initiator, who put it up at creation.
-    ///
-    /// Boxed along with the rest: adding an account to an instruction that
-    /// already carries the escrow is how this program hit the BPF 4KB stack
-    /// limit before (see `create_escrow`).
+    /// Created for every escrow, so a cancelled one must close it or the
+    /// initiator's rent is orphaned on chain.
     #[account(
         mut,
         close = initiator,
@@ -46,7 +40,6 @@ pub struct Cancel<'info> {
     #[account(mut)]
     pub vault: Box<Account<'info, TokenAccount>>,
 
-    /// Refund destination — the initiator's USDC account.
     #[account(
         mut,
         constraint = initiator_token_account.mint == escrow.mint,
@@ -59,16 +52,13 @@ pub struct Cancel<'info> {
 
 impl<'info> Cancel<'info> {
     pub fn cancel(&mut self) -> Result<()> {
-        // A stale program reading a newer account decodes silently and wrongly.
         self.escrow.check_version()?;
-        // Cancellable only before any committer has accepted.
         require!(
             self.escrow.status == EscrowStatus::Funded,
             EscrowError::InvalidStatus
         );
         require!(self.escrow.committer.is_none(), EscrowError::InvalidStatus);
 
-        // Escrow PDA signs for its own vault.
         let initiator_key = self.initiator.key();
         let contract_id = self.escrow.contract_id;
         let bump = self.escrow.bump;
@@ -79,7 +69,6 @@ impl<'info> Cancel<'info> {
             &[bump],
         ]];
 
-        // Return the full deposit to the initiator.
         transfer(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
@@ -93,8 +82,6 @@ impl<'info> Cancel<'info> {
             self.vault.amount,
         )?;
 
-        // Close the now-empty vault, returning its rent to the initiator. The
-        // panel is closed by its `close = initiator` constraint.
         close_account(CpiContext::new_with_signer(
             self.token_program.to_account_info(),
             CloseAccount {

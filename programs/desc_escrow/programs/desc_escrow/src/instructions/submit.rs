@@ -11,11 +11,9 @@ use crate::states::{Escrow, EscrowStatus, Outcome};
 /// after the deadline is rejected — that window is the initiator's ghost-refund
 /// path, not a submission.
 ///
-/// On a **no-mod** escrow the verdict is settled here: there is no moderator to
-/// render one, and the initiator accepted that at creation. The outcome is Pass,
-/// so the committer can `release` immediately. Doing it on-chain rather than in a
-/// backend job means the payout never waits on a server being up, and `moderator`
-/// stays zeroed — nobody judged it, and the record says so.
+/// On a **no-mod** escrow the outcome is set to Pass here, so the committer can
+/// `release` immediately. On-chain rather than in a backend job, so the payout
+/// never waits on a server being up.
 #[derive(Accounts)]
 pub struct Submit<'info> {
     pub committer: Signer<'info>,
@@ -30,7 +28,6 @@ pub struct Submit<'info> {
 
 impl<'info> Submit<'info> {
     pub fn submit(&mut self, deliverable_hash: [u8; 32]) -> Result<()> {
-        // A stale program reading a newer account decodes silently and wrongly.
         self.escrow.check_version()?;
         require!(
             self.escrow.status == EscrowStatus::Active,

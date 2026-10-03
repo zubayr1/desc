@@ -7,23 +7,21 @@ use desc_escrow::states::{Config as EscrowConfig, Escrow, Outcome, Panel};
 
 /// A registered, active moderator records its verdict for a submitted escrow.
 ///
-/// The mod signs with its OWN wallet; this checks it's a registered active
-/// moderator, then CPIs `desc_escrow::record_verdict` signing as the
-/// `[b"authority", config]` PDA — which is the escrow's `settlement_authority`.
-/// No central key signs: the mod authorizes itself, the program is the bridge.
+/// The moderator signs with its OWN wallet; this checks it is registered and
+/// active, then CPIs `desc_escrow::record_verdict` signing as the
+/// `[b"authority", config]` PDA — the escrow's `settlement_authority`. No
+/// central key signs: the moderator authorizes itself, the program is a bridge.
 ///
-/// V1 settles on a single verdict (`min_verdicts == 1`); k-of-n aggregation is V2.
+/// Panel consensus is decided on the escrow's `Panel`, not here.
 #[derive(Accounts)]
 pub struct SubmitVerdict<'info> {
     /// The moderator's own wallet.
     pub authority: Signer<'info>,
 
-    /// The moderation config the mod is registered under (authenticated via the
-    /// moderator's `has_one = config`).
+    /// Authenticated via the moderator's `has_one = config`.
     pub config: Account<'info, ModerationConfig>,
 
-    /// The `[b"authority", config]` signer PDA = the escrow's settlement
-    /// authority. Signs the CPI; holds no data.
+    /// The escrow's settlement authority. Signs the CPI; holds no data.
     /// CHECK: PDA validated by seeds; used only as a CPI signer.
     #[account(
         seeds = [ModerationConfig::AUTHORITY_SEED_PREFIX, config.key().as_ref()],
@@ -31,7 +29,7 @@ pub struct SubmitVerdict<'info> {
     )]
     pub verdict_authority: UncheckedAccount<'info>,
 
-    /// The registered moderator — must be active and bound to `config` + signer.
+    /// Must be active and bound to `config` + signer.
     #[account(
         seeds = [Moderator::SEED_PREFIX, authority.key().as_ref()],
         bump = moderator.bump,
@@ -40,15 +38,14 @@ pub struct SubmitVerdict<'info> {
     )]
     pub moderator: Account<'info, Moderator>,
 
-    /// The escrow's protocol config. Its `settlement_authority` must equal
-    /// `verdict_authority` — enforced inside `record_verdict`.
+    /// Its `settlement_authority` must equal `verdict_authority` — enforced
+    /// inside `record_verdict`.
     pub escrow_config: Account<'info, EscrowConfig>,
 
     #[account(mut)]
     pub escrow: Box<Account<'info, Escrow>>,
 
-    /// The escrow's panel: who may vote and the votes so far. The escrow
-    /// program checks the seat and tallies; this program only forwards it.
+    /// The escrow program checks the seat and tallies; this only forwards it.
     #[account(mut)]
     pub panel: Box<Account<'info, Panel>>,
 
@@ -76,8 +73,7 @@ impl<'info> SubmitVerdict<'info> {
             signer_seeds,
         );
 
-        // Pass the signing moderator through: the escrow seats it on the panel,
-        // counts the vote, and pays it its fee on settle (release / refund).
+        // The escrow seats it, counts the vote, and pays it on settle.
         desc_escrow::cpi::record_verdict(cpi_ctx, outcome, verdict_hash, self.authority.key())
     }
 }

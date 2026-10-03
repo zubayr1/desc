@@ -4,35 +4,21 @@ use crate::states::ModeratorReputation;
 
 /// Create a moderator's reputation account (PDA, seeds = [b"mod_rep", moderator]).
 ///
-/// **Permissionless on purpose.** Anyone may create anyone's, and the caller
-/// pays the rent. Three reasons that is right rather than merely convenient:
+/// Permissionless, caller pays. Safe because the caller supplies only the
+/// moderator pubkey, which IS the seed — every other field is written here, so
+/// the account is always born zeroed and bound to the key it derives from. An
+/// account for a non-registered pubkey is inert: it can never be seated on a
+/// panel, so it is never written again.
 ///
-///  1. The caller supplies only the moderator pubkey, which *is* the seed. Every
-///     other field is written by this handler, so the account is always born
-///     zeroed and bound to the key it is derived from. There is no field an
-///     attacker could pre-poison.
-///  2. An account for a pubkey that is not a registered moderator is inert — it
-///     can never be seated on a panel, so it can never be written again. The
-///     worst case is a stranger donating ~0.0015 SOL to a dead account.
-///  3. `release` and `refund` require one of these per seat. If a moderator were
-///     ever seated without one, its escrow could not settle and real money would
-///     be stuck. Letting *anybody* create the missing account means that
-///     situation is always repairable by whoever notices, without the
-///     moderator's key or ours.
+/// It matters that *anyone* can call this: `release` and `refund` require one
+/// per seat, so a moderator seated without one would leave its escrow
+/// unsettleable. Whoever notices can repair it.
 ///
-/// This is why settlement does not create accounts lazily: `release` is signed
-/// by a party, not by a moderator, so `init_if_needed` there would make the
-/// initiator or committer pay rent for a moderator's account.
-///
-/// `init`, never `init_if_needed`. The handler writes zeros, so on an account
-/// that already exists `init_if_needed` would **wipe a moderator's entire
-/// history** — a one-instruction reputation reset anyone could call. `init`
-/// fails on an existing account, which is the behaviour that protects it.
+/// `init`, never `init_if_needed` — the handler writes zeros, so on an existing
+/// account that would wipe a moderator's entire history.
 #[derive(Accounts)]
 #[instruction(moderator: Pubkey)]
 pub struct InitModeratorReputation<'info> {
-    /// Whoever is paying. Has no authority over the account afterwards —
-    /// nobody does.
     #[account(mut)]
     pub payer: Signer<'info>,
 

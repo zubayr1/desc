@@ -7,12 +7,12 @@ use crate::states::{Config, Escrow, EscrowStatus, ModeratorPrice, Panel, PanelEn
 /// Initiator opens an escrow and deposits the full amount (payout + protocol
 /// fee + moderator surcharge) into a program-owned vault. Status -> Funded.
 ///
-/// The protocol fee is snapshotted from the live `Config` so it's trustless and
-/// can't drift if the config fee changes mid-deal.
-/// Every sizeable account here is BOXED (heap, not stack). Unboxing any of them
-/// overflows the BPF 4KB stack frame in `try_accounts` — which does not fail
-/// loudly, it corrupts the accounts it parsed and surfaces as a nonsense error
-/// from whatever reads them next.
+/// The protocol fee is snapshotted from the live `Config`, so it cannot drift
+/// mid-deal.
+///
+/// Every sizeable account here is BOXED. Unboxing one overflows the BPF 4KB
+/// stack frame in `try_accounts`, which does not fail loudly — it corrupts the
+/// accounts it parsed and surfaces as nonsense from whatever reads them next.
 #[derive(Accounts)]
 #[instruction(contract_id: [u8; 16])]
 pub struct CreateEscrow<'info> {
@@ -78,9 +78,9 @@ impl<'info> CreateEscrow<'info> {
         deadline: i64,
         no_mod: bool,
         max_moderator_fee: u64,
-        // The `desc_moderation::Moderator` accounts the initiator picked: none
-        // for no-mod, otherwise 1 or 3. Read raw and verified in
-        // `ModeratorPrice::load` — escrow cannot import that account type.
+        // The picked `desc_moderation::Moderator` accounts: none for no-mod,
+        // else 1 or 3. Read raw and verified in `ModeratorPrice::load`, because
+        // escrow cannot import that type.
         moderators: &[AccountInfo<'info>],
         bumps: &CreateEscrowBumps,
     ) -> Result<()> {
@@ -94,12 +94,9 @@ impl<'info> CreateEscrow<'info> {
             EscrowError::AmountBelowMinimum
         );
 
-        // The moderators' fees come from the MODERATORS' own quoted prices, never
-        // from the caller. The fee used to be an instruction argument, so a
-        // caller could pass 0 and have them judge for free.
-        //
-        // Panel sizes are 0, 1 or 3 — never even, because a tie has no majority
-        // and the escrow would be left unsettleable.
+        // Fees come from the MODERATORS' own quoted prices, never the caller:
+        // as an instruction argument, a caller could pass 0 and have them judge
+        // for free. Sizes are 0, 1 or 3 — never even, a tie has no majority.
         let count = moderators.len();
         require!(
             Panel::is_valid_size(count as u8) && (count == 0) == no_mod,
@@ -108,20 +105,18 @@ impl<'info> CreateEscrow<'info> {
 
         let mut entries = [PanelEntry::default(); Panel::MAX_SEATS];
         let mut surcharge: u64 = 0;
-        // The escrow keeps the price snapshot only for a single-moderator deal;
-        // with a panel the per-seat fees on the panel are the record.
+        // The escrow keeps the price snapshot only for a one-seat deal; with a
+        // panel the per-seat fees are the record.
         let mut snapshot = (0u16, 0u64, 0u32);
         for (i, account) in moderators.iter().enumerate() {
             let price = ModeratorPrice::load(account, &self.config.settlement_authority)?;
-            // V1: settlement has no way to charge by delivered size or refund an
-            // unused ceiling yet, so a size-priced moderator is refused rather
-            // than silently paid its maximum.
+            // Settlement cannot charge by delivered size or refund an unused
+            // ceiling yet, so refuse rather than silently pay the maximum.
             require!(
                 price.fee_per_kb == 0 && price.max_bundle_kb == 0,
                 EscrowError::SizePricingNotEnabled
             );
-            // One seat each: the same moderator twice would be two votes from
-            // one judge, and a "majority" of one.
+            // One seat each: twice would be two votes from one judge.
             require!(
                 !entries[..i].iter().any(|e| e.moderator == price.authority),
                 EscrowError::DuplicateModerator
@@ -164,11 +159,9 @@ impl<'info> CreateEscrow<'info> {
 
         let moderator_surcharge = surcharge;
 
-        // Slippage guard. The initiator agreed to a price when it was quoted; the
-        // moderator can change its price before this transaction lands. Refuse
-        // rather than charge more than they agreed to. This is a LIMIT, not the
-        // fee — passing 0 cannot make a moderator work for free, it only makes a
-        // moderated escrow impossible to create.
+        // Slippage guard: a moderator may reprice before this lands. A LIMIT,
+        // not the fee — passing 0 cannot make anyone work for free, it only
+        // makes a moderated escrow impossible to create.
         require!(
             moderator_surcharge <= max_moderator_fee,
             EscrowError::ModeratorFeeAboveMax
@@ -177,21 +170,16 @@ impl<'info> CreateEscrow<'info> {
         let now = Clock::get()?.unix_timestamp;
         require!(deadline > now, EscrowError::InvalidDeadline);
 
-        // Snapshot the protocol fee from the live config (trustless), applying the
-        // floor so tiny contracts still cover the roughly-fixed cost to serve them.
+        // Snapshot from the live config, applying the floor.
         let bps_fee = (amount as u128)
             .checked_mul(self.config.protocol_fee_bps as u128)
             .and_then(|v| v.checked_div(10_000))
             .ok_or(EscrowError::MathOverflow)? as u64;
         let protocol_fee = bps_fee.max(self.config.protocol_fee_min);
 
-        // The floor doubles as the non-refundable verification fee: the slice of
-        // the protocol fee kept once a moderator has actually rendered a verdict,
-        // Pass or Fail. Snapshotted like `protocol_fee` so a later config change
-        // can't alter an in-flight deal. `<= protocol_fee` by the `max` above.
-        //
-        // A no-mod escrow never gets a verification, so there is nothing to
-        // recover: it pays the protocol fee only.
+        // The floor doubles as the non-refundable verification fee, kept once a
+        // moderator has rendered any verdict. `<= protocol_fee` by the `max`
+        // above. A no-mod escrow gets no verification, so it pays the fee only.
         let verification_fee = if no_mod {
             0
         } else {

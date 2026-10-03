@@ -5,20 +5,13 @@ use crate::error::EscrowError;
 /// A moderator's quoted price, read from its `desc_moderation::Moderator`
 /// account.
 ///
-/// Escrow cannot import that type: `desc_moderation` already depends on this
-/// crate to CPI into `record_verdict`, so the reverse import would be circular.
-/// Instead the account is read raw and trusted only after three checks:
+/// Escrow cannot import that type — `desc_moderation` already depends on this
+/// crate — so the account is read raw, then checked: discriminator, layout, and
+/// crucially that the verdict-authority PDA derived from the program OWNING the
+/// account equals this escrow's `settlement_authority`.
 ///
-///  1. its 8-byte discriminator is `Moderator`'s,
-///  2. it decodes as the field layout below, and
-///  3. the `desc_moderation` verdict-authority PDA derived from the program that
-///     OWNS the account, for the config the moderator is registered under, is
-///     exactly this escrow's `settlement_authority`.
-///
-/// (3) is what makes it safe. A look-alike account owned by some other program
-/// would need a config whose authority PDA collides with ours — infeasible. So
-/// passing the check proves the moderator is registered with the very
-/// moderation program that settles these escrows.
+/// That last check is what makes it safe: a look-alike owned by another program
+/// would need a colliding authority PDA, which is infeasible.
 pub struct ModeratorPrice {
     pub authority: Pubkey,
     pub base_bps: u16,
@@ -70,7 +63,6 @@ impl ModeratorPrice {
             EscrowError::ModeratorNotRecognized
         );
 
-        // A paused moderator takes no new work.
         require!(m.active, EscrowError::ModeratorInactive);
 
         Ok(Self {

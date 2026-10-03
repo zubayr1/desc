@@ -6,9 +6,9 @@ use crate::states::ModerationConfig;
 /// Bootstrap the program: create the `ModerationConfig` (PDA, seeds =
 /// [b"config", admin]). The signer becomes the `admin` and pays for the account.
 ///
-/// Also derives the `[b"authority", config]` signer PDA and stores its bump, so
-/// `submit_verdict` can later sign verdict CPIs as the escrow's settlement
-/// authority — without any keypair ever holding that power.
+/// Also stores the bump of the `[b"authority", config]` signer PDA, so
+/// `submit_verdict` can sign verdict CPIs as the escrow's settlement authority
+/// — without any keypair ever holding that power.
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
@@ -23,8 +23,7 @@ pub struct Initialize<'info> {
     )]
     pub config: Account<'info, ModerationConfig>,
 
-    /// The verdict-authority signer PDA. Not initialized (holds no data); we only
-    /// need its bump, stored in the config for CPI signing.
+    /// Not initialized — only its bump is needed, stored in the config.
     /// CHECK: PDA validated by seeds; never written, used only as a CPI signer.
     #[account(
         seeds = [ModerationConfig::AUTHORITY_SEED_PREFIX, config.key().as_ref()],
@@ -42,7 +41,7 @@ impl<'info> Initialize<'info> {
         min_verdicts: u8,
         bumps: &InitializeBumps,
     ) -> Result<()> {
-        // V1 settles on a single verdict; k-of-n consensus is V2.
+        // Panel consensus is decided on the escrow's `Panel`.
         require!(min_verdicts == 1, ModerationError::InvalidMinVerdicts);
 
         self.config.set_inner(ModerationConfig {

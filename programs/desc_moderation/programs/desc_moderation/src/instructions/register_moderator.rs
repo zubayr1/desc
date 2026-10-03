@@ -7,8 +7,8 @@ use crate::states::{ModerationConfig, Moderator};
 /// [b"moderator", authority]) bound to this config, storing the mod's wallet,
 /// public `age` recipient, and label. Born `active`.
 ///
-/// V1 is admin-gated (platform-run internal mods). Permissionless, stake-gated
-/// registration is V2 — those fields are carved from `Moderator::reserved`.
+/// Admin-gated for now; permissionless stake-gated registration is V2, carved
+/// from `Moderator::reserved`.
 #[derive(Accounts)]
 #[instruction(authority: Pubkey)]
 pub struct RegisterModerator<'info> {

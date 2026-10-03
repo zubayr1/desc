@@ -3,7 +3,12 @@ import { Link } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, Check, Copy, Loader2, Plus, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Copy, Loader2, Plus, Sparkles, X } from "lucide-react";
+import type {
+  CriteriaSuggestRequest,
+  CriteriaSuggestResponse,
+  HelperStatus,
+} from "@repo/shared";
 import {
   DELIVERABLE_TYPES,
   DELIVERABLE_TYPE_LABELS as TYPE_LABELS,
@@ -20,7 +25,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { ModeratorPicker } from "@/components/ModeratorPicker";
 import { Button } from "@/components/ui/Button";
-import { createAndFund, getFeeConfig } from "@/lib/api";
+import { api, createAndFund, getFeeConfig } from "@/lib/api";
 import { deriveDeliverableKey } from "@/lib/deliverableKey";
 
 // Used only until `GET /config/fees` answers. The on-chain Config is the real
@@ -53,6 +58,34 @@ export function NewContract() {
   const [brief, setBrief] = useState("");
   const [type, setType] = useState<DeliverableType>("mergeable");
   const [criteria, setCriteria] = useState<string[]>([""]);
+
+
+  // Helper AI — optional in every sense; nothing blocks on it.
+  const { data: helper } = useQuery({
+    queryKey: ["helper-status"],
+    queryFn: () => api.get<HelperStatus>("/helper/status"),
+    staleTime: Infinity,
+    retry: false,
+  });
+  const [helperError, setHelperError] = useState<string | null>(null);
+  const suggest = useMutation({
+    mutationFn: () => {
+      const body: CriteriaSuggestRequest = {
+        title: title.trim(),
+        brief: brief.trim(),
+        deliverableType: type,
+        existing: criteria.map((c) => c.trim()).filter(Boolean),
+      };
+      return api.post<CriteriaSuggestResponse>("/helper/criteria", body);
+    },
+    onSuccess: (r) => {
+      setHelperError(null);
+      if (r.criteria.length) setCriteria(r.criteria);
+    },
+    onError: (e: Error) => setHelperError(e.message),
+  });
+  const canSuggest = title.trim().length >= 3 && brief.trim().length >= 10;
+
   const [amount, setAmount] = useState("");
   const [deadline, setDeadline] = useState("");
   const [noMod, setNoMod] = useState(false);
@@ -268,6 +301,31 @@ export function NewContract() {
           </FormField>
 
           <FormField label="Acceptance criteria — what the moderator checks">
+            {helper?.available && (
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={!canSuggest || suggest.isPending}
+                  onClick={() => suggest.mutate()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-lilac transition hover:bg-accent/15 disabled:opacity-40 disabled:hover:bg-accent/10"
+                >
+                  {suggest.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-3.5" />
+                  )}
+                  {suggest.isPending ? "Writing criteria…" : "Suggest criteria"}
+                </button>
+                <span className="text-xs text-muted">
+                  {canSuggest
+                    ? "Drafts them from your brief. Edit anything — these are only a starting point."
+                    : "Add a title and a brief first."}
+                </span>
+              </div>
+            )}
+            {helperError && (
+              <div className="mb-3 text-xs text-fail">{helperError}</div>
+            )}
             <div className="space-y-2">
               {criteria.map((c, i) => (
                 <div key={i} className="flex items-center gap-2">

@@ -17,8 +17,6 @@
  * Run with: `pnpm moderation-init`.
  */
 import "dotenv/config";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import {
   Connection,
@@ -32,16 +30,10 @@ import idl from "../src/solana/idl/desc_moderation.json";
 import escrowIdl from "../src/solana/idl/desc_escrow.json";
 
 import { rpcUrl } from "../src/config/cluster";
-const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
+import { AUTHORITY_PATH, expand, loadKeypair } from "./_keys";
 const RPC = rpcUrl;
-const AUTHORITY_PATH = expand(
-  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
-);
 const MIN_VERDICTS = 1;
 
-function loadKeypair(path: string): Keypair {
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
-}
 
 async function fundIfLow(connection: Connection, pubkey: PublicKey) {
   if ((await connection.getBalance(pubkey)) < LAMPORTS_PER_SOL) {

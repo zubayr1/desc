@@ -23,9 +23,6 @@ export interface AgeKeypair {
   recipient: string;
 }
 
-/** @deprecated alias — use {@link AgeKeypair}. */
-export type ModerationKeypair = AgeKeypair;
-
 /** Generate a fresh age keypair (identity + recipient). */
 export async function generateModerationKeypair(): Promise<AgeKeypair> {
   const identity = await generateIdentity();

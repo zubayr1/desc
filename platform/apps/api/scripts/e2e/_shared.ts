@@ -16,8 +16,7 @@
  */
 import "dotenv/config";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { readdirSync } from "node:fs";
 import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { buildBundle, encryptToRecipients, type Contract } from "@repo/shared";
@@ -32,21 +31,15 @@ import {
 } from "../../src/solana/moderation";
 
 import { rpcUrl } from "../../src/config/cluster";
+import { AUTHORITY_PATH, expand, loadKeypair } from "../_keys";
 const _ = anchorPkg; // keep the CJS default import referenced under ESM
 
-export const expand = (p: string) =>
-  p.startsWith("~") ? p.replace(/^~/, homedir()) : p;
 export const RPC = rpcUrl;
 export const BASE = `http://localhost:${process.env.PORT ?? "3000"}`;
 export const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
 
 /** The cold authority keypair — also the dev USDC mint authority. */
-export const AUTHORITY_PATH = expand(
-  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
-);
 
-export const loadKeypair = (p: string) =>
-  Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
 
 /**
  * Wait out a rate limit rather than failing on it.
@@ -339,3 +332,5 @@ export async function recordVerdict(
     })
     .rpc();
 }
+
+export { AUTHORITY_PATH, expand, loadKeypair };

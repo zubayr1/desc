@@ -6,8 +6,6 @@
  * Run: `pnpm e2e:accept`.
  */
 import "dotenv/config";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import {
   Connection,
   Keypair,
@@ -23,15 +21,10 @@ import {
 } from "./_shared";
 
 import { rpcUrl, usdcMint } from "../../src/config/cluster";
-const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
+import { AUTHORITY_PATH, expand, loadKeypair } from "../_keys";
 const RPC = rpcUrl;
 const BASE = `http://localhost:${process.env.PORT ?? "3000"}`;
 const USDC_MINT = new PublicKey(usdcMint());
-const AUTHORITY_PATH = expand(
-  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
-);
-const loadKeypair = (p: string) =>
-  Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(p, "utf8"))));
 
 async function main() {
   const connection = new Connection(RPC, "confirmed");

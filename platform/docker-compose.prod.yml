@@ -78,6 +78,10 @@ services:
       # Only localnet needs this; devnet and mainnet pin it in clusters.ts.
       USDC_MINT: ${USDC_MINT:-}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set a long random value}
+      # The Helper AI runs here. Subscription, never an API key.
+      DESC_JUDGE: ${DESC_JUDGE:-claude}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?run `claude setup-token`}
+      DESC_HELPER_MODEL: ${DESC_HELPER_MODEL:-claude-sonnet-5}
       RPC_URL: ${RPC_URL:-}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-fs}
       STORAGE_DIR: /storage

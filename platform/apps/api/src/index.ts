@@ -8,6 +8,7 @@ import { registerContractRoutes } from "./routes/contracts";
 import { registerLinkRoutes } from "./routes/links";
 import { registerAdminRoutes } from "./routes/admin";
 import { registerConfigRoutes } from "./routes/config";
+import { registerHelperRoutes } from "./routes/helper";
 import { registerWaitlistRoutes } from "./routes/waitlist";
 import { humanizeError } from "./errors";
 import { startReconciler } from "./contracts/reconciler";
@@ -40,6 +41,7 @@ registerContractRoutes(app);
 registerLinkRoutes(app);
 registerAdminRoutes(app);
 registerConfigRoutes(app);
+registerHelperRoutes(app);
 registerWaitlistRoutes(app);
 
 /**

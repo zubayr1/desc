@@ -371,3 +371,26 @@ export interface ModeratorWaitlistRequest {
 export interface ModeratorWaitlistCount {
   count: number;
 }
+
+// ---------------------------------------------------------------------------
+// Helper AI — criteria suggestions (off-chain, pre-contract, non-binding)
+// ---------------------------------------------------------------------------
+
+/** `POST /helper/criteria` — a brief in, checkable criteria out. */
+export interface CriteriaSuggestRequest {
+  title: string;
+  brief: string;
+  deliverableType: DeliverableType;
+  /** Anything already typed, so the helper refines rather than overwrites. */
+  existing?: string[];
+}
+
+export interface CriteriaSuggestResponse {
+  criteria: string[];
+}
+
+/** `GET /helper/status` — false when no AI judge is configured, so the web can
+ *  hide the button instead of offering something that will fail. */
+export interface HelperStatus {
+  available: boolean;
+}

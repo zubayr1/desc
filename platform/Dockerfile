@@ -25,6 +25,8 @@ WORKDIR /app
 RUN corepack enable
 ENV NODE_ENV=production
 
+RUN npm install -g @anthropic-ai/claude-code && claude --version
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules

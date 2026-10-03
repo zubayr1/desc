@@ -60,8 +60,7 @@ export type DescModeration = {
         {
           "name": "authority",
           "docs": [
-            "The verdict-authority signer PDA. Not initialized (holds no data); we only",
-            "need its bump, stored in the config for CPI signing."
+            "Not initialized — only its bump is needed, stored in the config."
           ],
           "pda": {
             "seeds": [
@@ -289,8 +288,7 @@ export type DescModeration = {
         {
           "name": "config",
           "docs": [
-            "The moderation config the mod is registered under (authenticated via the",
-            "moderator's `has_one = config`)."
+            "Authenticated via the moderator's `has_one = config`."
           ],
           "relations": [
             "moderator"
@@ -299,8 +297,7 @@ export type DescModeration = {
         {
           "name": "verdictAuthority",
           "docs": [
-            "The `[b\"authority\", config]` signer PDA = the escrow's settlement",
-            "authority. Signs the CPI; holds no data."
+            "The escrow's settlement authority. Signs the CPI; holds no data."
           ],
           "pda": {
             "seeds": [
@@ -328,7 +325,7 @@ export type DescModeration = {
         {
           "name": "moderator",
           "docs": [
-            "The registered moderator — must be active and bound to `config` + signer."
+            "Must be active and bound to `config` + signer."
           ],
           "pda": {
             "seeds": [
@@ -356,8 +353,8 @@ export type DescModeration = {
         {
           "name": "escrowConfig",
           "docs": [
-            "The escrow's protocol config. Its `settlement_authority` must equal",
-            "`verdict_authority` — enforced inside `record_verdict`."
+            "Its `settlement_authority` must equal `verdict_authority` — enforced",
+            "inside `record_verdict`."
           ]
         },
         {
@@ -367,8 +364,7 @@ export type DescModeration = {
         {
           "name": "panel",
           "docs": [
-            "The escrow's panel: who may vote and the votes so far. The escrow",
-            "program checks the seat and tallies; this program only forwards it."
+            "The escrow program checks the seat and tallies; this only forwards it."
           ],
           "writable": true
         },
@@ -563,47 +559,30 @@ export type DescModeration = {
       "docs": [
         "Global protocol config (PDA, seeds = [b\"config\", authority]).",
         "",
-        "Seeded with `authority` so the config is deterministic per-admin and not a",
-        "squattable global singleton. Holds protocol-level parameters so fees,",
-        "treasury, the settlement authority, and the kill-switch can change without",
-        "redeploying the program.",
-        "",
-        "Note: because `authority` is part of the seed, the top-level admin cannot be",
-        "rotated in place (the PDA address would change). `settlement_authority` is a",
-        "field, not a seed, so it rotates freely — which is what the V1->V2 seam needs.",
-        "",
-        "Backward-compat discipline:",
-        "- `version` is the first field (byte 8) for version dispatch / migrations.",
-        "- `reserved` is the LAST field. New fields are inserted immediately before",
-        "it and shrink it by their exact size, so the account size stays constant",
-        "(no `realloc`). Freed bytes are zeroed, so an added `Option<T>` reads None."
+        "Seeded with `authority`, so it is deterministic per-admin rather than a",
+        "squattable singleton — and so the admin cannot be rotated in place.",
+        "`settlement_authority` is a field, not a seed, so that one rotates freely."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "version",
-            "docs": [
-              "Schema version of this account. Set to `VERSION` at init."
-            ],
             "type": "u8"
           },
           {
             "name": "authority",
             "docs": [
-              "Admin — may update this config. Also part of the PDA seed."
+              "Admin. Also part of the PDA seed."
             ],
             "type": "pubkey"
           },
           {
             "name": "settlementAuthority",
             "docs": [
-              "Key authorized to record a verdict on an escrow.",
-              "",
-              "`bootstrap` points this at the `desc_moderation` verdict-authority PDA,",
-              "so a registered moderator settles by CPI and no platform keypair can.",
-              "It is a field rather than a seed so it stays rotatable — that is the",
-              "seam V2 uses to widen the pool from one moderator to a staked set."
+              "Who may record a verdict. `bootstrap` points this at the",
+              "`desc_moderation` verdict-authority PDA, so moderators settle by CPI and",
+              "no platform keypair can."
             ],
             "type": "pubkey"
           },
@@ -635,31 +614,22 @@ export type DescModeration = {
           {
             "name": "protocolFeeMin",
             "docs": [
-              "Minimum protocol fee in token base units. The fee charged is",
-              "`max(protocol_fee_bps of amount, protocol_fee_min)` — a floor so tiny",
-              "contracts still cover the roughly-fixed cost to serve them. Zero disables",
-              "the floor (old configs, whose `reserved` was zeroed, read 0 → no floor)."
+              "Fee floor: the fee charged is `max(bps of amount, this)`, so tiny",
+              "contracts still cover a roughly-fixed cost. Zero disables it."
             ],
             "type": "u64"
           },
           {
             "name": "minAmount",
             "docs": [
-              "Smallest contract `amount` the protocol will escrow, in token base units.",
-              "",
-              "Pairs with `protocol_fee_min`: below the crossover point the floor is a",
-              "rising share of a shrinking contract, so a minimum keeps the effective",
-              "fee rate sane (at 200 bps + a $1 floor, $50 is where they meet). Zero",
-              "disables the minimum — including for configs created before this field",
-              "existed, whose `reserved` was zeroed."
+              "Smallest contract the protocol will escrow. Pairs with",
+              "`protocol_fee_min`: below the crossover the floor is a rising share of a",
+              "shrinking contract. Zero disables it."
             ],
             "type": "u64"
           },
           {
             "name": "reserved",
-            "docs": [
-              "Forward-compat padding. Carve new fields from here."
-            ],
             "type": {
               "array": [
                 "u8",
@@ -673,35 +643,23 @@ export type DescModeration = {
     {
       "name": "escrow",
       "docs": [
-        "Per-deal escrow account (PDA, seeds = [b\"escrow\", initiator, contract_id]).",
+        "Per-deal escrow (PDA, seeds = [b\"escrow\", initiator, contract_id]).",
         "",
-        "Holds the funds-relevant state for one contract. Subjective data (the",
-        "verdict reasoning, deliverable contents, criteria, moderator identities)",
-        "stays off-chain in V1; this account records only the money, the lifecycle,",
-        "and audit hashes of what was submitted and what verdict was acted on.",
-        "",
-        "Backward-compat discipline:",
-        "- `version` is the first field (byte 8) for version dispatch / migrations.",
-        "- `reserved` is the LAST field. New fields are inserted immediately before",
-        "it and shrink it by their exact size, so the account size stays constant",
-        "(no `realloc`). Freed bytes are zeroed, so an added `Option<T>` reads None."
+        "Records the money, the lifecycle and audit hashes. Everything subjective —",
+        "verdict reasoning, deliverable contents, criteria — stays off-chain."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "version",
-            "docs": [
-              "Schema version of this account. Set to `VERSION` at init."
-            ],
             "type": "u8"
           },
           {
             "name": "config",
             "docs": [
-              "The protocol `Config` governing this escrow. Bound at creation so later",
-              "instructions load the *current* `settlement_authority` / `treasury` live",
-              "(keeping `settlement_authority` rotatable — the V1->V2 seam)."
+              "The governing `Config`. Bound at creation, but read live, so",
+              "`settlement_authority` and `treasury` stay rotatable."
             ],
             "type": "pubkey"
           },
@@ -712,7 +670,7 @@ export type DescModeration = {
           {
             "name": "committer",
             "docs": [
-              "None until the shareable link is accepted by a committer."
+              "None until a committer accepts the shareable link."
             ],
             "type": {
               "option": "pubkey"
@@ -720,54 +678,43 @@ export type DescModeration = {
           },
           {
             "name": "mint",
-            "docs": [
-              "USDC mint used for this deal."
-            ],
             "type": "pubkey"
           },
           {
             "name": "vault",
             "docs": [
-              "PDA token account holding the deposited funds."
+              "PDA token account holding the deposit."
             ],
             "type": "pubkey"
           },
           {
             "name": "amount",
             "docs": [
-              "Payout to the committer on success (USDC, 1e6 base units)."
+              "Payout to the committer on success."
             ],
             "type": "u64"
           },
           {
             "name": "protocolFee",
             "docs": [
-              "Protocol fee, snapshotted at creation so a later Config change can't",
-              "alter the agreed terms of an in-flight deal."
+              "Snapshotted at creation, so a later `Config` change cannot alter the",
+              "terms of a live deal."
             ],
             "type": "u64"
           },
           {
             "name": "moderatorSurcharge",
             "docs": [
-              "What the moderators earn on this contract, in total.",
-              "",
-              "Priced PER MODERATOR, not as a pot to divide: every moderator runs the",
-              "whole check — decrypt, rebuild, judge every criterion — so each is paid a",
-              "full fee. A contract with `n` moderators costs the initiator `n ×` the",
-              "per-moderator rate, and the alternative (one fee split `n` ways) is",
-              "rejected: it would pay the fifth moderator a fifth as much for identical",
-              "work, and no staked outside operator would take the job.",
-              "",
-              "V1 runs a single moderator, so this is that one fee and `release` pays it",
-              "whole to `moderator`. Dividing it across a k-of-n set is V2 work."
+              "What the panel earns in total — the sum of each seat's own fee, never one",
+              "fee divided up. Every moderator runs the whole check, so each is paid in",
+              "full and `n` moderators cost `n ×` the rate."
             ],
             "type": "u64"
           },
           {
             "name": "moderatorCount",
             "docs": [
-              "Number of moderators on this contract. Always 1 in V1 (0 when `no_mod`)."
+              "Seats on the panel: 0 (no-mod), 1 or 3."
             ],
             "type": "u8"
           },
@@ -782,7 +729,7 @@ export type DescModeration = {
           {
             "name": "outcome",
             "docs": [
-              "Set by `record_verdict`; None until a verdict is attested."
+              "None until a verdict is attested."
             ],
             "type": {
               "option": {
@@ -795,8 +742,7 @@ export type DescModeration = {
           {
             "name": "verdictHash",
             "docs": [
-              "Hash of the aggregated verdict JSON the settlement acted on (zeroed until",
-              "recorded). On-chain audit trail for the \"neutral trust layer\"."
+              "sha256 of the verdict acted on. Zeroed until recorded."
             ],
             "type": {
               "array": [
@@ -808,7 +754,7 @@ export type DescModeration = {
           {
             "name": "deliverableHash",
             "docs": [
-              "Hash of the deliverable the committer submitted (zeroed until submitted)."
+              "sha256 of the submitted deliverable. Zeroed until submitted."
             ],
             "type": {
               "array": [
@@ -820,7 +766,7 @@ export type DescModeration = {
           {
             "name": "deadline",
             "docs": [
-              "Unix timestamp — submission deadline. Governs the ghosting refund only."
+              "Submission deadline. Governs the ghosting refund only."
             ],
             "type": "i64"
           },
@@ -831,8 +777,7 @@ export type DescModeration = {
           {
             "name": "submittedAt",
             "docs": [
-              "When the committer submitted (None until `Submitted`). Off-chain SLA",
-              "clock starts here; not used as an on-chain timer."
+              "Off-chain SLA clock; never used as an on-chain timer."
             ],
             "type": {
               "option": "i64"
@@ -861,84 +806,59 @@ export type DescModeration = {
           {
             "name": "moderator",
             "docs": [
-              "The moderator ASSIGNED to this escrow, bound at `create_escrow` — the one",
-              "whose price was snapshotted, and the only one `record_verdict` accepts.",
-              "It is paid the surcharge on settle (`release` / `refund`).",
-              "`Pubkey::default()` on a no-mod escrow."
+              "Set only on a ONE-seat escrow. `Pubkey::default()` on a panel of three",
+              "and on no-mod — read `panel` instead."
             ],
             "type": "pubkey"
           },
           {
             "name": "verificationFee",
             "docs": [
-              "The non-refundable slice of `protocol_fee`, snapshotted at creation from",
-              "`Config::protocol_fee_min`.",
+              "The non-refundable slice of `protocol_fee`. Charged whenever a moderator",
+              "actually rendered a verdict, so the protocol recovers the cost of a Fail",
+              "without profiting from one. Zero means the old fee-on-Pass-only",
+              "behaviour.",
               "",
-              "Cost recovery for the verification itself: charged to the treasury",
-              "whenever a moderator actually rendered a verdict — on `release` (Pass, as",
-              "part of the full fee) and on `refund` (Fail, this slice only). The rest of",
-              "`protocol_fee` goes back to the initiator on a Fail, so the protocol never",
-              "*profits* from a failed deal but is never paid to *pass* one either.",
-              "",
-              "Zero when no floor is configured, and for escrows created before this",
-              "field existed (their `reserved` was zeroed) — both mean \"charge nothing on",
-              "a Fail\", i.e. the old fee-on-Pass-only behaviour. Carved from `reserved`.",
-              "",
-              "Invariant: `verification_fee <= protocol_fee`, since",
-              "`protocol_fee = max(bps_fee, protocol_fee_min)`."
+              "Invariant: `verification_fee <= protocol_fee`."
             ],
             "type": "u64"
           },
           {
             "name": "noMod",
             "docs": [
-              "This escrow runs WITHOUT verification: the initiator opted out of",
-              "moderation at creation, accepting the risk. `submit` then records a Pass",
-              "straight away — there is no moderator, no surcharge, and no verification",
-              "fee. Immutable once set; both parties can see it.",
-              "",
-              "Zero (false) for escrows created before this field existed, which is the",
-              "moderated behaviour. Carved from `reserved`."
+              "Initiator opted out of moderation. `submit` then records a Pass straight",
+              "away: no moderator, no surcharge, no verification fee."
             ],
             "type": "bool"
           },
           {
             "name": "baseBps",
-            "docs": [
-              "Share of `amount` the moderator charges, in basis points."
-            ],
             "type": "u16"
           },
           {
             "name": "feePerKb",
             "docs": [
-              "Per-KB of deliverable text. Always 0 until size pricing ships."
+              "Always 0 until size pricing ships."
             ],
             "type": "u64"
           },
           {
             "name": "maxBundleKb",
             "docs": [
-              "Largest deliverable accepted, in KB. 0 = no limit."
+              "0 = no limit."
             ],
             "type": "u32"
           },
           {
             "name": "panel",
             "docs": [
-              "This escrow's `Panel` — the moderators judging it and their votes. One",
-              "exists for every escrow, including no-mod ones (`count == 0`), so there",
-              "is a single shape to settle. Carved from `reserved`."
+              "This escrow's `Panel`. One exists for every escrow, including no-mod",
+              "(`count == 0`), so settlement has a single shape to handle."
             ],
             "type": "pubkey"
           },
           {
             "name": "reserved",
-            "docs": [
-              "Forward-compat padding so V2 fields (e.g. `parent`, `dispute_account`)",
-              "can be added without a risky `realloc`. Carve new fields from here;",
-              "keep this the LAST field."
-            ],
             "type": {
               "array": [
                 "u8",
@@ -952,17 +872,11 @@ export type DescModeration = {
     {
       "name": "escrowStatus",
       "docs": [
-        "On-chain lifecycle of an escrow — only the transitions that move money.",
+        "On-chain lifecycle — only the transitions that move money. The richer",
+        "off-chain states (draft, under_verification, disputed) have no on-chain form.",
         "",
-        "The richer off-chain contract states (draft, under_verification, disputed)",
-        "have no on-chain representation.",
-        "",
-        "Invariant: once `Submitted`, funds are frozen until a verdict is recorded —",
-        "the deadline is irrelevant from that point. Pass -> committer, Fail ->",
-        "initiator, and nothing else can move the money.",
-        "",
-        "APPEND-ONLY: borsh indexes variants by declaration order. New variants (e.g.",
-        "a future `Disputed`) must be added at the END — never reorder or insert."
+        "Invariant: once `Submitted`, funds are frozen until a verdict is recorded.",
+        "The deadline stops applying from that point."
       ],
       "type": {
         "kind": "enum",
@@ -993,46 +907,38 @@ export type DescModeration = {
       "docs": [
         "Program config (PDA, seeds = [b\"config\", admin]).",
         "",
-        "Seeded with `admin` so the config is deterministic per-platform and not a",
-        "squattable global singleton (mirrors `desc_escrow`'s `Config`). It is the",
-        "root of the verdict-authority chain: the escrow's `settlement_authority` is",
-        "set to this program's `[b\"authority\", config]` signer PDA, so the *only* way",
-        "to record a verdict is through this program — and the only way to make it act",
-        "is a registered moderator's signature.",
-        "",
-        "Backward-compat discipline (same as desc_escrow):",
-        "- `version` is the first field for version dispatch / migrations.",
-        "- `reserved` is the LAST field. New fields are carved from it so the account",
-        "size stays constant (no `realloc`); freed bytes are zeroed."
+        "Seeded with `admin`, so it is per-platform rather than a squattable",
+        "singleton. It is the root of the verdict-authority chain: the escrow's",
+        "`settlement_authority` is this program's `[b\"authority\", config]` signer PDA,",
+        "so the only way to record a verdict is through here — and the only way to",
+        "make it act is a registered moderator's signature."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "version",
-            "docs": [
-              "Schema version of this account. Set to `VERSION` at init."
-            ],
             "type": "u8"
           },
           {
             "name": "admin",
             "docs": [
-              "Platform admin — may `register_moderator`. Also part of the PDA seed."
+              "May `register_moderator`. Also part of the PDA seed."
             ],
             "type": "pubkey"
           },
           {
             "name": "escrowProgram",
             "docs": [
-              "The `desc_escrow` program this config authorizes verdicts for (CPI target)."
+              "The `desc_escrow` program this config authorizes verdicts for."
             ],
             "type": "pubkey"
           },
           {
             "name": "minVerdicts",
             "docs": [
-              "Verdicts required to settle a contract. V1 = 1; k-of-n consensus is V2."
+              "Verdicts required to settle. Panel consensus lives on the escrow's",
+              "`Panel`; this stays 1."
             ],
             "type": "u8"
           },
@@ -1043,16 +949,13 @@ export type DescModeration = {
           {
             "name": "authorityBump",
             "docs": [
-              "Bump of the `[b\"authority\", config]` signer PDA — the escrow's",
-              "`settlement_authority`. Stored so `submit_verdict` can sign the CPI."
+              "Bump of the `[b\"authority\", config]` signer PDA, stored so",
+              "`submit_verdict` can sign the CPI."
             ],
             "type": "u8"
           },
           {
             "name": "reserved",
-            "docs": [
-              "Forward-compat padding (V2: fee/reward params, …). Keep it LAST."
-            ],
             "type": {
               "array": [
                 "u8",
@@ -1068,69 +971,56 @@ export type DescModeration = {
       "docs": [
         "A registered moderator (PDA, seeds = [b\"moderator\", authority]).",
         "",
-        "One per moderator wallet. Holds the mod's signing identity, its public",
-        "encryption key (so the *chain* is the source of truth for what committers",
-        "seal deliverables to), and an active flag the mod controls itself.",
+        "One per moderator wallet: its signing identity, its public encryption key",
+        "(so the CHAIN decides what committers seal deliverables to), and an active",
+        "flag the moderator controls itself.",
         "",
-        "V1: registered by the platform admin (internal mods). V2: permissionless",
-        "registration gated by stake — those fields are carved from `reserved`.",
-        "",
-        "Backward-compat discipline: `version` first, `reserved` LAST (see",
-        "`ModerationConfig`)."
+        "Registered by the platform admin today; permissionless stake-gated",
+        "registration is V2, carved from `reserved`."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "version",
-            "docs": [
-              "Schema version of this account. Set to `VERSION` at init."
-            ],
             "type": "u8"
           },
           {
             "name": "config",
             "docs": [
-              "The `ModerationConfig` this moderator is registered under. Bound at",
-              "registration so a verdict can't be signed under a different config."
+              "Bound at registration, so a verdict cannot be signed under a different",
+              "config."
             ],
             "type": "pubkey"
           },
           {
             "name": "authority",
             "docs": [
-              "The moderator's own non-custodial wallet. Signs `set_moderator_active`",
-              "and `submit_verdict`. Also part of the PDA seed."
+              "The moderator's own wallet. Signs `set_moderator_active` and",
+              "`submit_verdict`. Also part of the PDA seed."
             ],
             "type": "pubkey"
           },
           {
             "name": "recipient",
             "docs": [
-              "Public `age` recipient (e.g. `age1...`) — what committers encrypt",
-              "deliverables to. On-chain so nobody can swap a mod's key."
+              "Public `age` recipient. On-chain so nobody can swap a moderator's key."
             ],
             "type": "string"
           },
           {
             "name": "label",
-            "docs": [
-              "Human-readable label (platform-set)."
-            ],
             "type": "string"
           },
           {
             "name": "active",
             "docs": [
-              "Whether this mod may currently judge. Toggled by the mod itself."
+              "Toggled by the moderator itself."
             ],
             "type": "bool"
           },
           {
             "name": "registeredAt",
-            "docs": [
-              "Unix timestamp of registration."
-            ],
             "type": "i64"
           },
           {
@@ -1139,30 +1029,27 @@ export type DescModeration = {
           },
           {
             "name": "baseBps",
-            "docs": [
-              "Share of the contract amount, in basis points (100 = 1%)."
-            ],
             "type": "u16"
           },
           {
             "name": "feePerKb",
             "docs": [
-              "Per-KB of deliverable text. V2 — must be 0 until size pricing ships."
+              "Must be 0 until size pricing ships."
             ],
             "type": "u64"
           },
           {
             "name": "maxBundleKb",
             "docs": [
-              "Largest deliverable this moderator will judge, in KB. 0 = no limit.",
-              "V2 — must be 0 until size pricing ships."
+              "0 = no limit. Must be 0 until size pricing ships."
             ],
             "type": "u32"
           },
           {
             "name": "reserved",
             "docs": [
-              "Forward-compat padding (V2: stake, reputation, …). Keep it LAST."
+              "V2: stake, slashing history. Reputation lives in `desc_escrow`, which is",
+              "where the outcome and the panel's votes are."
             ],
             "type": {
               "array": [
@@ -1177,11 +1064,9 @@ export type DescModeration = {
     {
       "name": "outcome",
       "docs": [
-        "Aggregated verdict result, attested on-chain by the settlement authority.",
-        "The authority only *records* this; the parties themselves execute the",
-        "transfer (so payout never depends on the authority being online).",
-        "",
-        "APPEND-ONLY: add new variants at the END only (see `EscrowStatus`)."
+        "The verdict, attested by the settlement authority. The authority only",
+        "*records* it; the parties execute the transfer, so payout never depends on",
+        "the authority being online."
       ],
       "type": {
         "kind": "enum",
@@ -1198,56 +1083,44 @@ export type DescModeration = {
     {
       "name": "panel",
       "docs": [
-        "The moderators judging one escrow, and their votes (PDA, seeds =",
-        "[b\"panel\", escrow]).",
+        "The moderators judging one escrow (PDA, seeds = [b\"panel\", escrow]).",
         "",
-        "A separate account because the escrow cannot hold three moderators plus",
-        "their votes — three pubkeys alone outgrow its remaining `reserved` space.",
-        "",
-        "One panel exists per escrow, including a no-mod escrow (`count == 0`), so",
-        "every settlement path has exactly one shape to handle. Its rent is paid by",
-        "the initiator at creation and returns to the initiator when the panel is",
-        "closed on settle.",
-        "",
-        "Backward-compat discipline: `version` first, `reserved` LAST."
+        "Separate from the escrow because three pubkeys plus votes outgrow its",
+        "remaining `reserved` space. One exists per escrow, including no-mod",
+        "(`count == 0`), so settlement has a single shape to handle. Rent is paid by",
+        "the initiator and returned to it when the panel closes on settle."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "version",
-            "docs": [
-              "Schema version of this account. Set to `VERSION` at init."
-            ],
             "type": "u8"
           },
           {
             "name": "escrow",
-            "docs": [
-              "The escrow this panel judges. Bound at creation."
-            ],
             "type": "pubkey"
           },
           {
             "name": "count",
             "docs": [
-              "How many seats are filled: 0 (no-mod), 1 or 3. Never even above zero —",
-              "a tie has no majority."
+              "Seats filled: 0 (no-mod), 1 or 3. Never even above zero — a tie has no",
+              "majority."
             ],
             "type": "u8"
           },
           {
             "name": "quorum",
             "docs": [
-              "Votes needed for an outcome: `count / 2 + 1`. Snapshotted so a later",
-              "rule change cannot move the goalposts on a live deal."
+              "Votes needed to decide: `count / 2 + 1`. Snapshotted so a later rule",
+              "change cannot move the goalposts on a live deal."
             ],
             "type": "u8"
           },
           {
             "name": "entries",
             "docs": [
-              "Seats. Only the first `count` are used."
+              "Only the first `count` are used."
             ],
             "type": {
               "array": [
@@ -1266,9 +1139,6 @@ export type DescModeration = {
           },
           {
             "name": "reserved",
-            "docs": [
-              "Forward-compat padding. Carve new fields from here; keep it LAST."
-            ],
             "type": {
               "array": [
                 "u8",
@@ -1282,8 +1152,7 @@ export type DescModeration = {
     {
       "name": "panelEntry",
       "docs": [
-        "A moderator's seat on an escrow's panel: who they are, what they are owed,",
-        "and how they voted."
+        "One moderator's seat: who, what they are owed, and how they voted."
       ],
       "type": {
         "kind": "struct",
@@ -1291,7 +1160,7 @@ export type DescModeration = {
           {
             "name": "moderator",
             "docs": [
-              "The moderator's wallet — the key that signs its verdict."
+              "The wallet that signs this seat's verdict."
             ],
             "type": "pubkey"
           },
@@ -1299,21 +1168,18 @@ export type DescModeration = {
             "name": "fee",
             "docs": [
               "Its own price for THIS contract, snapshotted at creation. Paid on settle",
-              "only if it voted; otherwise it returns to the initiator."
+              "only if it voted; otherwise returned to the initiator."
             ],
             "type": "u64"
           },
           {
             "name": "vote",
-            "docs": [
-              "`VOTE_NONE` until it votes, then `VOTE_PASS` / `VOTE_FAIL`."
-            ],
             "type": "u8"
           },
           {
             "name": "verdictHash",
             "docs": [
-              "sha256 of the verdict this moderator signed. Zero until it votes."
+              "sha256 of the verdict signed. Zero until it votes."
             ],
             "type": {
               "array": [

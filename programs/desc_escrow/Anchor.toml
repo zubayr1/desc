@@ -1,4 +1,7 @@
 [toolchain]
+# Pin the CLI to the `anchor-lang` the programs build against. Without it
+# every build warns that the two differ, which buries real warnings.
+anchor_version = "0.31.1"
 package_manager = "yarn"
 
 [features]

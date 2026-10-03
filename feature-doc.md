@@ -1,6 +1,6 @@
 # desc — status & roadmap
 
-*Last updated: 2026-08-28*
+*Last updated: 2026-10-03*
 
 Legend: ✅ built · 🔨 in progress · ⬜ not started · 🔮 later version · 🚫 set aside
 
@@ -106,19 +106,20 @@ Two principles behind this:
 
 | Piece | State |
 |---|---|
-| `desc_escrow` program (10 instructions) | ✅ |
-| `desc_moderation` program (4 instructions) | ✅ |
+| `desc_escrow` program (11 instructions) | ✅ |
+| `desc_moderation` program (5 instructions) | ✅ |
 | Deliverable pipeline (seal → encrypt → verify) | ✅ |
 | API + Postgres read model | ✅ |
 | Web app | ✅ |
 | Admin console (read-only) | ✅ |
 | Fee model (floor, verification fee, minimum) | ✅ |
 | No-mod mode | ✅ |
-| Moderator runner (`mod-run`) | ✅ with a **manual** verdict |
-| **AI moderator** | ⬜ |
-| **Helper AI** | ⬜ |
-| Background reconciler | ⬜ |
 | Verdict consensus (panel of 1 or 3, majority) | ✅ |
+| **AI moderator** — Claude, on the subscription | ✅ |
+| Moderator reputation, on-chain | ✅ |
+| Background reconciler | ✅ |
+| **Live on devnet** — descprotocol.xyz | ✅ |
+| **Helper AI** | ⬜ |
 
 ---
 
@@ -136,16 +137,24 @@ Two principles behind this:
 
 - API holds **no signing key** — it builds unsigned transactions, the user signs,
   the API submits.
-- Deliverables are sealed to every active mod **and the initiator**, so a Pass
-  hands over exactly the bytes that were verified.
+- Deliverables are sealed to **this contract's panel** and the initiator, so a
+  Pass hands over exactly the bytes that were verified — and no moderator can
+  read work it was never given.
 - Read model caches chain state in Postgres, and the list view re-reads the chain
   in one batched call.
 
-**The verification seam**
+**Verification**
 
-`runCheck(criteria, files) → { outcome, reasoning }` is the swap point. Today it
-returns an operator's manual decision. The real AI drops in here without touching
-the runner, the API, or the chain.
+`runCheck(criteria, files) → { outcome, reasoning }` is the seam, and it now runs
+a real judge: Claude through the Claude Code subscription (`DESC_JUDGE=claude`),
+with the metered API as an alternative and a manual stand-in for tests. Swapping
+the judge touches neither the runner, the API, nor the chain.
+
+**Moderator reputation**
+
+Settlement writes each moderator's own `ModeratorReputation` account as it pays
+it, so the record survives the escrow being closed. Agreement is counted only on
+panels of three — a moderator judging alone is its own majority.
 
 ---
 
@@ -155,22 +164,19 @@ In order.
 
 | # | Item | Why |
 |---|---|---|
-| 1 | **Thin AI moderator slice** — one model call: criteria + files → pass/fail + reasoning | Tests the whole thesis. Everything else is chassis. |
-| 2 | **Helper AI** — brief → checkable criteria | Vague criteria cause failed verification and disputes. Highest-leverage V1 work. |
-| 3 | **Constrain criteria to bundle-checkable claims** | A mod sees a folder. It cannot see "merged" or "deployed". |
-| 4 | **Fix the deadline bug** — form accepts today's date, tx then fails | User signs, then loses a transaction fee. |
-| 5 | **Honest copy** — site says "AI moderator" and there isn't one yet | Decide: build it, or change the words. |
-| 6 | **Background reconciler** | Users can go direct to chain and bypass the API; the cached list then goes stale. |
-| 7 | **Crypto unit tests** — Merkle, denylist, `age` round-trip | Silent bugs there are security bugs. |
-| 8 | **Break-even model** | Confirms whether $1 / $50 are the right numbers. |
-| 9 | **10 willingness-to-pay conversations** with people scammed on a Solana bounty | Do this before expanding scope, not after. |
+| 1 | **Helper AI** — brief → checkable criteria | Vague criteria cause failed verification and disputes. Highest-leverage V1 work. |
+| 2 | **Constrain criteria to bundle-checkable claims** | A mod sees a folder. It cannot see "merged" or "deployed". |
+| 3 | **Break-even model** | Confirms whether $1 / $50 are the right numbers. |
+| 4 | **10 willingness-to-pay conversations** with people scammed on a Solana bounty | Do this before expanding scope, not after. |
 
-Not blocking, but do before launch: revive the `e2e/` scripts (they use a removed
-deliverable type and a deleted admin route), and drop the vestigial `moderators`
-table and its unused repo.
+Done since this list was written: the AI moderator, the background reconciler,
+the deadline the form would accept and the chain would reject, the honest-copy
+problem (the site said "AI moderator" before there was one), crypto and bundle
+unit tests, the `e2e/` scripts, and the vestigial `moderators` table.
 
 The validator covers path traversal, control characters, denylists, and per-file
-plus total size caps. What it lacks is tests — see #7.
+plus total size caps, and `pnpm test` exercises the Merkle build and the `age`
+round-trip.
 
 ---
 
@@ -234,8 +240,17 @@ happen either.
 
 ### V1.5 — cheap, high trust-signal
 
-- ⬜ **Reputation** — on-chain completed-deal counts for both parties. Low
-  complexity, directly attacks cold-start trust, feeds mod weighting later.
+- ✅ **Moderator reputation** — on-chain counters per moderator: verdicts cast,
+  verdicts on a panel of three, how many matched the majority, and how many were
+  Fail. Written by settlement as each seat is paid, so the record outlives the
+  escrow. Shown on `/moderators` and in the picker, which turns the moderator
+  list into a market: a track record is what justifies charging more.
+- ⬜ **Party reputation** — completed-deal counts for initiators and committers.
+  Deferred, not forgotten: a wallet is free, so counts are farmable at the price
+  of a protocol fee, and defending them needs counterparty-diversity history
+  that belongs off-chain.
+- ✅ **Moderator waitlist** — third-party operators can register interest on
+  `/moderators`. All moderators are ours today; V2 opens registration.
 
 ### V2 — decentralize moderation *(this is the real differentiator)*
 

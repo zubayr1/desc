@@ -54,7 +54,6 @@ impl<'info> InitializeConfig<'info> {
             reserved: [0; 48],
         });
 
-        // Cross-field check on the finished config (see `validate_fee_bounds`).
         self.config.validate_fee_bounds()?;
 
         Ok(())

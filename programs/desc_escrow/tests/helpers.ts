@@ -95,6 +95,14 @@ export function verdictAuthorityPda(modConfig: PublicKey): PublicKey {
   )[0];
 }
 
+/** A moderator's lifetime reputation record, on the ESCROW program. */
+export function moderatorReputationPda(wallet: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("mod_rep"), wallet.toBuffer()],
+    program.programId
+  )[0];
+}
+
 export function moderatorPda(wallet: PublicKey): PublicKey {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("moderator"), wallet.toBuffer()],
@@ -274,6 +282,18 @@ async function registerModeratorIn(
   maxBundleKb = 0
 ): Promise<PublicKey> {
   const pda = moderatorPda(wallet.publicKey);
+  // Settlement takes one reputation account per panel seat, so a moderator
+  // registered without one cannot be settled. Production does this in
+  // `moderator-register`; the tests have to do it too.
+  await program.methods
+    .initModeratorReputation(wallet.publicKey)
+    .accountsPartial({
+      payer: admin.publicKey,
+      reputation: moderatorReputationPda(wallet.publicKey),
+      systemProgram: SystemProgram.programId,
+    })
+    .signers([admin])
+    .rpc();
   await moderation.methods
     .registerModerator(
       wallet.publicKey,
@@ -521,8 +541,7 @@ export async function recordVerdict(
 }
 
 /**
- * The token account of EVERY seat on `s`'s panel, in panel order — exactly what
- * `release` / `refund` expect as `remainingAccounts`.
+ * The token account of EVERY seat on `s`'s panel, in panel order.
  *
  * One per seat, not one per voter: the voter list grows as votes land, so a
  * settlement transaction built from it could arrive with the wrong number of
@@ -545,6 +564,25 @@ export async function panelAtas(s: EscrowSetup): Promise<PublicKey[]> {
   return atas;
 }
 
+/** Every seat's reputation account, in panel order. */
+export async function panelReputations(s: EscrowSetup): Promise<PublicKey[]> {
+  const panel = await program.account.panel.fetch(s.panel);
+  return panel.entries
+    .slice(0, panel.count)
+    .map((e) => moderatorReputationPda(e.moderator));
+}
+
+/**
+ * Exactly what `release` / `refund` take as `remainingAccounts`: TWO per seat,
+ * token accounts first, then reputation PDAs (see `settle_panel`).
+ */
+export async function panelSettlementAccounts(
+  s: EscrowSetup,
+  atas?: PublicKey[]
+): Promise<PublicKey[]> {
+  return [...(atas ?? (await panelAtas(s))), ...(await panelReputations(s))];
+}
+
 const remaining = (keys: PublicKey[]) =>
   keys.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true }));
 
@@ -560,7 +598,7 @@ export async function releaseEscrow(
     moderatorAtas?: PublicKey[];
   }
 ) {
-  const atas = opts.moderatorAtas ?? (await panelAtas(s));
+  const accounts = await panelSettlementAccounts(s, opts.moderatorAtas);
   await program.methods
     .release()
     .accountsPartial({
@@ -575,7 +613,7 @@ export async function releaseEscrow(
       initiator: s.initiator.publicKey,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .remainingAccounts(remaining(atas))
+    .remainingAccounts(remaining(accounts))
     .signers([opts.signer])
     .rpc();
 }
@@ -588,7 +626,7 @@ export async function refundEscrow(
   s: EscrowSetup,
   opts?: { moderatorAtas?: PublicKey[] }
 ) {
-  const atas = opts?.moderatorAtas ?? (await panelAtas(s));
+  const accounts = await panelSettlementAccounts(s, opts?.moderatorAtas);
   await program.methods
     .refund()
     .accountsPartial({
@@ -601,7 +639,7 @@ export async function refundEscrow(
       treasury: s.world.treasury,
       tokenProgram: TOKEN_PROGRAM_ID,
     })
-    .remainingAccounts(remaining(atas))
+    .remainingAccounts(remaining(accounts))
     .signers([s.initiator])
     .rpc();
 }

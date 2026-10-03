@@ -60,9 +60,8 @@ export function dbWorkSource(): WorkSource {
             -- a settled escrow leaves 'submitted' anyway.
             -- Nothing to judge until the ciphertext is actually uploaded.
             AND c.deliverable_storage_key IS NOT NULL
-            -- A seat on this contract's panel. The legacy column covers rows
-            -- created before the panel was stored.
-            AND (c.panel @> ${seat}::jsonb OR c.moderator = ${wallet})
+            -- A seat on this contract's panel.
+            AND c.panel @> ${seat}::jsonb
           ON CONFLICT (contract_id, moderator) DO UPDATE
             SET state = 'in_progress',
                 attempts = moderation_claims.attempts + 1,

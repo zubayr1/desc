@@ -33,7 +33,6 @@ export type Address = string;
 /** ISO 8601 timestamp. */
 export type Timestamp = string;
 
-export const USDC_DECIMALS = 6;
 export const DEFAULT_PROTOCOL_FEE_BPS = 200; // 2%
 /** Minimum protocol fee in USDC base units ($1). The fee is
  *  max(2% of amount, this) — a floor so tiny contracts cover the fixed cost.
@@ -51,9 +50,6 @@ export const DEFAULT_MIN_AMOUNT = 50_000_000;
 /* Each enum is declared as an `as const` array (the runtime source of truth)
  * with its type derived from it — so a value list and a type come from ONE
  * declaration, importable by both compile-time and runtime code. */
-
-export const ROLES = ["initiator", "committer", "admin"] as const;
-export type Role = (typeof ROLES)[number];
 
 /**
  * Deliverable types — framed as what a moderator can verify **from the submitted
@@ -189,11 +185,6 @@ export interface Contract {
    *  contract, otherwise 1 or 3. Mirrors the on-chain `Panel`, in the same
    *  order, and it is what the committer seals the delivery to. */
   panel: ContractModerator[];
-  /** Legacy mirror of a ONE-seat panel: `panel[0].wallet`, or null. Kept while
-   *  `mod-watch` still claims by this column; use `panel`. */
-  moderator: Address | null;
-  /** Legacy mirror of `panel[0].recipient`. Use `panel`. */
-  moderatorRecipient: string | null;
 
   // Verification (manual in MVP; null until a verdict is recorded)
   outcome: Outcome | null;
@@ -360,29 +351,6 @@ export interface CreateContractResponse {
   escrowAddress: Address;
   /** Base64 serialized unsigned transaction. */
   unsignedTx: string;
-}
-
-/** Body for any submit endpoint — the wallet-signed transaction. */
-export interface SubmitTxRequest {
-  /** Base64 serialized signed transaction. */
-  signedTx: string;
-}
-
-/** Committer opens the shareable link and accepts. */
-export interface AcceptContractRequest {
-  linkToken: string;
-  committer: Address;
-}
-
-export interface SubmitDeliverableRequest {
-  payload: string;
-}
-
-/** Admin/manual verdict (the stand-in for AI moderators in the MVP). */
-export interface RecordVerdictRequest {
-  outcome: Outcome;
-  /** Optional reviewer note for the audit trail. */
-  note?: string;
 }
 
 // ---------------------------------------------------------------------------

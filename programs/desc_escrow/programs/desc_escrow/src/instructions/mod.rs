@@ -7,6 +7,7 @@ pub mod mutual_cancel;
 pub mod record_verdict;
 pub mod refund;
 pub mod release;
+pub mod settle;
 pub mod submit;
 pub mod update_config;
 
@@ -19,5 +20,6 @@ pub use mutual_cancel::*;
 pub use record_verdict::*;
 pub use refund::*;
 pub use release::*;
+pub use settle::*;
 pub use submit::*;
 pub use update_config::*;

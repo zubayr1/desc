@@ -27,7 +27,6 @@ pub struct MutualCancel<'info> {
     #[account(mut)]
     pub vault: Account<'info, TokenAccount>,
 
-    /// Refund destination — the initiator's USDC account.
     #[account(
         mut,
         constraint = initiator_token_account.mint == escrow.mint @ EscrowError::Unauthorized,
@@ -40,20 +39,17 @@ pub struct MutualCancel<'info> {
 
 impl<'info> MutualCancel<'info> {
     pub fn mutual_cancel(&mut self) -> Result<()> {
-        // A stale program reading a newer account decodes silently and wrongly.
         self.escrow.check_version()?;
         require!(
             self.escrow.status == EscrowStatus::Active
                 || self.escrow.status == EscrowStatus::Submitted,
             EscrowError::InvalidStatus
         );
-        // The co-signer must be the bound committer.
         require!(
             self.escrow.committer == Some(self.committer.key()),
             EscrowError::Unauthorized
         );
 
-        // Escrow PDA signs for its own vault.
         let initiator_key = self.initiator.key();
         let contract_id = self.escrow.contract_id;
         let bump = self.escrow.bump;
@@ -64,7 +60,6 @@ impl<'info> MutualCancel<'info> {
             &[bump],
         ]];
 
-        // Return the full deposit to the initiator.
         transfer(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
@@ -78,7 +73,6 @@ impl<'info> MutualCancel<'info> {
             self.vault.amount,
         )?;
 
-        // Close the now-empty vault, rent back to the initiator.
         close_account(CpiContext::new_with_signer(
             self.token_program.to_account_info(),
             CloseAccount {

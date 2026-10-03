@@ -9,6 +9,7 @@ import {
   waitForChainTime,
   usdc,
   refundEscrow,
+  moderatorReputationPda,
 } from "./helpers";
 
 /**
@@ -40,5 +41,16 @@ describe("ghost timeout", () => {
     assert.equal((await tokenBalance(s.initiatorAta)).toString(), total.toString());
     assert.equal((await tokenBalance(world.treasury)).toString(), "0");
     assert.property((await program.account.escrow.fetch(s.escrow)).status, "refunded");
+
+    // And nobody is SCORED either. A moderator is scored exactly when it is
+    // paid, so a deal nobody judged must leave every record untouched — the
+    // seat was assigned, which is not the same as having done the work.
+    const rep = await program.account.moderatorReputation.fetch(
+      moderatorReputationPda(world.moderator.publicKey)
+    );
+    assert.equal(rep.verdictsCast, 0);
+    assert.equal(rep.panelVerdicts, 0);
+    assert.equal(rep.majorityAgreements, 0);
+    assert.equal(rep.failVotes, 0);
   });
 });

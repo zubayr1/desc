@@ -31,28 +31,20 @@ import {
   SystemProgram,
 } from "@solana/web3.js";
 import "dotenv/config";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import type { DescEscrow } from "../src/solana/idl/desc_escrow";
 import idl from "../src/solana/idl/desc_escrow.json";
 import moderationIdl from "../src/solana/idl/desc_moderation.json";
 
 import { cluster, descEnv, rpcUrl } from "../src/config/cluster";
-const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
+import { AUTHORITY_PATH, expand, loadKeypair } from "./_keys";
 
 const RPC = rpcUrl;
-const AUTHORITY_PATH = expand(
-  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
-);
 const FEE_BPS = 200;
 const FEE_MIN = 1_000_000; // $1 floor (base units) — configurable via update-config
 // Smallest contract the protocol accepts. At 200 bps + a $1 floor the two meet
 // at $50; below that the floor would be a punitive share of the contract.
 const MIN_AMOUNT = 50_000_000; // $50
 
-function loadKeypair(path: string): Keypair {
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
-}
 
 /** The escrow's `settlement_authority` = the `desc_moderation` `[b"authority", config]`
  *  PDA, derived from the cold admin + the moderation program id. No keypair. */

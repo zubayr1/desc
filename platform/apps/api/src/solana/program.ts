@@ -246,7 +246,7 @@ export async function readModeratorReputations(
 /**
  * The accounts `release` and `refund` take as remaining accounts: TWO per panel
  * seat, in seat order — every seat's token account first, then every seat's
- * reputation PDA. Mirrors `pay_panel`, which splits the slice at the seat count.
+ * reputation PDA. Mirrors `settle_panel`, which splits the slice at the seat count.
  *
  * Per SEAT and not per voter: the voter list grows as votes land, so a list
  * sized to the voters would be the wrong length by the time the transaction

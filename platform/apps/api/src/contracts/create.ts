@@ -146,10 +146,6 @@ export async function createContract(
       linkToken: null,
       initiatorRecipient: req.initiatorRecipient ?? null,
       panel,
-      // Legacy single-seat mirrors — only meaningful for a panel of one, which
-      // is also all `mod-watch` can claim by until the claims table lands.
-      moderator: panel.length === 1 ? panel[0].wallet : null,
-      moderatorRecipient: panel.length === 1 ? panel[0].recipient : null,
     })
     .returning();
 

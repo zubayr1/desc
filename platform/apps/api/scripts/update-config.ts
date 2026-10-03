@@ -16,7 +16,6 @@
  */
 import "dotenv/config";
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 const { BN } = anchorPkg;
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -24,11 +23,8 @@ import type { DescEscrow } from "../src/solana/idl/desc_escrow";
 import idl from "../src/solana/idl/desc_escrow.json";
 
 import { rpcUrl } from "../src/config/cluster";
-const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
+import { AUTHORITY_PATH, expand } from "./_keys";
 const RPC = rpcUrl;
-const AUTHORITY_PATH = expand(
-  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
-);
 
 const argv = process.argv.slice(2);
 const has = (f: string) => argv.includes(f);

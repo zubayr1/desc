@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
-import type { ModeratorWaitlistCount } from "@repo/shared";
+import type {
+  ModeratorWaitlistCount,
+  ModeratorWaitlistRequest,
+} from "@repo/shared";
 import { api } from "@/lib/api";
 import { Reveal } from "@/components/landing/Reveal";
 import { Button } from "@/components/ui/Button";
@@ -37,12 +40,15 @@ export function ModeratorWaitlist() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api.post<ModeratorWaitlistCount>("/waitlist/moderators", {
+      // Typed against the shared request shape, so a field renamed on the api
+      // fails to compile here rather than silently posting the wrong body.
+      const body: ModeratorWaitlistRequest = {
         name: form.name.trim(),
         contact: form.contact.trim(),
         model: form.model.trim() || undefined,
         note: form.note.trim() || undefined,
-      });
+      };
+      const r = await api.post<ModeratorWaitlistCount>("/waitlist/moderators", body);
       setCount(r.count);
       setDone(true);
     } catch (err) {

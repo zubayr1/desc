@@ -23,8 +23,6 @@
  * Prereq: both programs deployed at the version that has `init_moderator_reputation`.
  */
 import "dotenv/config";
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import type { DescEscrow } from "../src/solana/idl/desc_escrow";
@@ -32,16 +30,10 @@ import escrowIdl from "../src/solana/idl/desc_escrow.json";
 import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import moderationIdl from "../src/solana/idl/desc_moderation.json";
 import { rpcUrl } from "../src/config/cluster";
+import { AUTHORITY_PATH, expand, loadKeypair } from "./_keys";
 
-const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
-const AUTHORITY_PATH = expand(
-  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
-);
 const DRY_RUN = process.argv.includes("--dry-run");
 
-function loadKeypair(path: string): Keypair {
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
-}
 
 async function main() {
   const connection = new Connection(rpcUrl, "confirmed");

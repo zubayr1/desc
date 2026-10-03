@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 pub mod error;
+pub mod foreign;
 pub mod instructions;
 pub mod states;
 
@@ -61,8 +62,8 @@ pub mod desc_escrow {
     }
 
     pub fn create_escrow<'info>(
-        // `'info` is spelled out because the chosen moderators arrive as
-        // `remaining_accounts`, which must share the accounts' lifetime.
+        // `'info` is spelled out because `remaining_accounts` must share the
+        // accounts' lifetime. Same below, on release and refund.
         ctx: Context<'_, '_, '_, 'info, CreateEscrow<'info>>,
         contract_id: [u8; 16],
         amount: u64,
@@ -76,7 +77,6 @@ pub mod desc_escrow {
             deadline,
             no_mod,
             max_moderator_fee,
-            // The chosen moderators: none for no-mod, otherwise 1 or 3.
             ctx.remaining_accounts,
             &ctx.bumps,
         )
@@ -105,21 +105,15 @@ pub mod desc_escrow {
     }
 
     pub fn release<'info>(
-        // `'info` is spelled out because the panel's accounts arrive as
-        // `remaining_accounts`, which must share the accounts' lifetime.
-        // The third lifetime is `'info` too: the reputation accounts are
-        // deserialized as `Account<'info, _>` inside `pay_panel`, so the
-        // remaining-accounts slice has to outlive the call.
+        // The THIRD lifetime is `'info` too: `settle_panel` deserializes the
+        // reputation accounts as `Account<'info, _>`, so the slice has to
+        // outlive the call.
         ctx: Context<'_, '_, 'info, 'info, Release<'info>>,
     ) -> Result<()> {
-        // Two accounts per panel SEAT, in panel order: every seat's token
-        // account, then every seat's reputation PDA (see `pay_panel`).
         ctx.accounts.release(ctx.remaining_accounts)
     }
 
     pub fn refund<'info>(ctx: Context<'_, '_, 'info, 'info, Refund<'info>>) -> Result<()> {
-        // Two accounts per panel SEAT, in panel order (see `pay_panel`). Empty
-        // on a ghost-timeout, where nobody judged.
         ctx.accounts.refund(ctx.remaining_accounts)
     }
 

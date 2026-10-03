@@ -30,8 +30,7 @@
  *   Size pricing (the last two) is V2: escrow refuses a non-zero value today.
  */
 import "dotenv/config";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 // `BN` isn't a statically-detectable named export under ESM — pull it off default.
 const { BN } = anchorPkg;
@@ -51,11 +50,8 @@ import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import idl from "../src/solana/idl/desc_moderation.json";
 
 import { rpcUrl, usdcMint } from "../src/config/cluster";
-const expand = (p: string) => (p.startsWith("~") ? p.replace(/^~/, homedir()) : p);
+import { AUTHORITY_PATH, expand, loadKeypair } from "./_keys";
 const RPC = rpcUrl;
-const AUTHORITY_PATH = expand(
-  process.env.AUTHORITY_KEYPAIR_PATH ?? "~/.config/solana/id.json"
-);
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
 const GAS_SOL = 0.05; // a tiny buffer — thousands of verdict txns
 
@@ -85,9 +81,6 @@ const slug =
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "") || "moderator";
 
-function loadKeypair(path: string): Keypair {
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
-}
 
 /**
  * Top the new moderator up with gas for its verdict transactions.

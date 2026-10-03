@@ -12,7 +12,6 @@ import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { api, prepareSignSubmit } from "@/lib/api";
-import { useFees } from "@/lib/fees";
 import { cn, short, usd } from "@/lib/utils";
 
 function Field({
@@ -286,7 +285,6 @@ export function ContractView() {
   const { publicKey } = useWallet();
 
   const me = publicKey?.toBase58();
-  const { fees } = useFees();
   const queryKey = ["contract", byLink ? "link" : "id", id];
   const {
     data: contract,
@@ -362,8 +360,9 @@ export function ContractView() {
                 : contract.panel.length > 1
                   ? `${contract.panel.length} moderators`
                   : (contract.panel[0]?.label ??
-                    fees.moderators.find((m) => m.wallet === contract.moderator)?.label ??
-                    (contract.moderator ? short(contract.moderator) : "Moderator"))
+                    (contract.panel[0]?.wallet
+                      ? short(contract.panel[0].wallet)
+                      : "Moderator"))
             }
           />
           {contract.committer && (

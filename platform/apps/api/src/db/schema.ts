@@ -80,12 +80,6 @@ export const contracts = pgTable(
     // it was never given. Empty for no-mod contracts.
     panel: jsonb("panel").$type<ContractModerator[]>().notNull().default([]),
 
-    // Legacy mirrors of a ONE-seat panel, kept only while `mod-watch` still
-    // claims work by this column (replaced by the per-moderator claims table).
-    // Null on a no-mod contract AND on a panel of three — read `panel` instead.
-    moderator: text("moderator"),
-    moderatorRecipient: text("moderator_recipient"),
-
     // Deliverable bundle — sealed (ciphertext in storage). Server keeps only the
     // anchors; the file list lives inside the ciphertext. submittedAt on confirm.
     deliverableHash: text("deliverable_hash"), // sha256(manifest), on-chain anchor

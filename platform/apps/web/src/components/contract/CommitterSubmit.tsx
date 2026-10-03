@@ -49,14 +49,11 @@ export function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void
         // Seal to every moderator on THIS contract's panel — and to nobody
         // else. Sealing to every registered moderator would let one read work
         // it was never given; sealing to only one would leave the other two
-        // seats unable to judge. Contracts created before the panel was stored
-        // fall back to the single assigned moderator, then to the active set —
-        // which is what they were sealed to back then.
+        // seats unable to judge. The active set is a fallback for a contract
+        // whose panel somehow did not reach the client.
         const mods = c.panel?.length
           ? c.panel.map((m) => m.recipient)
-          : c.moderatorRecipient
-            ? [c.moderatorRecipient]
-            : (await api.get<{ recipients: string[] }>("/config/moderators")).recipients;
+          : (await api.get<{ recipients: string[] }>("/config/moderators")).recipients;
         // …and (if enrolled) the initiator, so a Pass delivers the exact
         // verified bytes — not a side-channel copy.
         all = c.initiatorRecipient ? [...mods, c.initiatorRecipient] : mods;

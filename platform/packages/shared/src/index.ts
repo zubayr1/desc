@@ -185,11 +185,6 @@ export interface Contract {
    *  contract, otherwise 1 or 3. Mirrors the on-chain `Panel`, in the same
    *  order, and it is what the committer seals the delivery to. */
   panel: ContractModerator[];
-  /** Legacy mirror of a ONE-seat panel: `panel[0].wallet`, or null. Kept while
-   *  `mod-watch` still claims by this column; use `panel`. */
-  moderator: Address | null;
-  /** Legacy mirror of `panel[0].recipient`. Use `panel`. */
-  moderatorRecipient: string | null;
 
   // Verification (manual in MVP; null until a verdict is recorded)
   outcome: Outcome | null;

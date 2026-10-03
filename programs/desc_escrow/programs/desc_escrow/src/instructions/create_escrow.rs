@@ -2,7 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{transfer, Mint, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Config, Escrow, EscrowStatus, ModeratorPrice, Panel, PanelEntry, VOTE_NONE};
+use crate::foreign::ModeratorPrice;
+use crate::states::{Config, Escrow, EscrowStatus, Panel, PanelEntry, VOTE_NONE};
 
 /// Initiator opens an escrow and deposits the full amount (payout + protocol
 /// fee + moderator surcharge) into a program-owned vault. Status -> Funded.

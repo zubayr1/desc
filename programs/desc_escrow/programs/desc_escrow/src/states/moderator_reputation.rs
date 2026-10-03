@@ -59,7 +59,7 @@ impl ModeratorReputation {
     }
 
     /// Fold one settled panel seat in. Called once per PAID seat from
-    /// `pay_panel`, so scoring and payment can never disagree about who did the
+    /// `settle_panel`, so scoring and payment can never disagree about who did the
     /// work.
     ///
     /// A seat that never voted is a no-op — it is not paid either, and counting

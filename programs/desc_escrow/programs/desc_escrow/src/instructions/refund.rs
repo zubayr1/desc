@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{close_account, transfer, CloseAccount, Token, TokenAccount, Transfer};
 
 use crate::error::EscrowError;
-use crate::instructions::release::pay_panel;
+use crate::instructions::settle::settle_panel;
 use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel};
 
 /// Initiator reclaims the deposit. Fires on either trigger:
@@ -19,7 +19,7 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel};
 /// So the protocol never profits from a failed deal, and is never paid to pass
 /// one either.
 ///
-/// `remaining_accounts` is two per SEAT, in panel order (see `pay_panel`).
+/// `remaining_accounts` is two per SEAT, in panel order (see `settle_panel`).
 /// Vault and panel are closed (rents -> initiator); the escrow is kept as a
 /// `Refunded` record.
 #[derive(Accounts)]
@@ -98,7 +98,7 @@ impl<'info> Refund<'info> {
 
         // Zero on a ghost-timeout: the escrow never reached `Submitted`, so no
         // seat holds a vote and nobody is paid or scored.
-        let paid = pay_panel(
+        let paid = settle_panel(
             &self.panel,
             &self.escrow,
             panel_accounts,

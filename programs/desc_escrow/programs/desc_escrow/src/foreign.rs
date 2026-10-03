@@ -1,3 +1,10 @@
+//! Reading accounts owned by ANOTHER program.
+//!
+//! These are not this program's account layouts (those live in `states`), and
+//! they cannot be imported as types: `desc_moderation` already depends on this
+//! crate, so the reverse import would be circular. Each is read raw and proved
+//! genuine before anything here trusts it.
+
 use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;

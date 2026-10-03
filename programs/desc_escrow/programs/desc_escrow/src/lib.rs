@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 pub mod error;
+pub mod foreign;
 pub mod instructions;
 pub mod states;
 
@@ -104,7 +105,7 @@ pub mod desc_escrow {
     }
 
     pub fn release<'info>(
-        // The THIRD lifetime is `'info` too: `pay_panel` deserializes the
+        // The THIRD lifetime is `'info` too: `settle_panel` deserializes the
         // reputation accounts as `Account<'info, _>`, so the slice has to
         // outlive the call.
         ctx: Context<'_, '_, 'info, 'info, Release<'info>>,

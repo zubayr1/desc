@@ -1,86 +1,220 @@
-# desc — Solana bounty formalization tool (V1)
+# desc
 
-A **formalization tool, not a marketplace.** Two parties who already agreed on a deal
-elsewhere (Twitter, Discord, Telegram) come here to make it safe: on-chain USDC escrow,
-AI-drafted checkable acceptance criteria, federated AI moderators that randomly verify
-the deliverable, and automated settlement.
+**Escrow for digital work on Solana, where a panel of AI moderators reads the
+delivered files and votes on-chain before the money moves.**
 
-> "You already made the deal — now make it safe."
+> *"You already made the deal — now make it safe."*
 
-V1 wedge: **Solana bounty-style dev work** with objectively-checkable deliverables
-(merged PR, deployed contract, passing test suite, spec'd technical report).
+Live on devnet → **[descprotocol.xyz](https://descprotocol.xyz)**
 
-## Layout
+---
 
+## The problem
+
+Two strangers agree a bounty on Discord or Twitter, and someone has to go first.
+The developer risks not being paid; the poster risks paying for nothing. When it
+goes wrong there is no neutral party to decide who is right — and a human
+arbitrator is slow, expensive, and has to be trusted.
+
+desc is a **formalisation tool, not a marketplace**. People arrive having already
+agreed the deal elsewhere. desc locks the money, defines what "done" means, and
+lets independent AI judges decide whether it was delivered.
+
+## How a deal works
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor I as Initiator
+    participant D as desc
+    actor C as Committer
+    participant P as AI panel (1 or 3)
+    participant S as Solana
+
+    I->>D: brief + acceptance criteria<br/>(Helper AI can draft them)
+    I->>S: deposit USDC into escrow
+    I-->>C: shareable link
+    C->>S: accept
+    C->>D: deliverable, encrypted to the panel + initiator
+    C->>S: submit — bundle hash recorded on-chain
+    P->>D: fetch ciphertext, decrypt, re-check hash
+    P->>S: each moderator signs its own verdict
+    Note over S: first majority decides
+    S->>C: Pass → payout
+    S->>I: Fail → refund
 ```
-.
-├── programs/
-│   ├── desc_escrow/            # escrow + money lifecycle (Rust / Anchor)
-│   └── desc_moderation/        # on-chain moderator registry; signs verdicts by CPI
-└── platform/
-    ├── apps/
-    │   ├── web/                # user frontend
-    │   ├── admin/              # read-only oversight console (internal)
-    │   └── api/                # backend — builds unsigned txns, owns the read model
-    ├── packages/
-    │   └── shared/             # shared TS domain types + deliverable pipeline
-    └── services/
-        └── ai/                 # Helper AI + moderator agents (Python) — not built yet
+
+1. **Initiator** writes a brief and acceptance criteria — or clicks **Suggest
+   criteria** and the Helper AI drafts ones a moderator can actually check from
+   the files.
+2. They pick a **panel of 1 or 3 moderators**, each with its own on-chain price,
+   and deposit the payout plus fees into an escrow. The committer receives a link.
+3. **Committer** accepts, does the work, and uploads it. The browser bundles the
+   files, computes a Merkle root, and encrypts the bundle to exactly that panel and
+   the initiator — the server only ever stores ciphertext.
+4. **Each moderator** decrypts the bundle, rebuilds it, confirms its hash matches
+   the one on-chain, judges it against the criteria, and signs a verdict with its
+   own wallet.
+5. **The first majority decides.** Either party then executes the payout — so
+   settlement never depends on desc being online.
+
+## Why you can trust it
+
+- **No central settlement key.** The backend holds no keypair at all — it only
+  builds unsigned transactions for your wallet to sign. Verdicts reach the escrow
+  by CPI from `desc_moderation`, signed by a registered moderator. Nobody at desc
+  can move your money.
+- **A panel, not one model.** Three moderators run different models (Claude Opus 5,
+  Sonnet 5, Haiku 4.5). One wrong or failing moderator is outvoted.
+- **The moderator is paid on any verdict**, pass or fail, so it has no reason to
+  lean either way — including when it was outvoted.
+- **The work is sealed.** Delivered files are encrypted to the contract's panel
+  and initiator only. A moderator cannot read work it was not assigned.
+- **On a Pass, the initiator gets the exact bytes that were judged**, re-verified
+  against the on-chain hash before they are handed over.
+- **Every moderator has an on-chain track record** — verdicts cast, and how often it
+  agreed with the panel's majority — written by settlement itself, so it outlives
+  the escrow and is nobody's database entry.
+
+### The adversarial moderator
+
+devnet runs a fourth moderator, **Mischief**, that judges for real and then submits
+the **opposite** verdict. It exists to prove the panel works: put it on a panel of
+three and it is outvoted, still paid for its work, and its record shows it. It is
+refused on mainnet.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Browser
+        W[web app]
+        WAL[wallet]
+    end
+    subgraph Platform
+        API[api<br/>builds unsigned txs<br/>holds no key]
+        DB[(Postgres<br/>read model)]
+        ST[(ciphertext<br/>storage)]
+        H[Helper AI]
+    end
+    subgraph Moderators
+        M1[Olympus · Opus 5]
+        M2[SonGoku · Sonnet 5]
+        M3[Hikaru · Haiku 4.5]
+        M4[Mischief · inverts]
+    end
+    subgraph Solana
+        E[desc_escrow]
+        MOD[desc_moderation]
+    end
+
+    W --> API
+    WAL -- signs --> E
+    API --- DB
+    API --- ST
+    API --- H
+    M1 & M2 & M3 & M4 -- read ciphertext --> ST
+    M1 & M2 & M3 & M4 -- sign verdict --> MOD
+    MOD -- CPI --> E
 ```
 
-## What each piece does
-
-| Piece | Responsibility |
+| Piece | Role |
 |---|---|
-| `programs/desc_escrow` | On-chain escrow: deposit, accept, submit, record verdict, release, refund, cancel. Holds funds — neither party does. |
-| `programs/desc_moderation` | Moderator registry. Each moderator is a PDA with its own wallet and its **own price**; it signs a verdict and CPIs into the escrow. It is the escrow's `settlement_authority`, so **no platform keypair can settle**. |
-| `apps/web` | Public product: draft contract, review & accept (from a shareable link), submit a sealed deliverable, view verdict & settlement, dashboard. Talks only to `api`. |
-| `apps/api` | Owns the DB + off-chain contract metadata, generates shareable links, and **builds unsigned transactions for the user to sign**. It holds no signing key and cannot move funds. |
-| `apps/admin` | Read-only oversight for the team. It does **not** record verdicts — moderators do. Separate auth from `web`. |
-| `packages/shared` | Library (not a service). Domain types plus the deliverable pipeline: validate → Merkle → `age` multi-recipient encryption. Imported by `web`, `admin`, `api`. |
-| `services/ai` | Helper AI (drafts checkable acceptance criteria) + the moderator's verdict brain. **Placeholder** — a human operator answers through the same `runCheck` interface today. |
-
-## Data flow
-
-```
-web / admin  ──HTTP──►  api
-                         │
-                         ├── Postgres (off-chain metadata + cached chain state)
-                         ├── blind storage (deliverable ciphertext only)
-                         └── Solana RPC ──► desc_escrow / desc_moderation
-
-user wallet ── signs every transaction; the api only builds and submits them
-moderator   ── decrypts, re-verifies the on-chain hash, signs its own verdict
-shared      ── types + bundle pipeline imported by web, admin, api
-```
+| `desc_escrow` | Holds the USDC, runs the lifecycle, tallies the panel, pays everyone, records each moderator's reputation. 11 instructions. |
+| `desc_moderation` | Registry of moderators — each an on-chain account with its own wallet, price and encryption key. The only path by which a verdict reaches an escrow. 5 instructions. |
+| `apps/api` | Builds unsigned transactions, stores ciphertext blind, caches chain state for dashboards, runs the Helper AI. Cannot move funds. |
+| `apps/web` | Create, accept, deliver, follow the verdict, pick moderators. |
+| `mod-watch` | One process per moderator. Claims its seats, judges through Claude, signs its verdict. |
+| `packages/shared` | Types, the bundle format (Merkle + denylist + size caps) and `age` encryption — used by browser, api and moderators alike. |
 
 ## Contract lifecycle
 
-Mirrors the program's on-chain `EscrowStatus` 1:1 — there is no off-chain `draft`
-or `disputed` state.
+```mermaid
+stateDiagram-v2
+    [*] --> Funded: initiator deposits
+    Funded --> Cancelled: initiator cancels (nobody accepted yet)
+    Funded --> Active: committer accepts
+    Active --> Submitted: delivery before deadline
+    Active --> Refunded: deadline passed, nothing delivered
+    Active --> Refunded: both agree to cancel
+    Submitted --> Settled: panel says Pass → payout
+    Submitted --> Refunded: panel says Fail
+    Submitted --> Refunded: both agree to cancel
+    Settled --> [*]
+    Refunded --> [*]
+    Cancelled --> [*]
+```
+
+Once work is **submitted**, the funds are frozen until the panel rules or both
+parties agree to cancel — the deadline no longer applies, so neither side can run
+out the clock.
+
+## Who gets paid
+
+| Outcome | Committer | Initiator | Moderators | Protocol |
+|---|---|---|---|---|
+| **Pass** | the payout | unused moderator fees | each voter its own price | fee |
+| **Fail** | — | payout + most of the fee | each voter its own price | verification fee only |
+| Nobody delivered | — | everything | — | — |
+| Cancelled before acceptance | — | everything | — | — |
+
+Protocol fee is 2% with a floor; each moderator sets its own price on its on-chain
+account (0.5%–1% today, capped at 5%). A moderator that never voted is not paid,
+and its fee goes back to the initiator.
+
+There is also a **no-mod** mode: the initiator can skip verification entirely,
+accepting the risk, for deals where speed matters more than proof.
+
+## Live on devnet
+
+| | |
+|---|---|
+| Site | [descprotocol.xyz](https://descprotocol.xyz) |
+| `desc_escrow` | [`4Q1jTgR9UVpbbVo57Dx1cpjo77Hx8oBn78ieex4gY2CU`](https://explorer.solana.com/address/4Q1jTgR9UVpbbVo57Dx1cpjo77Hx8oBn78ieex4gY2CU?cluster=devnet) |
+| `desc_moderation` | [`AHGBmnYQCXJwnKKPixjmt6KAbDjVpMQtETRASzycJ47T`](https://explorer.solana.com/address/AHGBmnYQCXJwnKKPixjmt6KAbDjVpMQtETRASzycJ47T?cluster=devnet) |
+| Settlement token | Circle's devnet USDC, `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+
+One contract, end to end:
+
+| Step | Transaction |
+|---|---|
+| Committer submits | [`4svmX3bm…aNS`](https://explorer.solana.com/tx/4svmX3bmdGSR1wm4rfGLKhnyty44nMK1WGfXRSoSkeadTmDjLM8QNLZRpZnWTaegwwomG5tfhdodw6eYSr5cuaNS?cluster=devnet) |
+| A moderator signs its verdict → CPI into the escrow | [`48ex5EiQ…jqBn`](https://explorer.solana.com/tx/48ex5EiQ6GGckMbn9tkdSPpQmbu9T2dFYp78nsrLKSLWas56eJjnkMzd58fxfyUQrwGKQxsVyvwa3KawH867jqBn?cluster=devnet) |
+| Funds released | [`4ZLkNckY…ads8`](https://explorer.solana.com/tx/4ZLkNckYuerWaGegHoBD6Q6oj5ejuwQJBwaXKVfNG7nwiQxB8KweSYD9C2mnXHYzkUxKAopLD4CaUXJD8DqGads8?cluster=devnet) |
+
+## Repository
 
 ```
-funded → active → submitted → settled     (Pass, released)
-                            → refunded    (Fail)
-       → refunded                         (deadline passed, committer ghosted)
-funded → cancelled                        (before anyone accepts)
+programs/
+  desc_escrow/          escrow, panel, settlement, moderator reputation (Anchor)
+  desc_moderation/      moderator registry; verdicts reach the escrow by CPI
+platform/
+  apps/api/             backend, Helper AI, moderator runners, scripts
+  apps/web/             the product
+  apps/admin/           read-only oversight console
+  packages/shared/      types, bundle format, encryption
+feature-doc.md          status, design decisions and roadmap
 ```
 
-## V1 commitments
+**Tested:** 87 on-chain tests across 16 files, plus 10 end-to-end flows that drive
+the full lifecycle — create, accept, deliver, judge, settle — through the real api
+against a real validator, with no human in the loop.
 
-- USDC settlement, no native token.
-- Pricing: `max(2%, $1)` protocol fee + the chosen moderator's own price (1%
-  today, capped at 5%); $50 minimum contract.
-  Nothing is charged if the deal is cancelled or never delivered.
-- Objectively-verifiable deliverables only (`mergeable`, `deployable`,
-  `tests_pass`, `spec_met`).
-- Deliverables are sealed in the browser and stored as ciphertext — the server
-  never sees plaintext.
-- Two platform-run AI moderators on different models and prices (Claude Opus 5,
-  Claude Haiku 4.5); the initiator picks one, and its single verdict settles. Manual dispute review by the
-  team (target SLA: 48 business hours).
-- Optional **no-mod** mode: the initiator may skip verification entirely.
+**Run it locally:** see [`platform/README.md`](platform/README.md).
 
-Random moderator assignment, staking/slashing, k-of-n consensus, marketplace,
-listings, discovery, decomposition, human jurors, SDK, embedded wallets, fiat
-ramps, reputation, and subjective deliverables are all explicitly deferred to V2+.
+## Status
+
+| | |
+|---|---|
+| Escrow, panels of 1 or 3, majority settlement | ✅ |
+| AI moderators on Claude, four live on devnet | ✅ |
+| Encrypted delivery, verified hand-over on Pass | ✅ |
+| On-chain moderator reputation | ✅ |
+| Helper AI for acceptance criteria | ✅ |
+| No-mod mode | ✅ |
+| Commit–reveal voting, verdict deadline, tiebreakers | next |
+| Open moderator registration, staking and slashing | V2 |
+| Client SDK for other applications | V2 |
+
+Design decisions, trade-offs and the full roadmap live in
+[`feature-doc.md`](feature-doc.md).

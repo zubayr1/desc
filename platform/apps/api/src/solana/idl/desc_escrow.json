@@ -319,6 +319,75 @@
       ]
     },
     {
+      "name": "finalize",
+      "discriminator": [
+        171,
+        61,
+        218,
+        56,
+        127,
+        115,
+        12,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "Escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "init_moderator_reputation",
       "docs": [
         "Create a moderator's reputation account. Permissionless, caller pays —",
@@ -515,6 +584,215 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "record_commit",
+      "discriminator": [
+        229,
+        233,
+        165,
+        181,
+        135,
+        196,
+        42,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "settlement_authority",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "Escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "commit",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "moderator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "record_tiebreak",
+      "discriminator": [
+        140,
+        150,
+        147,
+        207,
+        132,
+        123,
+        43,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "settlement_authority",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "Escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "replaced_reputation",
+          "docs": [
+            "Verified below against the seat the program picks."
+          ],
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "Outcome"
+            }
+          }
+        },
+        {
+          "name": "verdict_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "tiebreaker",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "record_verdict",
@@ -871,6 +1149,111 @@
       "args": []
     },
     {
+      "name": "reveal_verdict",
+      "discriminator": [
+        152,
+        73,
+        112,
+        169,
+        101,
+        246,
+        99,
+        196
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "Escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "Escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "moderator",
+          "type": "pubkey"
+        },
+        {
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "Outcome"
+            }
+          }
+        },
+        {
+          "name": "verdict_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "salt",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "submit",
       "discriminator": [
         88,
@@ -1008,6 +1391,12 @@
           "name": "paused",
           "type": {
             "option": "bool"
+          }
+        },
+        {
+          "name": "verdict_window",
+          "type": {
+            "option": "i64"
           }
         }
       ]
@@ -1182,6 +1571,71 @@
       "code": 6022,
       "name": "VerdictAlreadyFinal",
       "msg": "The verdict is already final — a majority was reached without this vote"
+    },
+    {
+      "code": 6023,
+      "name": "WrongVotingMode",
+      "msg": "This panel votes by commit and reveal, not directly — or the reverse"
+    },
+    {
+      "code": 6024,
+      "name": "VotingClosed",
+      "msg": "The voting window for this escrow has closed"
+    },
+    {
+      "code": 6025,
+      "name": "RevealNotOpen",
+      "msg": "Reveals are not open yet — wait until every seat has committed or the commit window ends"
+    },
+    {
+      "code": 6026,
+      "name": "NotCommitted",
+      "msg": "This seat has not committed a vote"
+    },
+    {
+      "code": 6027,
+      "name": "CommitMismatch",
+      "msg": "The revealed vote does not match the commit"
+    },
+    {
+      "code": 6028,
+      "name": "InvalidVote",
+      "msg": "A verdict must be Pass or Fail"
+    },
+    {
+      "code": 6029,
+      "name": "TiebreakNotOpen",
+      "msg": "Tiebreaking is only possible after voting closes with no majority"
+    },
+    {
+      "code": 6030,
+      "name": "TiebreakCapReached",
+      "msg": "This escrow has used all its tiebreaks"
+    },
+    {
+      "code": 6031,
+      "name": "NoSilentSeat",
+      "msg": "Every seat has already voted"
+    },
+    {
+      "code": 6032,
+      "name": "NotFinalizable",
+      "msg": "Not finalizable yet — a vote or a tiebreak is still possible"
+    },
+    {
+      "code": 6033,
+      "name": "AwaitingReveals",
+      "msg": "A moderator that committed is still inside its reveal window"
+    },
+    {
+      "code": 6034,
+      "name": "TiebreakerNotSelectable",
+      "msg": "A tiebreaker cannot be chosen as a panel moderator"
+    },
+    {
+      "code": 6035,
+      "name": "InvalidVerdictWindow",
+      "msg": "Verdict window must be between 1 second and 7 days"
     }
   ],
   "types": [
@@ -1260,11 +1714,18 @@
             "type": "u64"
           },
           {
+            "name": "verdict_window",
+            "docs": [
+              "Seconds per moderation phase. Zero = `Escrow::DEFAULT_VERDICT_WINDOW`."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                48
+                40
               ]
             }
           }
@@ -1489,11 +1950,32 @@
             "type": "pubkey"
           },
           {
+            "name": "verdict_window",
+            "docs": [
+              "Snapshotted from `Config` so a config change can't move a live deadline."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "commit_deadline",
+            "docs": [
+              "Panel of 1: the vote deadline."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "reveal_deadline",
+            "docs": [
+              "Panel of 1: equals `commit_deadline`."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                41
+                17
               ]
             }
           }
@@ -1599,11 +2081,18 @@
             "type": "u8"
           },
           {
+            "name": "missed",
+            "docs": [
+              "Never voted in time. Counted so withholding a reveal can't protect a record."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                48
+                44
               ]
             }
           }
@@ -1625,6 +2114,9 @@
           },
           {
             "name": "Fail"
+          },
+          {
+            "name": "Inconclusive"
           }
         ]
       }
@@ -1687,11 +2179,15 @@
             "type": "u8"
           },
           {
+            "name": "tiebreak_fills",
+            "type": "u8"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                64
+                63
               ]
             }
           }
@@ -1708,16 +2204,12 @@
         "fields": [
           {
             "name": "moderator",
-            "docs": [
-              "The wallet that signs this seat's verdict."
-            ],
             "type": "pubkey"
           },
           {
             "name": "fee",
             "docs": [
-              "Its own price for THIS contract, snapshotted at creation. Paid on settle",
-              "only if it voted; otherwise returned to the initiator."
+              "Snapshotted at creation; paid only if it votes. A tiebreaker inherits it."
             ],
             "type": "u64"
           },
@@ -1728,7 +2220,7 @@
           {
             "name": "verdict_hash",
             "docs": [
-              "sha256 of the verdict signed. Zero until it votes."
+              "The commit hash while `VOTE_COMMITTED`, the verdict hash once revealed."
             ],
             "type": {
               "array": [

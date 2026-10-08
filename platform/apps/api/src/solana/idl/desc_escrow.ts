@@ -325,6 +325,75 @@ export type DescEscrow = {
       ]
     },
     {
+      "name": "finalize",
+      "discriminator": [
+        171,
+        61,
+        218,
+        56,
+        127,
+        115,
+        12,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "initModeratorReputation",
       "docs": [
         "Create a moderator's reputation account. Permissionless, caller pays —",
@@ -521,6 +590,215 @@ export type DescEscrow = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "recordCommit",
+      "discriminator": [
+        229,
+        233,
+        165,
+        181,
+        135,
+        196,
+        42,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "settlementAuthority",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "commit",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "moderator",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "recordTiebreak",
+      "discriminator": [
+        140,
+        150,
+        147,
+        207,
+        132,
+        123,
+        43,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "settlementAuthority",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        },
+        {
+          "name": "replacedReputation",
+          "docs": [
+            "Verified below against the seat the program picks."
+          ],
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "outcome"
+            }
+          }
+        },
+        {
+          "name": "verdictHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "tiebreaker",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "recordVerdict",
@@ -877,6 +1155,111 @@ export type DescEscrow = {
       "args": []
     },
     {
+      "name": "revealVerdict",
+      "discriminator": [
+        152,
+        73,
+        112,
+        169,
+        101,
+        246,
+        99,
+        196
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "signer": true
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow.initiator",
+                "account": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "escrow.contract_id",
+                "account": "escrow"
+              }
+            ]
+          }
+        },
+        {
+          "name": "panel",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  97,
+                  110,
+                  101,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "escrow"
+              }
+            ]
+          },
+          "relations": [
+            "escrow"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "moderator",
+          "type": "pubkey"
+        },
+        {
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "outcome"
+            }
+          }
+        },
+        {
+          "name": "verdictHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "salt",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "submit",
       "discriminator": [
         88,
@@ -1014,6 +1397,12 @@ export type DescEscrow = {
           "name": "paused",
           "type": {
             "option": "bool"
+          }
+        },
+        {
+          "name": "verdictWindow",
+          "type": {
+            "option": "i64"
           }
         }
       ]
@@ -1188,6 +1577,71 @@ export type DescEscrow = {
       "code": 6022,
       "name": "verdictAlreadyFinal",
       "msg": "The verdict is already final — a majority was reached without this vote"
+    },
+    {
+      "code": 6023,
+      "name": "wrongVotingMode",
+      "msg": "This panel votes by commit and reveal, not directly — or the reverse"
+    },
+    {
+      "code": 6024,
+      "name": "votingClosed",
+      "msg": "The voting window for this escrow has closed"
+    },
+    {
+      "code": 6025,
+      "name": "revealNotOpen",
+      "msg": "Reveals are not open yet — wait until every seat has committed or the commit window ends"
+    },
+    {
+      "code": 6026,
+      "name": "notCommitted",
+      "msg": "This seat has not committed a vote"
+    },
+    {
+      "code": 6027,
+      "name": "commitMismatch",
+      "msg": "The revealed vote does not match the commit"
+    },
+    {
+      "code": 6028,
+      "name": "invalidVote",
+      "msg": "A verdict must be Pass or Fail"
+    },
+    {
+      "code": 6029,
+      "name": "tiebreakNotOpen",
+      "msg": "Tiebreaking is only possible after voting closes with no majority"
+    },
+    {
+      "code": 6030,
+      "name": "tiebreakCapReached",
+      "msg": "This escrow has used all its tiebreaks"
+    },
+    {
+      "code": 6031,
+      "name": "noSilentSeat",
+      "msg": "Every seat has already voted"
+    },
+    {
+      "code": 6032,
+      "name": "notFinalizable",
+      "msg": "Not finalizable yet — a vote or a tiebreak is still possible"
+    },
+    {
+      "code": 6033,
+      "name": "awaitingReveals",
+      "msg": "A moderator that committed is still inside its reveal window"
+    },
+    {
+      "code": 6034,
+      "name": "tiebreakerNotSelectable",
+      "msg": "A tiebreaker cannot be chosen as a panel moderator"
+    },
+    {
+      "code": 6035,
+      "name": "invalidVerdictWindow",
+      "msg": "Verdict window must be between 1 second and 7 days"
     }
   ],
   "types": [
@@ -1266,11 +1720,18 @@ export type DescEscrow = {
             "type": "u64"
           },
           {
+            "name": "verdictWindow",
+            "docs": [
+              "Seconds per moderation phase. Zero = `Escrow::DEFAULT_VERDICT_WINDOW`."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                48
+                40
               ]
             }
           }
@@ -1495,11 +1956,32 @@ export type DescEscrow = {
             "type": "pubkey"
           },
           {
+            "name": "verdictWindow",
+            "docs": [
+              "Snapshotted from `Config` so a config change can't move a live deadline."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "commitDeadline",
+            "docs": [
+              "Panel of 1: the vote deadline."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "revealDeadline",
+            "docs": [
+              "Panel of 1: equals `commit_deadline`."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                41
+                17
               ]
             }
           }
@@ -1605,11 +2087,18 @@ export type DescEscrow = {
             "type": "u8"
           },
           {
+            "name": "missed",
+            "docs": [
+              "Never voted in time. Counted so withholding a reveal can't protect a record."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                48
+                44
               ]
             }
           }
@@ -1631,6 +2120,9 @@ export type DescEscrow = {
           },
           {
             "name": "fail"
+          },
+          {
+            "name": "inconclusive"
           }
         ]
       }
@@ -1693,11 +2185,15 @@ export type DescEscrow = {
             "type": "u8"
           },
           {
+            "name": "tiebreakFills",
+            "type": "u8"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                64
+                63
               ]
             }
           }
@@ -1714,16 +2210,12 @@ export type DescEscrow = {
         "fields": [
           {
             "name": "moderator",
-            "docs": [
-              "The wallet that signs this seat's verdict."
-            ],
             "type": "pubkey"
           },
           {
             "name": "fee",
             "docs": [
-              "Its own price for THIS contract, snapshotted at creation. Paid on settle",
-              "only if it voted; otherwise returned to the initiator."
+              "Snapshotted at creation; paid only if it votes. A tiebreaker inherits it."
             ],
             "type": "u64"
           },
@@ -1734,7 +2226,7 @@ export type DescEscrow = {
           {
             "name": "verdictHash",
             "docs": [
-              "sha256 of the verdict signed. Zero until it votes."
+              "The commit hash while `VOTE_COMMITTED`, the verdict hash once revealed."
             ],
             "type": {
               "array": [

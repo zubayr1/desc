@@ -98,6 +98,18 @@ export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 
 /** A moderator's vote. */
 export type Vote = "pass" | "fail";
+/** A seat's vote as seen on-chain: `committed` is cast but still hidden. */
+export type SeatVote = Vote | "committed";
+
+/** Where a submitted contract's verdict stands. `awaiting-reveals`: decided, but
+ *  settlement waits for committed seats to reveal. `finalizable`: nothing can
+ *  decide it any more — the refund finalizes it as Inconclusive. */
+export type VerdictPhase = "vote" | "commit" | "reveal" | "tiebreak" | "awaiting-reveals" | "finalizable";
+export interface VerdictTiming {
+  phase: VerdictPhase;
+  /** When the phase ends, corrected for the chain's clock. Null when it doesn't. */
+  endsAt: Timestamp | null;
+}
 
 /** Verdict result. Mirrors the program's on-chain `Outcome`. `inconclusive`: no
  *  majority even after tiebreaks — the initiator is refunded. */
@@ -191,6 +203,8 @@ export interface Contract {
 
   // Verification (manual in MVP; null until a verdict is recorded)
   outcome: Outcome | null;
+  /** Detail reads of a submitted contract only; null otherwise. */
+  verdict?: VerdictTiming | null;
   deliverable: Deliverable | null;
 
   // Timing
@@ -255,8 +269,10 @@ export interface ContractModerator {
    *  proof of a vote is that moderator's own signed transaction in the ledger.
    *
    *  `undefined` = never read yet · `null` = seated, has not voted ·
-   *  `"pass"`/`"fail"` = its vote. */
-  vote?: Vote | null;
+   *  `"committed"` = voted, hidden until reveal · `"pass"`/`"fail"` = its vote. */
+  vote?: SeatVote | null;
+  /** A tiebreaker took this silent seat; `vote` is then the tiebreaker's. */
+  filledBy?: Address;
 }
 
 /**

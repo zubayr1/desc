@@ -8,6 +8,7 @@ import { Connection, Keypair, PublicKey, SYSVAR_CLOCK_PUBKEY } from "@solana/web
 import type { DescEscrow } from "../solana/idl/desc_escrow";
 import type { WorkSource } from "./watch/source";
 
+export const VOTE_NONE = 0;
 export const VOTE_PASS = 1;
 export const VOTE_FAIL = 2;
 export const VOTE_COMMITTED = 3;

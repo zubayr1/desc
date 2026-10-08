@@ -7,13 +7,17 @@ import type {
 } from "@repo/shared";
 import type { ContractRow } from "../db/schema";
 import {
-  readEscrow,
+  connection,
+  mapEscrowAccount,
+  mapPanelSeats,
+  program,
   readEscrows,
-  readPanel,
   readPanels,
   type OnChainEscrow,
   type PanelSeat,
 } from "../solana/program";
+import { chainNow } from "../moderation/commit";
+import { verdictTiming } from "../moderation/tiebreak/phase";
 import { toContract } from "./mapper";
 import {
   getRow,
@@ -38,43 +42,52 @@ const TERMINAL: ReadonlySet<ContractStatus> = new Set([
  * written back, because the panel account is closed on settle and the votes are
  * unreadable after that. Seats keep their cached vote when the live read has
  * nothing for them, so a settled contract still shows who said what.
+ *
+ * Matched by seat index, the on-chain order: a tiebreaker replaces the wallet of
+ * the silent seat it fills, and is recorded as `filledBy`.
  */
 function overlayVotes(
   stored: ContractModerator[],
   live: PanelSeat[] | undefined
 ): { seats: ContractModerator[]; changed: boolean } {
   if (!live?.length) return { seats: stored, changed: false };
-  const byWallet = new Map(live.map((s) => [s.moderator.toBase58(), s.vote]));
   let changed = false;
-  const seats = stored.map((m) => {
-    const vote = byWallet.get(m.wallet);
-    if (vote === undefined || vote === m.vote) return m;
+  const seats = stored.map((m, i) => {
+    const seat = live[i];
+    if (!seat) return m;
+    const wallet = seat.moderator.toBase58();
+    const filledBy = wallet === m.wallet ? m.filledBy : wallet;
+    if (seat.vote === m.vote && filledBy === m.filledBy) return m;
     changed = true;
-    return { ...m, vote };
+    return { ...m, vote: seat.vote, ...(filledBy ? { filledBy } : {}) };
   });
   return { seats, changed };
 }
 
 /** Detail read: live chain state. Null if the escrow isn't on-chain yet. */
 async function merge(row: ContractRow): Promise<Contract | null> {
-  const escrow = new PublicKey(row.escrowAddress);
-  let oc: OnChainEscrow;
+  let raw;
   try {
-    oc = await readEscrow(escrow);
+    raw = await program.account.escrow.fetch(new PublicKey(row.escrowAddress));
   } catch {
     return null;
   }
+  const oc = mapEscrowAccount(raw);
   const contract = toContract(row, oc);
 
   // Overlay each seat's live vote and cache anything new. Best-effort: once the
   // contract settles the panel account is gone, and the read simply falls back
   // to the votes cached on the way there.
   try {
-    const { seats, changed } = overlayVotes(contract.panel, await readPanel(escrow));
-    contract.panel = seats;
-    if (changed) await writePanelVotes(row.id, seats);
+    const panel = await program.account.panel.fetchNullable(raw.panel);
+    if (panel) {
+      const { seats, changed } = overlayVotes(contract.panel, mapPanelSeats(panel));
+      contract.panel = seats;
+      if (changed) await writePanelVotes(row.id, seats);
+      if (oc.status === "submitted") contract.verdict = verdictTiming(raw, panel, await chainNow(connection));
+    }
   } catch {
-    // no panel on chain (settled, or created before panels existed)
+    // panel unreadable — the cached votes stand
   }
   return contract;
 }

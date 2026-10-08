@@ -48,6 +48,27 @@ function Passive({ ok, children }: { ok?: boolean; children: React.ReactNode }) 
 }
 
 
+const until = (at: string | null | undefined) =>
+  at ? ` (until ${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "";
+
+function phaseText(c: Contract): string {
+  const v = c.verdict;
+  switch (v?.phase) {
+    case "vote":
+      return `The moderator is judging${until(v.endsAt)}.`;
+    case "commit":
+      return `Moderators are judging; votes stay hidden until all are in${until(v.endsAt)}.`;
+    case "reveal":
+      return `Moderators are revealing their votes${until(v.endsAt)}.`;
+    case "tiebreak":
+      return `No majority — a platform tiebreaker is deciding${until(v.endsAt)}.`;
+    case "finalizable":
+      return "No majority — INCONCLUSIVE. The initiator can reclaim the deposit.";
+    default:
+      return "Awaiting verdict from the moderators.";
+  }
+}
+
 /** The contextual action — depends on (status × role). */
 function Actions({
   contract: c,
@@ -202,6 +223,23 @@ function Actions({
         );
 
       case "submitted":
+        if (c.verdict?.phase === "awaiting-reveals") {
+          return (
+            <Passive>
+              Verdict: {c.outcome?.toUpperCase()} — settles once every moderator has revealed{until(c.verdict.endsAt)}.
+            </Passive>
+          );
+        }
+        if (c.verdict?.phase === "finalizable" && isInitiator) {
+          return (
+            <div>
+              <div className="mb-3 text-sm text-st-submitted">No majority — INCONCLUSIVE</div>
+              <Button variant="accent" className="w-full" disabled={busy} onClick={() => refund.mutate()}>
+                {refund.isPending ? spin : "Reclaim deposit"}
+              </Button>
+            </div>
+          );
+        }
         if (c.outcome === "pass") {
           if (isInitiator || isCommitter) {
             return (
@@ -249,9 +287,7 @@ function Actions({
         return (
           <Passive>
             <span className="size-2 animate-pulse rounded-full bg-st-submitted" />
-            {c.noMod
-              ? "Submitted — settling."
-              : "Awaiting verdict from the moderators."}
+            {c.noMod ? "Submitted — settling." : phaseText(c)}
           </Passive>
         );
 
@@ -295,6 +331,7 @@ export function ContractView() {
     queryKey,
     queryFn: () =>
       api.get<Contract>(byLink ? `/links/${id}` : `/contracts/${id}`),
+    refetchInterval: (q) => (q.state.data?.status === "submitted" ? 15_000 : false),
   });
 
   if (isLoading) {

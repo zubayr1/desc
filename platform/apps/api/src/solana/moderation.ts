@@ -55,15 +55,20 @@ export async function listActiveRecipients(): Promise<string[]> {
 
 /** The tiebreakers' age recipients. Every delivery is sealed to them too, so any one can take a silent seat. */
 export async function listTiebreakerRecipients(): Promise<string[]> {
-  return (await activeModerators()).filter((m) => m.account.isTiebreaker).map((m) => m.account.recipient);
+  return (await registered()).filter((m) => m.account.isTiebreaker).map((m) => m.account.recipient);
 }
 
 /**
- * Every active moderator registered under THIS platform's config. The single
+ * Every active moderator under THIS platform's config that a contract can seat — tiebreakers never. The single
  * definition of "a moderator you can use" — the fee quote and the create path
  * both go through it, so what the form quotes is what gets charged.
  */
 async function activeModerators() {
+  return (await registered()).filter((m) => !m.account.isTiebreaker);
+}
+
+/** Active under this config, tiebreakers included. */
+async function registered() {
   return (await moderationProgram.account.moderator.all()).filter(
     (m) => m.account.active && m.account.config.equals(moderationConfigPda)
   );

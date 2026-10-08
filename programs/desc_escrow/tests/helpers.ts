@@ -8,6 +8,7 @@ import {
   LAMPORTS_PER_SOL,
   SystemProgram,
 } from "@solana/web3.js";
+import { createHash, randomBytes } from "crypto";
 import {
   TOKEN_PROGRAM_ID,
   createMint,
@@ -190,13 +191,19 @@ export interface World {
   moderatorAta: PublicKey;
   /** The moderator's own price, in bps of the contract amount. */
   modBps: number;
+  /** Seconds per moderation phase. */
+  verdictWindow: number;
 }
+
+/** Long enough for a normal flow, short enough for a silent-seat test to wait out. */
+export const TEST_VERDICT_WINDOW = 10;
 
 export async function setupWorld(
   feeBps = 200,
   feeMin = 0,
   minAmount = 0,
-  modBps = 100
+  modBps = 100,
+  verdictWindow = TEST_VERDICT_WINDOW
 ): Promise<World> {
   const authority = await newFundedKeypair();
 
@@ -251,6 +258,12 @@ export async function setupWorld(
     .signers([authority])
     .rpc();
 
+  await program.methods
+    .updateConfig(null, null, null, null, null, null, new BN(verdictWindow))
+    .accountsPartial({ authority: authority.publicKey, config })
+    .signers([authority])
+    .rpc();
+
   const moderatorPdaKey = await registerModeratorIn(authority, modConfig, moderator, modBps);
 
   return {
@@ -269,6 +282,7 @@ export async function setupWorld(
     minAmount,
     moderator,
     moderatorAta,
+    verdictWindow,
   };
 }
 
@@ -334,6 +348,21 @@ export async function addModerator(
 // ---------------------------------------------------------------------------
 // Escrow lifecycle helpers
 // ---------------------------------------------------------------------------
+
+/** Asserts `fn` throws an error containing `code`. A bare try/catch around
+ *  `assert.fail` catches its own assertion, so it can never fail. */
+export async function expectError(fn: () => Promise<unknown>, code = "") {
+  let thrown: unknown;
+  try {
+    await fn();
+  } catch (e) {
+    thrown = e;
+  }
+  if (thrown === undefined) throw new Error(`expected an error${code ? ` (${code})` : ""}`);
+  if (code && !String(thrown).includes(code)) {
+    throw new Error(`expected ${code}, got: ${String(thrown).slice(0, 300)}`);
+  }
+}
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -538,6 +567,149 @@ export async function recordVerdict(
     })
     .signers([by])
     .rpc();
+}
+
+const voteObj = (outcome: "pass" | "fail"): any =>
+  outcome === "pass" ? { pass: {} } : { fail: {} };
+const voteByte = (outcome: "pass" | "fail") => (outcome === "pass" ? 1 : 2);
+
+/** Mirrors `panel::commit_hash`. */
+export function commitHash(
+  outcome: "pass" | "fail",
+  verdictHash: number[],
+  salt: Buffer,
+  moderator: PublicKey,
+  escrow: PublicKey
+): number[] {
+  return Array.from(
+    createHash("sha256")
+      .update(Buffer.from([voteByte(outcome)]))
+      .update(Buffer.from(verdictHash))
+      .update(salt)
+      .update(moderator.toBuffer())
+      .update(escrow.toBuffer())
+      .digest()
+  );
+}
+
+interface Pending {
+  outcome: "pass" | "fail";
+  hash: number[];
+  salt: Buffer;
+}
+const pending = new Map<string, Pending>();
+const pendingKey = (s: EscrowSetup, by: Keypair) =>
+  s.escrow.toBase58() + by.publicKey.toBase58();
+
+/** Post a hidden vote on a panel of 3. `commit` overrides the hash posted. */
+export async function commitVote(
+  s: EscrowSetup,
+  outcome: "pass" | "fail",
+  hash: number[],
+  by: Keypair,
+  commit?: number[]
+) {
+  const salt = randomBytes(32);
+  pending.set(pendingKey(s, by), { outcome, hash, salt });
+  await moderation.methods
+    .commitVerdict(commit ?? commitHash(outcome, hash, salt, by.publicKey, s.escrow))
+    .accountsPartial({
+      authority: by.publicKey,
+      config: s.world.modConfig,
+      verdictAuthority: s.world.settlementAuthority,
+      moderator: moderatorPda(by.publicKey),
+      escrowConfig: s.world.config,
+      escrow: s.escrow,
+      panel: s.panel,
+      descEscrowProgram: program.programId,
+    })
+    .signers([by])
+    .rpc();
+}
+
+/** Reveal `by`'s committed vote. Permissionless — sent by the provider wallet. */
+export async function revealVote(s: EscrowSetup, by: Keypair, override?: Partial<Pending>) {
+  const p = { ...pending.get(pendingKey(s, by))!, ...override };
+  await program.methods
+    .revealVerdict(by.publicKey, voteObj(p.outcome), p.hash, Array.from(p.salt))
+    .accountsPartial({ payer: provider.wallet.publicKey, escrow: s.escrow, panel: s.panel })
+    .rpc();
+}
+
+async function escrowDeadlines(s: EscrowSetup) {
+  const e = await program.account.escrow.fetch(s.escrow);
+  return { commit: e.commitDeadline.toNumber(), reveal: e.revealDeadline.toNumber() };
+}
+
+export async function waitPastCommits(s: EscrowSetup) {
+  await waitForChainTime((await escrowDeadlines(s)).commit);
+}
+
+export async function waitPastVoting(s: EscrowSetup) {
+  await waitForChainTime((await escrowDeadlines(s)).reveal);
+}
+
+/**
+ * Vote on a panel of 3 the way production does: every listed seat commits, then
+ * — once reveals open — reveals, in order. A seat left out stays silent, so the
+ * helper waits out the commit window before revealing.
+ */
+export async function voteOnPanel(
+  s: EscrowSetup,
+  votes: { by: Keypair; outcome: "pass" | "fail"; hash?: number[] }[]
+) {
+  for (const [i, v] of votes.entries()) {
+    await commitVote(s, v.outcome, v.hash ?? Array(32).fill(i + 1), v.by);
+  }
+  if (votes.length < s.moderatorCount) await waitPastCommits(s);
+  for (const v of votes) await revealVote(s, v.by);
+}
+
+/** Register a platform tiebreaker in `world`. */
+export async function addTiebreaker(world: World): Promise<{ wallet: Keypair; pda: PublicKey }> {
+  const t = await addModerator(world);
+  await moderation.methods
+    .setTiebreaker(true)
+    .accountsPartial({ admin: world.authority.publicKey, config: world.modConfig, moderator: t.pda })
+    .signers([world.authority])
+    .rpc();
+  return t;
+}
+
+/** The seat a tiebreak will fill — the program's own choice, mirrored. */
+export async function firstSilentSeat(s: EscrowSetup): Promise<PublicKey> {
+  const panel = await program.account.panel.fetch(s.panel);
+  const seat = panel.entries.slice(0, panel.count).find((e) => e.vote !== 1 && e.vote !== 2);
+  if (!seat) throw new Error("no silent seat");
+  return seat.moderator;
+}
+
+export async function submitTiebreak(
+  s: EscrowSetup,
+  outcome: "pass" | "fail",
+  by: Keypair,
+  hash: number[] = Array(32).fill(7)
+) {
+  const replaced = await firstSilentSeat(s).catch(() => by.publicKey);
+  await moderation.methods
+    .submitTiebreak(voteObj(outcome), hash)
+    .accountsPartial({
+      authority: by.publicKey,
+      config: s.world.modConfig,
+      verdictAuthority: s.world.settlementAuthority,
+      moderator: moderatorPda(by.publicKey),
+      escrowConfig: s.world.config,
+      escrow: s.escrow,
+      panel: s.panel,
+      replacedReputation: moderatorReputationPda(replaced),
+      descEscrowProgram: program.programId,
+    })
+    .signers([by])
+    .rpc();
+}
+
+export async function finalizeEscrow(s: EscrowSetup) {
+  await program.methods.finalize().accountsPartial({ escrow: s.escrow, panel: s.panel }).rpc();
 }
 
 /**

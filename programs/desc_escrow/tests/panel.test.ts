@@ -9,6 +9,7 @@ import {
   tokenBalance,
   usdc,
   BN,
+  expectError,
 } from "./helpers";
 
 /**
@@ -66,26 +67,20 @@ describe("panel", () => {
   it("rejects an even panel — a tie has no majority", async () => {
     const world = await setupWorld();
     const b = await addModerator(world);
-    try {
+    await expectError(async () => {
       await createEscrow({ world, moderators: [world.moderatorPda, b.pda] });
-      assert.fail("expected InvalidPanelSize");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidPanelSize");
-    }
+    }, "InvalidPanelSize");
   });
 
   it("rejects the same moderator twice", async () => {
     const world = await setupWorld();
     const b = await addModerator(world);
-    try {
+    await expectError(async () => {
       await createEscrow({
         world,
         moderators: [world.moderatorPda, b.pda, world.moderatorPda],
       });
-      assert.fail("expected DuplicateModerator");
-    } catch (e) {
-      assert.include(e.toString(), "DuplicateModerator");
-    }
+    }, "DuplicateModerator");
   });
 
   it("gives a no-mod escrow an empty panel", async () => {
@@ -101,16 +96,13 @@ describe("panel", () => {
     const world = await setupWorld();
     const b = await addModerator(world, { baseBps: 50 });
     const c = await addModerator(world, { baseBps: 75 });
-    try {
+    await expectError(async () => {
       await createEscrow({
         world,
         amount: usdc(1000),
         moderators: [world.moderatorPda, b.pda, c.pda],
         maxModeratorFee: usdc(10), // quoted for one moderator, not three
       });
-      assert.fail("expected ModeratorFeeAboveMax");
-    } catch (e) {
-      assert.include(e.toString(), "ModeratorFeeAboveMax");
-    }
+    }, "ModeratorFeeAboveMax");
   });
 });

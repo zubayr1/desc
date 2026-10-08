@@ -1,5 +1,5 @@
 import { assert } from "chai";
-import { program, createEscrow, acceptEscrow } from "./helpers";
+import { program, createEscrow, acceptEscrow, expectError } from "./helpers";
 
 describe("accept", () => {
   it("binds the committer and goes Active", async () => {
@@ -12,22 +12,16 @@ describe("accept", () => {
 
   it("rejects self-dealing (initiator accepting own escrow)", async () => {
     const s = await createEscrow();
-    try {
+    await expectError(async () => {
       await acceptEscrow(s, s.initiator);
-      assert.fail("expected SelfDeal");
-    } catch (e) {
-      assert.include(e.toString(), "SelfDeal");
-    }
+    }, "SelfDeal");
   });
 
   it("rejects a second accept (first-accept-wins)", async () => {
     const s = await createEscrow();
     await acceptEscrow(s);
-    try {
+    await expectError(async () => {
       await acceptEscrow(s);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 });

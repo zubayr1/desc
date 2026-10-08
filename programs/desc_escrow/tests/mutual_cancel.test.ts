@@ -8,6 +8,7 @@ import {
   accountExists,
   newFundedKeypair,
   TOKEN_PROGRAM_ID,
+  expectError,
 } from "./helpers";
 
 async function mutualCancel(s: any, committer: any, signers: any[]) {
@@ -50,22 +51,16 @@ describe("mutual_cancel", () => {
     const s = await createEscrow();
     await acceptEscrow(s);
     const stranger = await newFundedKeypair();
-    try {
+    await expectError(async () => {
       await mutualCancel(s, stranger, [s.initiator, stranger]);
-      assert.fail("expected Unauthorized");
-    } catch (e) {
-      assert.include(e.toString(), "Unauthorized");
-    }
+    }, "Unauthorized");
   });
 
   it("rejects before acceptance (Funded)", async () => {
     const s = await createEscrow();
     const stranger = await newFundedKeypair();
-    try {
+    await expectError(async () => {
       await mutualCancel(s, stranger, [s.initiator, stranger]);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 });

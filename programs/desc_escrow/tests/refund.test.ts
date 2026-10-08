@@ -10,6 +10,7 @@ import {
   accountExists,
   usdc,
   refundEscrow,
+  expectError,
 } from "./helpers";
 
 /** Moderator token accounts default to whoever voted — none before a verdict,
@@ -93,12 +94,9 @@ describe("refund", () => {
   it("rejects refund while Active before the deadline", async () => {
     const s = await createEscrow();
     await acceptEscrow(s);
-    try {
+    await expectError(async () => {
       await refund(s);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 
   it("rejects refund when the verdict is Pass", async () => {
@@ -106,11 +104,8 @@ describe("refund", () => {
     const c = await acceptEscrow(s);
     await submitEscrow(s, c);
     await recordVerdict(s, "pass");
-    try {
+    await expectError(async () => {
       await refund(s);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 });

@@ -5,6 +5,7 @@ import {
   acceptEscrow,
   submitEscrow,
   recordVerdict,
+  voteOnPanel,
   setupWorld,
   addModerator,
   releaseEscrow,
@@ -17,22 +18,8 @@ import {
   PublicKey,
 } from "./helpers";
 
-/**
- * What settlement writes to each moderator's `ModeratorReputation`.
- *
- * The rest of the suite exercises this code — settlement cannot complete without
- * it — but never reads a counter back, so it would pass just as happily if an
- * outvoted moderator were credited as agreeing. These are the assertions that
- * hold the rules:
- *
- *   - a moderator is scored exactly when it is PAID, never for silence,
- *   - agreement is measured against the outcome the panel settled on,
- *   - and only on a panel of three, because a moderator judging alone is its
- *     own majority and would read 100% forever.
- *
- * The ghost-timeout case (nobody judged, nobody scored) lives in
- * `ghost_timeout.test.ts`, which must run first on a fresh validator.
- */
+/** What settlement writes to each moderator's `ModeratorReputation`. The
+ *  ghost-timeout case lives in `ghost_timeout.test.ts`. */
 
 interface Seat {
   wallet: Keypair;
@@ -45,7 +32,7 @@ async function repOf(wallet: PublicKey) {
   return program.account.moderatorReputation.fetch(moderatorReputationPda(wallet));
 }
 
-/** Assert all four counters at once, so a wrong one names itself. */
+/** All counters at once, so a wrong one names itself. */
 async function assertRep(
   label: string,
   wallet: PublicKey,
@@ -54,6 +41,7 @@ async function assertRep(
     panelVerdicts: number;
     majorityAgreements: number;
     failVotes: number;
+    missed?: number;
   }
 ) {
   const r = await repOf(wallet);
@@ -63,8 +51,9 @@ async function assertRep(
       panelVerdicts: r.panelVerdicts,
       majorityAgreements: r.majorityAgreements,
       failVotes: r.failVotes,
+      missed: r.missed,
     },
-    expected,
+    { missed: 0, ...expected },
     label
   );
 }
@@ -116,10 +105,11 @@ describe("moderator reputation", () => {
   it("credits the majority and not the moderator it outvoted", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
 
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
-    // Lands after the majority formed, and disagrees with it.
-    await recordVerdict(s, "fail", Array(32).fill(3), seats[2].wallet);
+    await voteOnPanel(s, [
+      { by: seats[0].wallet, outcome: "pass" },
+      { by: seats[1].wallet, outcome: "pass" },
+      { by: seats[2].wallet, outcome: "fail" },
+    ]);
 
     await releaseEscrow(s, { signer: committer, committerTokenAccount: committerAta });
 
@@ -143,12 +133,8 @@ describe("moderator reputation", () => {
   it("scores a vote that lands after the outcome is already final", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
 
-    // Two agree: the outcome is decided here.
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
-    // The third judged the same deliverable and reached the same answer, just
-    // late. Being last is not a reason to lose the credit.
-    await recordVerdict(s, "pass", Array(32).fill(3), seats[2].wallet);
+    // The third reveal lands after the first two already decided it.
+    await voteOnPanel(s, seats.map((x) => ({ by: x.wallet, outcome: "pass" as const })));
 
     await releaseEscrow(s, { signer: committer, committerTokenAccount: committerAta });
 
@@ -160,31 +146,29 @@ describe("moderator reputation", () => {
     });
   });
 
-  it("does not score a seat that never voted", async () => {
+  it("marks a seat that never voted as missed, and unpaid", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
 
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
-    // seats[2] stays silent. Its account is still passed to settlement.
+    await voteOnPanel(s, [
+      { by: seats[0].wallet, outcome: "pass" },
+      { by: seats[1].wallet, outcome: "pass" },
+    ]);
 
     await releaseEscrow(s, { signer: committer, committerTokenAccount: committerAta });
 
-    // Silence earns no fee, so it must earn no record either — counting it
-    // would reward not answering.
     await assertRep("the silent seat", seats[2].wallet.publicKey, {
       verdictsCast: 0,
       panelVerdicts: 0,
       majorityAgreements: 0,
       failVotes: 0,
+      missed: 1,
     });
   });
 
   it("counts a Fail settlement, which refund pays out rather than release", async () => {
     const { s, seats } = await panelOfThree();
 
-    for (const seat of seats) {
-      await recordVerdict(s, "fail", Array(32).fill(1), seat.wallet);
-    }
+    await voteOnPanel(s, seats.map((x) => ({ by: x.wallet, outcome: "fail" as const })));
     await refundEscrow(s);
 
     // The panel settled Fail, so a Fail vote AGREED with it. Scoring lives in

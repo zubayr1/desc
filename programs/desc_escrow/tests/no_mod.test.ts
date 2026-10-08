@@ -12,6 +12,7 @@ import {
   BN,
   PublicKey,
   releaseEscrow,
+  expectError,
 } from "./helpers";
 
 /** Release with an empty panel — the no-mod path passes no moderator accounts. */
@@ -74,20 +75,14 @@ describe("no_mod", () => {
 
   it("rejects a no-mod escrow that still names a moderator", async () => {
     const world = await setupWorld();
-    try {
+    await expectError(async () => {
       await createEscrow({ world, noMod: true, moderators: [world.moderatorPda] });
-      assert.fail("expected InvalidPanelSize");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidPanelSize");
-    }
+    }, "InvalidPanelSize");
   });
 
   it("rejects a moderated escrow with no moderator", async () => {
-    try {
+    await expectError(async () => {
       await createEscrow({ moderators: [] });
-      assert.fail("expected InvalidPanelSize");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidPanelSize");
-    }
+    }, "InvalidPanelSize");
   });
 });

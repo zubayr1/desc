@@ -7,6 +7,7 @@ import {
   accountExists,
   newFundedKeypair,
   TOKEN_PROGRAM_ID,
+  expectError,
 } from "./helpers";
 
 async function cancel(s: any, signer = s.initiator) {
@@ -40,22 +41,16 @@ describe("cancel", () => {
   it("cannot cancel once accepted", async () => {
     const s = await createEscrow();
     await acceptEscrow(s);
-    try {
+    await expectError(async () => {
       await cancel(s);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 
   it("cannot be cancelled by a non-initiator", async () => {
     const s = await createEscrow();
     const stranger = await newFundedKeypair();
-    try {
+    await expectError(async () => {
       await cancel(s, stranger);
-      assert.fail("expected a failure");
-    } catch (e) {
-      assert.ok(e.toString().length > 0);
-    }
+    });
   });
 });

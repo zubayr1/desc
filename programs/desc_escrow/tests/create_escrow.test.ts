@@ -6,6 +6,7 @@ import {
   tokenBalance,
   usdc,
   BN,
+  expectError,
 } from "./helpers";
 
 describe("create_escrow", () => {
@@ -19,7 +20,7 @@ describe("create_escrow", () => {
     assert.equal((await tokenBalance(s.vault)).toString(), total.toString());
 
     const acc = await program.account.escrow.fetch(s.escrow);
-    assert.equal(acc.version, 1);
+    assert.equal(acc.version, 2);
     assert.property(acc.status, "funded");
     assert.isNull(acc.committer);
     assert.ok(acc.amount.eq(amount));
@@ -66,12 +67,9 @@ describe("create_escrow", () => {
 
   it("rejects an amount below the configured minimum", async () => {
     const world = await setupWorld(200, usdc(1).toNumber(), usdc(50).toNumber());
-    try {
+    await expectError(async () => {
       await createEscrow({ world, amount: usdc(49) });
-      assert.fail("expected AmountBelowMinimum");
-    } catch (e) {
-      assert.include(e.toString(), "AmountBelowMinimum");
-    }
+    }, "AmountBelowMinimum");
   });
 
   it("accepts an amount exactly at the minimum", async () => {
@@ -84,36 +82,27 @@ describe("create_escrow", () => {
   });
 
   it("rejects a zero amount", async () => {
-    try {
+    await expectError(async () => {
       await createEscrow({ amount: new BN(0) });
-      assert.fail("expected InvalidAmount");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidAmount");
-    }
+    }, "InvalidAmount");
   });
 
   it("rejects a deadline in the past", async () => {
-    try {
+    await expectError(async () => {
       await createEscrow({ deadlineOffset: -10 });
-      assert.fail("expected InvalidDeadline");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidDeadline");
-    }
+    }, "InvalidDeadline");
   });
 
   it("rejects when the protocol is paused", async () => {
     const world = await setupWorld();
     await program.methods
-      .updateConfig(null, null, null, null, null, true)
+      .updateConfig(null, null, null, null, null, true, null)
       .accountsPartial({ authority: world.authority.publicKey, config: world.config })
       .signers([world.authority])
       .rpc();
 
-    try {
+    await expectError(async () => {
       await createEscrow({ world });
-      assert.fail("expected ProtocolPaused");
-    } catch (e) {
-      assert.include(e.toString(), "ProtocolPaused");
-    }
+    }, "ProtocolPaused");
   });
 });

@@ -6,6 +6,7 @@ import {
   type ContractStatus,
   type ModeratorReputation,
   type Outcome,
+  type Vote,
 } from "@repo/shared";
 import type { DescEscrow } from "./idl/desc_escrow";
 import idl from "./idl/desc_escrow.json";
@@ -121,7 +122,7 @@ export interface PanelSeat {
   /** Its own price for this contract, snapshotted at creation. */
   fee: string;
   /** How it voted, or null if it has not. Only voters are paid on settle. */
-  vote: Outcome | null;
+  vote: Vote | null;
 }
 
 /**
@@ -134,7 +135,7 @@ export interface PanelSeat {
 export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
   const acc = await program.account.panel.fetch(panelPda(escrow));
   // Mirrors the program's VOTE_NONE / VOTE_PASS / VOTE_FAIL.
-  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
+  const VOTES: (Vote | null)[] = [null, "pass", "fail"];
   return acc.entries.slice(0, acc.count).map((e) => ({
     moderator: e.moderator,
     fee: e.fee.toString(),
@@ -167,7 +168,7 @@ export async function readPanels(
 ): Promise<Map<string, PanelSeat[]>> {
   const out = new Map<string, PanelSeat[]>();
   if (!escrows.length) return out;
-  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
+  const VOTES: (Vote | null)[] = [null, "pass", "fail"];
   const CHUNK = 100;
   for (let i = 0; i < escrows.length; i += CHUNK) {
     const slice = escrows.slice(i, i + CHUNK);

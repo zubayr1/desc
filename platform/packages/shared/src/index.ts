@@ -96,9 +96,12 @@ export const CONTRACT_STATUSES = [
 ] as const;
 export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 
-/** Verdict result. Mirrors the program's on-chain `Outcome`.
- *  In the MVP this is set manually by the admin/settlement authority. */
-export const OUTCOMES = ["pass", "fail"] as const;
+/** A moderator's vote. */
+export type Vote = "pass" | "fail";
+
+/** Verdict result. Mirrors the program's on-chain `Outcome`. `inconclusive`: no
+ *  majority even after tiebreaks — the initiator is refunded. */
+export const OUTCOMES = ["pass", "fail", "inconclusive"] as const;
 export type Outcome = (typeof OUTCOMES)[number];
 
 // ---------------------------------------------------------------------------
@@ -253,7 +256,7 @@ export interface ContractModerator {
    *
    *  `undefined` = never read yet · `null` = seated, has not voted ·
    *  `"pass"`/`"fail"` = its vote. */
-  vote?: Outcome | null;
+  vote?: Vote | null;
 }
 
 /**

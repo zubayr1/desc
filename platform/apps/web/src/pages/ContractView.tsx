@@ -222,11 +222,12 @@ function Actions({
           }
           return <Passive ok>Verdict: PASS — awaiting release.</Passive>;
         }
-        if (c.outcome === "fail") {
+        if (c.outcome === "fail" || c.outcome === "inconclusive") {
+          const verdict = c.outcome === "fail" ? "Verdict: FAIL" : "No majority — INCONCLUSIVE";
           if (isInitiator) {
             return (
               <div>
-                <div className="mb-3 text-sm text-st-submitted">Verdict: FAIL</div>
+                <div className="mb-3 text-sm text-st-submitted">{verdict}</div>
                 <Button
                   variant="accent"
                   className="w-full"
@@ -241,7 +242,7 @@ function Actions({
           // Committer (and any other viewer): just the outcome, no action.
           return (
             <div className="flex items-center gap-2 text-sm text-st-submitted">
-              <span className="size-2 rounded-full bg-st-submitted" /> Verdict: FAIL
+              <span className="size-2 rounded-full bg-st-submitted" /> {verdict}
             </div>
           );
         }

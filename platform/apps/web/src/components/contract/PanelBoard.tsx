@@ -1,4 +1,4 @@
-import type { Contract, Outcome } from "@repo/shared";
+import type { Contract, Vote } from "@repo/shared";
 import { cn, short, usd } from "@/lib/utils";
 
 /**
@@ -67,7 +67,7 @@ export function PanelBoard({ c }: { c: Contract }) {
   );
 }
 
-function VoteBadge({ vote }: { vote?: Outcome | null }) {
+function VoteBadge({ vote }: { vote?: Vote | null }) {
   if (vote === undefined) {
     return <span className="font-mono text-[0.68rem] text-muted">—</span>;
   }

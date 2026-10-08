@@ -6,7 +6,7 @@
  * CI checks, a different model, or a remote service means adding a sibling file
  * here — nothing above this line moves.
  */
-import type { InputFile, Outcome } from "@repo/shared";
+import type { InputFile, Vote } from "@repo/shared";
 
 export interface AcceptanceCriterion {
   description: string;
@@ -32,7 +32,7 @@ export interface Usage {
 }
 
 export interface JudgeResult {
-  outcome: Outcome;
+  outcome: Vote;
   /** Human-readable summary. Goes on-chain via the verdict hash. */
   reasoning: string;
   criteria: CriterionVerdict[];

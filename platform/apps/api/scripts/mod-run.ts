@@ -24,7 +24,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import type { Outcome } from "@repo/shared";
+import type { Vote } from "@repo/shared";
 import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import moderationIdl from "../src/solana/idl/desc_moderation.json";
 import type { DescEscrow } from "../src/solana/idl/desc_escrow";
@@ -67,7 +67,7 @@ for (let i = 0; i < args.length; i++) {
   else positional.push(args[i]);
 }
 const ref = positional[0];
-const outcome = positional[1] as Outcome | undefined;
+const outcome = positional[1] as Vote | undefined;
 
 // With DESC_JUDGE=claude the AI decides, so demanding a pass/fail here would be
 // worse than pointless: you would type one verdict and a different one could be
@@ -86,7 +86,7 @@ if (!ref || (!aiJudge && !hasOutcome)) {
 if (aiJudge && (hasOutcome || note)) {
   console.warn("! DESC_JUDGE=claude — ignoring the outcome/note you passed; the AI decides.");
 }
-const manual = hasOutcome ? { outcome: outcome as Outcome, note } : undefined;
+const manual = hasOutcome ? { outcome: outcome as Vote, note } : undefined;
 
 function resolveSlug(): string {
   if (slug) return slug;

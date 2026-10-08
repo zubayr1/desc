@@ -15,7 +15,7 @@
  * gets its real judge wrapped so the verdict comes out backwards (see
  * `mischief.ts`). Every other moderator is unaffected.
  */
-import type { Outcome } from "@repo/shared";
+import type { Vote } from "@repo/shared";
 import type { Judge } from "./types";
 import { claudeJudge } from "./claude";
 import { claudeCodeJudge } from "./claudeCode";
@@ -39,7 +39,7 @@ export function aiJudge(slug?: string): Judge {
 }
 
 export function selectJudge(
-  manual?: { outcome: Outcome; note?: string },
+  manual?: { outcome: Vote; note?: string },
   slug?: string
 ): Judge {
   if (aiJudgeSelected()) return aiJudge(slug);

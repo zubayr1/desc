@@ -5,6 +5,7 @@
 #
 #   ./fund-wallets.sh <USDC_MINT> [amount]
 #   SOLANA_URL=devnet WALLETS="<pubkey>" ./fund-wallets.sh <USDC_MINT> 1000
+#   ./fund-wallets.sh --tiebreakers   SOL only, for the wallets `pnpm tiebreaker-register` wrote
 #
 # - <USDC_MINT>  (required) the dev mint printed by bootstrap
 # - [amount]     (optional) USDC to mint per wallet (default 1_000_000)
@@ -17,6 +18,23 @@
 # authority. spl-token needs --fee-payer explicitly (it ignores `solana config`
 # once --url is set). Re-runnable: a pre-existing token account is not an error.
 set -uo pipefail
+
+if [[ "${1:-}" == "--tiebreakers" ]]; then
+  DIR="${MOD_DIR:-$(dirname "$0")/platform/apps/api/moderators}"
+  URL="${SOLANA_URL:-localhost}"
+  shopt -s nullglob
+  files=("$DIR"/tiebreaker-*-wallet.json)
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "no tiebreaker wallets in $DIR — run \`pnpm tiebreaker-register\` first" >&2
+    exit 1
+  fi
+  for f in "${files[@]}"; do
+    w=$(solana-keygen pubkey "$f")
+    solana airdrop "${SOL_PER_WALLET:-1}" "$w" -u "$URL" >/dev/null || echo "  (airdrop refused for $w)"
+    echo "$(basename "$f" -wallet.json)  $w  $(solana balance "$w" -u "$URL")"
+  done
+  exit 0
+fi
 
 USDC_MINT="${1:-}"
 AMOUNT="${2:-1000000}"

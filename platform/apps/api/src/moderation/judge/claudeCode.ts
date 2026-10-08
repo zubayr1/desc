@@ -25,9 +25,7 @@ import { z } from "zod/v4";
 import type { InputFile } from "@repo/shared";
 import type { AcceptanceCriterion, Judge, JudgeResult } from "./types";
 import { JudgeError } from "./types";
-import { SYSTEM, VerdictSchema, buildPrompt, judgeModel, toResult } from "./claude";
-
-const TIMEOUT_MS = Number(process.env.DESC_JUDGE_TIMEOUT_MS ?? 5 * 60_000);
+import { JUDGE_TIMEOUT_MS as TIMEOUT_MS, VerdictSchema, buildPrompt, judgeModel, judgeSystem, toResult } from "./claude";
 
 /** The verdict schema for `--json-schema`. zod stamps a draft-2020-12 `$schema`
  *  that Claude Code's validator rejects, so it is dropped — the shape is unchanged. */
@@ -123,7 +121,7 @@ export function claudeCodeJudge(): Judge {
         "-p",
         "--output-format", "json",
         "--model", MODEL,
-        "--system-prompt", SYSTEM,
+        "--system-prompt", judgeSystem(),
         "--json-schema", VERDICT_JSON_SCHEMA,
         "--tools", "",
         "--strict-mcp-config",

@@ -27,7 +27,7 @@ import type { CommittedVote, WorkItem, WorkSource } from "./source";
  * simply gets picked up again. Long enough that a slow judgment is not stolen
  * from a worker that is still going.
  */
-const LEASE_MS = Number(process.env.MOD_CLAIM_LEASE_MS ?? 10 * 60_000);
+export const LEASE_MS = Number(process.env.MOD_CLAIM_LEASE_MS ?? 10 * 60_000);
 
 export function dbWorkSource(): WorkSource {
   return {

@@ -27,6 +27,7 @@ impl<'info> UpdateConfig<'info> {
         protocol_fee_min: Option<u64>,
         min_amount: Option<u64>,
         paused: Option<bool>,
+        verdict_window: Option<i64>,
     ) -> Result<()> {
         self.config.check_version()?;
         if let Some(bps) = protocol_fee_bps {
@@ -48,6 +49,13 @@ impl<'info> UpdateConfig<'info> {
         }
         if let Some(paused) = paused {
             self.config.paused = paused;
+        }
+        if let Some(window) = verdict_window {
+            require!(
+                window > 0 && window <= Config::MAX_VERDICT_WINDOW,
+                EscrowError::InvalidVerdictWindow
+            );
+            self.config.verdict_window = window;
         }
 
         // Checked on the RESULT, after every option is applied, so one call may

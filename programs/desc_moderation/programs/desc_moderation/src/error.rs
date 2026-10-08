@@ -12,4 +12,6 @@ pub enum ModerationError {
     BaseBpsTooHigh,
     #[msg("A per-KB price needs a maximum bundle size")]
     SizePricingWithoutLimit,
+    #[msg("Signer is not a registered tiebreaker")]
+    NotATiebreaker,
 }

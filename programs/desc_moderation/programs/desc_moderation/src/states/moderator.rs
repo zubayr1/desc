@@ -42,14 +42,16 @@ pub struct Moderator {
     pub fee_per_kb: u64,
     /// 0 = no limit. Must be 0 until size pricing ships.
     pub max_bundle_kb: u32,
+    /// Read raw by `desc_escrow` — keep it directly after the pricing fields.
+    pub is_tiebreaker: bool,
 
     /// V2: stake, slashing history. Reputation lives in `desc_escrow`, which is
     /// where the outcome and the panel's votes are.
-    pub reserved: [u8; 50],
+    pub reserved: [u8; 49],
 }
 
 impl Moderator {
-    pub const VERSION: u8 = 1;
+    pub const VERSION: u8 = 2;
 
     /// Seed prefix; full seeds = [SEED_PREFIX, authority].
     pub const SEED_PREFIX: &'static [u8] = b"moderator";

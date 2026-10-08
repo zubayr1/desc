@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;
+use crate::states::Panel;
 
 /// On-chain lifecycle — only the transitions that move money. The richer
 /// off-chain states (draft, under_verification, disputed) have no on-chain form.
@@ -31,6 +32,8 @@ pub enum EscrowStatus {
 pub enum Outcome {
     Pass,
     Fail,
+    /// No majority even after the tiebreakers.
+    Inconclusive,
 }
 
 /// Per-deal escrow (PDA, seeds = [b"escrow", initiator, contract_id]).
@@ -111,13 +114,20 @@ pub struct Escrow {
     /// (`count == 0`), so settlement has a single shape to handle.
     pub panel: Pubkey,
 
-    pub reserved: [u8; 41],
+    /// Snapshotted from `Config` so a config change can't move a live deadline.
+    pub verdict_window: i64,
+    /// Panel of 1: the vote deadline.
+    pub commit_deadline: i64,
+    /// Panel of 1: equals `commit_deadline`.
+    pub reveal_deadline: i64,
+
+    pub reserved: [u8; 17],
 }
 
 impl Escrow {
-    /// Bump whenever a field is carved from `reserved`. Still 1: nothing added
-    /// so far outlived a validator reset, so no older layout exists anywhere.
-    pub const VERSION: u8 = 1;
+    pub const VERSION: u8 = 2;
+
+    pub const DEFAULT_VERDICT_WINDOW: i64 = 3_600;
 
     /// Seed prefix; full seeds = [SEED_PREFIX, initiator, contract_id].
     pub const SEED_PREFIX: &'static [u8] = b"escrow";
@@ -134,6 +144,32 @@ impl Escrow {
             EscrowError::UnsupportedVersion
         );
         Ok(())
+    }
+
+    pub fn window(&self) -> i64 {
+        if self.verdict_window > 0 {
+            self.verdict_window
+        } else {
+            Self::DEFAULT_VERDICT_WINDOW
+        }
+    }
+
+    pub fn reveal_open(&self, panel: &Panel, now: i64) -> bool {
+        panel.all_committed() || now > self.commit_deadline
+    }
+
+    pub fn voting_closed(&self, now: i64) -> bool {
+        now > self.reveal_deadline
+    }
+
+    pub fn tiebreak_deadline(&self, panel: &Panel) -> i64 {
+        self.reveal_deadline
+            .saturating_add(self.window().saturating_mul(panel.tiebreak_cap() as i64))
+    }
+
+    /// A committed seat always gets its full reveal window before settlement.
+    pub fn settlement_ready(&self, panel: &Panel, now: i64) -> bool {
+        !panel.has_unrevealed() || self.voting_closed(now)
     }
 
     /// The most a moderator can charge here — what the initiator locks up front.

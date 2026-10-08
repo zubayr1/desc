@@ -117,6 +117,7 @@ impl<'info> CreateEscrow<'info> {
                 price.fee_per_kb == 0 && price.max_bundle_kb == 0,
                 EscrowError::SizePricingNotEnabled
             );
+            require!(!price.is_tiebreaker, EscrowError::TiebreakerNotSelectable);
             // One seat each: twice would be two votes from one judge.
             require!(
                 !entries[..i].iter().any(|e| e.moderator == price.authority),
@@ -150,7 +151,8 @@ impl<'info> CreateEscrow<'info> {
             quorum: (count as u8) / 2 + 1,
             entries,
             bump: bumps.panel,
-            reserved: [0; 64],
+            tiebreak_fills: 0,
+            reserved: [0; 63],
         });
 
         // Kept on the escrow for the single-moderator fast path; zero when the
@@ -233,7 +235,10 @@ impl<'info> CreateEscrow<'info> {
             fee_per_kb: snapshot.1,
             max_bundle_kb: snapshot.2,
             panel: self.panel.key(),
-            reserved: [0; 41],
+            verdict_window: self.config.verdict_window,
+            commit_deadline: 0,
+            reveal_deadline: 0,
+            reserved: [0; 17],
         });
 
         Ok(())

@@ -61,7 +61,8 @@ impl<'info> RegisterModerator<'info> {
             base_bps,
             fee_per_kb,
             max_bundle_kb,
-            reserved: [0; 50],
+            is_tiebreaker: false,
+            reserved: [0; 49],
         });
 
         Ok(())

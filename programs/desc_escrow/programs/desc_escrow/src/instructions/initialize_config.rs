@@ -51,7 +51,8 @@ impl<'info> InitializeConfig<'info> {
             bump: bumps.config,
             protocol_fee_min,
             min_amount,
-            reserved: [0; 48],
+            verdict_window: 0,
+            reserved: [0; 40],
         });
 
         self.config.validate_fee_bounds()?;

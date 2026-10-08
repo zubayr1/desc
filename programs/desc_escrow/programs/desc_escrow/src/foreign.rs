@@ -24,6 +24,7 @@ pub struct ModeratorPrice {
     pub base_bps: u16,
     pub fee_per_kb: u64,
     pub max_bundle_kb: u32,
+    pub is_tiebreaker: bool,
 }
 
 /// sha256("account:Moderator")[..8] — matches the `desc_moderation` IDL.
@@ -32,8 +33,8 @@ const MODERATOR_DISCRIMINATOR: [u8; 8] = [130, 201, 20, 55, 202, 167, 143, 128];
 /// `desc_moderation::ModerationConfig::AUTHORITY_SEED_PREFIX`.
 const VERDICT_AUTHORITY_SEED: &[u8] = b"authority";
 
-/// Mirror of `desc_moderation::Moderator`, up to the pricing fields. The ORDER
-/// must match that struct exactly; trailing `reserved` bytes are not read.
+/// Mirror of `desc_moderation::Moderator`, up to `is_tiebreaker`. The ORDER must
+/// match that struct exactly; trailing `reserved` bytes are not read.
 #[derive(AnchorDeserialize)]
 struct ModeratorLayout {
     _version: u8,
@@ -47,6 +48,7 @@ struct ModeratorLayout {
     base_bps: u16,
     fee_per_kb: u64,
     max_bundle_kb: u32,
+    is_tiebreaker: bool,
 }
 
 impl ModeratorPrice {
@@ -77,6 +79,7 @@ impl ModeratorPrice {
             base_bps: m.base_bps,
             fee_per_kb: m.fee_per_kb,
             max_bundle_kb: m.max_bundle_kb,
+            is_tiebreaker: m.is_tiebreaker,
         })
     }
 }

@@ -134,8 +134,9 @@ export async function deliverBundle(
     const mods = contract.panel?.length
       ? contract.panel.map((m) => m.recipient)
       : (await getJson<{ recipients: string[] }>("/config/moderators")).recipients;
+    const tiebreakers = (await getJson<{ recipients: string[] }>("/config/tiebreakers")).recipients;
     const initiatorKey = contract.initiatorRecipient;
-    recipients = initiatorKey ? [...mods, initiatorKey] : mods;
+    recipients = [...new Set([...mods, ...tiebreakers, ...(initiatorKey ? [initiatorKey] : [])])];
     if (!recipients.length) {
       throw new Error("no moderators registered — run `pnpm moderator-register`");
     }

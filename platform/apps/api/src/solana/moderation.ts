@@ -53,6 +53,11 @@ export async function listActiveRecipients(): Promise<string[]> {
   return (await activeModerators()).map((m) => m.account.recipient);
 }
 
+/** The tiebreakers' age recipients. Every delivery is sealed to them too, so any one can take a silent seat. */
+export async function listTiebreakerRecipients(): Promise<string[]> {
+  return (await activeModerators()).filter((m) => m.account.isTiebreaker).map((m) => m.account.recipient);
+}
+
 /**
  * Every active moderator registered under THIS platform's config. The single
  * definition of "a moderator you can use" — the fee quote and the create path

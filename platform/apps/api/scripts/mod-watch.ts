@@ -1,9 +1,9 @@
 /**
  * mod-watch — the moderator's discovery loop.
  *
- * `mod-run` judges ONE contract you name. Nothing tells it a contract is
- * waiting, so end-to-end testing means copy-pasting link tokens. This polls for
- * work and runs `mod-run` on whatever it finds.
+ * `mod-run` judges ONE contract you name. This polls for work, runs `mod-run`
+ * on whatever it finds, and reveals this moderator's committed votes once
+ * reveals open.
  *
  *   pnpm mod-watch                          # manual verdicts, prompts per contract
  *   DESC_JUDGE=claude pnpm mod-watch        # the AI judges, unattended
@@ -23,7 +23,12 @@ import "dotenv/config";
 import { spawn } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { Keypair } from "@solana/web3.js";
+import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
+import { Connection, Keypair } from "@solana/web3.js";
+import type { DescEscrow } from "../src/solana/idl/desc_escrow";
+import escrowIdl from "../src/solana/idl/desc_escrow.json";
+import { rpcUrl } from "../src/config/cluster";
+import { revealCommitted } from "../src/moderation/commit";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
 import { moderatorModel } from "../src/moderation/moderatorModel";
 import { isMischief } from "../src/moderation/judge/mischief";
@@ -47,8 +52,11 @@ function resolveSlug(): string {
   );
 }
 
-/** Run `mod-run` for one contract. Resolves to the exit code and captured tail. */
-function judge(item: WorkItem, slug: string): Promise<boolean> {
+/** `mod-run`'s exit code for a hidden vote awaiting its reveal. */
+const EXIT_COMMITTED = 3;
+
+/** Run `mod-run` for one contract. Resolves to its exit code. */
+function judge(item: WorkItem, slug: string): Promise<number> {
   return new Promise((resolve) => {
     // The local tsx binary directly, not `npx` — npx shells out to npm, which
     // prints its own config warnings over every contract we judge.
@@ -58,16 +66,23 @@ function judge(item: WorkItem, slug: string): Promise<boolean> {
       ["scripts/mod-run.ts", item.contractId, "--mod", slug],
       { stdio: "inherit", env: process.env }
     );
-    child.on("close", (code) => resolve(code === 0));
-    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code ?? 1));
+    child.on("error", () => resolve(1));
   });
 }
 
 async function main() {
   const slug = resolveSlug();
-  const moderator = Keypair.fromSecretKey(
+  const modKeypair = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(readFileSync(`${MOD_DIR}/${slug}-wallet.json`, "utf8")))
-  ).publicKey;
+  );
+  const moderator = modKeypair.publicKey;
+  const escrowProgram = new Program<DescEscrow>(
+    escrowIdl as DescEscrow,
+    new AnchorProvider(new Connection(rpcUrl, "confirmed"), new Wallet(modKeypair), {
+      commitment: "confirmed",
+    })
+  );
 
   const source = dbWorkSource();
   const isAi = process.env.DESC_JUDGE === "claude" || process.env.DESC_JUDGE === "claude-api";
@@ -112,9 +127,11 @@ async function main() {
     for (const item of work) {
       const nth = item.attempts > 1 ? ` (attempt ${item.attempts})` : "";
       console.log(`\n--- ${item.title ?? "(untitled)"} · ${item.contractId}${nth} ---`);
-      const ok = await judge(item, slug);
-      if (ok) {
+      const code = await judge(item, slug);
+      if (code === 0) {
         await source.release(item.contractId, moderator);
+      } else if (code === EXIT_COMMITTED) {
+        // Claim stays `committed`; the reveal sweep below finishes it.
       } else {
         // Marked failed rather than left claimed: these are near-always
         // permanent for that contract (no criteria, bundle too large, a
@@ -128,6 +145,12 @@ async function main() {
         );
         console.error("  ! no verdict submitted — marked failed, not retrying");
       }
+    }
+
+    try {
+      await revealCommitted(source, modKeypair, escrowProgram);
+    } catch (err) {
+      console.error(`  ! reveal sweep failed: ${(err as Error).message}`);
     }
 
     if (once) {

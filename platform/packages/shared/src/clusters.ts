@@ -37,6 +37,8 @@ export interface ClusterConfig {
   usdcMint: string | null;
   /** True where deliberately-wrong test moderators may run at all. */
   allowsTestModerators: boolean;
+  /** Seconds per moderation phase, written on-chain by `bootstrap`. */
+  verdictWindow: number;
 }
 
 /** Canonical USDC on Solana mainnet. */
@@ -67,6 +69,7 @@ export const CLUSTERS: Record<DescEnv, ClusterConfig> = {
     moderationProgramId: MODERATION_PROGRAM_ID,
     usdcMint: null,
     allowsTestModerators: true,
+    verdictWindow: 300,
   },
   devnet: {
     env: "devnet",
@@ -77,6 +80,7 @@ export const CLUSTERS: Record<DescEnv, ClusterConfig> = {
     moderationProgramId: MODERATION_PROGRAM_ID,
     usdcMint: DEVNET_USDC,
     allowsTestModerators: true,
+    verdictWindow: 300,
   },
   mainnet: {
     env: "mainnet",
@@ -87,6 +91,7 @@ export const CLUSTERS: Record<DescEnv, ClusterConfig> = {
     moderationProgramId: MODERATION_PROGRAM_ID,
     usdcMint: MAINNET_USDC,
     allowsTestModerators: false,
+    verdictWindow: 3600,
   },
 };
 

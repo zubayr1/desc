@@ -20,7 +20,7 @@ import type {
  * Off-chain moderation progress for ONE moderator on ONE contract — see
  * `moderationClaims`. Not an on-chain concept.
  */
-export type ModerationState = "in_progress" | "done" | "failed";
+export type ModerationState = "in_progress" | "committed" | "done" | "failed";
 
 /**
  * Off-chain contract metadata. The chain is the source of truth for status,
@@ -129,6 +129,7 @@ export type NewContractRow = typeof contracts.$inferInsert;
  * States, all meaningful only while the contract is `submitted`:
  *   (no row)     — this moderator has not picked the contract up
  *   in_progress  — claimed (see `startedAt` for the lease)
+ *   committed    — panel of 3: hidden vote posted, waiting to reveal
  *   done         — this moderator's verdict is in; terminal, never re-judged
  *   failed       — this moderator cannot judge it; never retried, needs a human
  */
@@ -145,6 +146,11 @@ export const moderationClaims = pgTable(
     attempts: integer("attempts").notNull().default(0),
     /** Why this moderator could not judge it. Safe to show a user. */
     error: text("error"),
+    /** Panel of 3: what was committed, kept for the reveal. The verdict hash
+     *  covers the judge's reasoning, which can't be reproduced, so it must be
+     *  stored. The salt is derived from the moderator's key and never stored. */
+    commitOutcome: text("commit_outcome").$type<"pass" | "fail">(),
+    commitVerdictHash: text("commit_verdict_hash"),
     /** When the claim was taken. A worker that dies leaves this stale, and the
      *  claim is reclaimable once it ages past the lease. */
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),

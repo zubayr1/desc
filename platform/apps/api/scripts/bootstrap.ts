@@ -101,10 +101,14 @@ async function main() {
         authority.publicKey
       );
       await program.methods
-        .updateConfig(null, fixed.address, null, null, null, null)
+        .updateConfig(null, fixed.address, null, null, null, null, null)
         .accountsPartial({ authority: authority.publicKey, config })
         .rpc();
       console.log("  repointed treasury  :", fixed.address.toBase58());
+    }
+
+    if (existing.verdictWindow.toNumber() !== cluster.verdictWindow) {
+      await setWindow(program, authority.publicKey, config);
     }
 
     const finalCfg = await program.account.config.fetch(config);
@@ -116,6 +120,7 @@ async function main() {
     console.log("  treasury            :", finalCfg.treasury.toBase58());
     console.log("  min amount          :", finalCfg.minAmount.toString());
     console.log("  fee floor           :", finalCfg.protocolFeeMin.toString());
+    console.log("  verdict window      :", `${finalCfg.verdictWindow.toString()}s`);
     console.log(
       cluster.usdcMint
         ? `  mint                : ${cluster.usdcMint} (fixed for ${descEnv} — do NOT set USDC_MINT)`
@@ -152,6 +157,7 @@ async function main() {
       systemProgram: SystemProgram.programId,
     })
     .rpc();
+  await setWindow(program, authority.publicKey, config);
 
   console.log("Bootstrap complete:");
   console.log("  authority (cold)    :", authority.publicKey.toBase58());
@@ -172,6 +178,14 @@ async function main() {
   console.log("  USDC_MINT=" + mint.toBase58());
   console.log("\nNext: deploy desc_moderation + `pnpm moderation-init` (the PDA above");
   console.log("can sign verdicts once the ModerationConfig is initialized).");
+}
+
+async function setWindow(program: Program<DescEscrow>, authority: PublicKey, config: PublicKey) {
+  await program.methods
+    .updateConfig(null, null, null, null, null, null, new BN(cluster.verdictWindow))
+    .accountsPartial({ authority, config })
+    .rpc();
+  console.log(`  verdict window      : ${cluster.verdictWindow}s (${descEnv})`);
 }
 
 async function fundIfLow(connection: Connection, pubkey: PublicKey) {

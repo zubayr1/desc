@@ -27,6 +27,15 @@ export interface WorkItem {
   attempts: number;
 }
 
+/** A vote committed and not yet revealed. */
+export interface CommittedVote {
+  contractId: string;
+  escrowAddress: string;
+  outcome: "pass" | "fail";
+  /** Hex. */
+  verdictHash: string;
+}
+
 export interface WorkSource {
   /** Named in logs so it is obvious which source a run used. */
   readonly name: string;
@@ -47,4 +56,14 @@ export interface WorkSource {
   /** This moderator could not judge it. Recorded with a reason and never
    *  retried — the rest of the panel is unaffected and can still settle it. */
   fail(contractId: string, moderator: PublicKey, error: string): Promise<void>;
+
+  /** Store what is about to be committed — BEFORE the transaction, so a crash
+   *  after it lands can't leave a commit with nothing to reveal. */
+  saveCommit(contractId: string, moderator: PublicKey, outcome: "pass" | "fail", verdictHash: string): Promise<void>;
+
+  /** The commit landed; reveal it once reveals open. Requires `saveCommit` first. */
+  markCommitted(contractId: string, moderator: PublicKey): Promise<boolean>;
+
+  /** This moderator's commits still waiting to be revealed. */
+  committed(moderator: PublicKey): Promise<CommittedVote[]>;
 }

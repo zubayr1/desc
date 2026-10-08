@@ -13,11 +13,11 @@
  * collide — which is the whole reason the old single column on `contracts` had
  * to go.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { PublicKey } from "@solana/web3.js";
 import { db } from "../../db/client";
-import { moderationClaims } from "../../db/schema";
-import type { WorkItem, WorkSource } from "./source";
+import { contracts, moderationClaims } from "../../db/schema";
+import type { CommittedVote, WorkItem, WorkSource } from "./source";
 
 /**
  * How long a claim is honoured before another worker may take it.
@@ -101,24 +101,62 @@ export function dbWorkSource(): WorkSource {
       await db
         .update(moderationClaims)
         .set({ state: "done", error: null, updatedAt: new Date() })
-        .where(
-          and(
-            eq(moderationClaims.contractId, contractId),
-            eq(moderationClaims.moderator, moderator.toBase58())
-          )
-        );
+        .where(seat(contractId, moderator));
     },
 
     async fail(contractId: string, moderator: PublicKey, error: string): Promise<void> {
       await db
         .update(moderationClaims)
         .set({ state: "failed", error: error.slice(0, 500), updatedAt: new Date() })
+        .where(seat(contractId, moderator));
+    },
+
+    async saveCommit(contractId, moderator, outcome, verdictHash): Promise<void> {
+      await db
+        .update(moderationClaims)
+        .set({ commitOutcome: outcome, commitVerdictHash: verdictHash, updatedAt: new Date() })
+        .where(seat(contractId, moderator));
+    },
+
+    async markCommitted(contractId, moderator): Promise<boolean> {
+      const rows = await db
+        .update(moderationClaims)
+        .set({ state: "committed", updatedAt: new Date() })
+        .where(and(seat(contractId, moderator), isNotNull(moderationClaims.commitVerdictHash)))
+        .returning({ id: moderationClaims.contractId });
+      return rows.length > 0;
+    },
+
+    async committed(moderator: PublicKey): Promise<CommittedVote[]> {
+      const rows = await db
+        .select({
+          contractId: moderationClaims.contractId,
+          escrowAddress: contracts.escrowAddress,
+          outcome: moderationClaims.commitOutcome,
+          verdictHash: moderationClaims.commitVerdictHash,
+        })
+        .from(moderationClaims)
+        .innerJoin(contracts, eq(contracts.id, moderationClaims.contractId))
         .where(
           and(
-            eq(moderationClaims.contractId, contractId),
-            eq(moderationClaims.moderator, moderator.toBase58())
+            eq(moderationClaims.moderator, moderator.toBase58()),
+            eq(moderationClaims.state, "committed")
           )
         );
+      return rows
+        .filter((r) => r.outcome && r.verdictHash)
+        .map((r) => ({
+          contractId: r.contractId,
+          escrowAddress: r.escrowAddress,
+          outcome: r.outcome!,
+          verdictHash: r.verdictHash!,
+        }));
     },
   };
 }
+
+const seat = (contractId: string, moderator: PublicKey) =>
+  and(
+    eq(moderationClaims.contractId, contractId),
+    eq(moderationClaims.moderator, moderator.toBase58())
+  );

@@ -294,7 +294,12 @@ pnpm moderator-register "Olympus (Mod-Claude-Opus)"  --base-bps 100  # 1%
 pnpm moderator-register "SonGoku (Mod-Claude-Sonnet)" --base-bps 75  # 0.75%
 pnpm moderator-register "Hikaru (Mod-Claude-Haiku)"   --base-bps 50  # 0.5%
 pnpm moderator-register "Mischief"                    --base-bps 50  # 0.5% — TEST ONLY
+pnpm tiebreaker-register              # the 4 platform tiebreakers, tiebreaker-1..4
 ```
+
+The tiebreakers need SOL to vote. Local: `../../../fund-wallets.sh --tiebreakers`.
+Devnet: send the 4 addresses it prints SOL from the faucet, and register them with
+`MOD_DIR=./moderators/devnet` so the prod compose mounts them.
 
 > **Mischief is a deliberately wrong moderator.** It judges for real, then
 > submits the OPPOSITE verdict, so a 3-moderator panel can be shown outvoting a
@@ -309,6 +314,7 @@ MODEL_SONGOKU_MOD_CLAUDE_SONNET=claude-sonnet-5
 MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
 MODEL_MISCHIEF=claude-haiku-4-5           # test moderator — local/devnet only
 DESC_MISCHIEF_MODS=mischief               # slugs that invert their verdict
+DESC_TIEBREAK_MODEL=claude-opus-5         # optional; the default
 ```
 
 `DESC_MISCHIEF_MODS` is what actually makes Mischief misbehave: registering it
@@ -334,10 +340,11 @@ pnpm mod-watch --mod olympus-mod-claude-opus
 pnpm mod-watch --mod songoku-mod-claude-sonnet
 pnpm mod-watch --mod hikaru-mod-claude-haiku
 pnpm mod-watch --mod mischief            # test moderator — votes the OPPOSITE
+pnpm tiebreak-watch                      # all 4 tiebreakers, one process
 ```
-Run one per moderator you registered. A three-moderator contract needs all three
-of its watchers up, or it sits at `submitted` waiting for the vote that never
-comes.
+Run one per moderator you registered, plus `tiebreak-watch`. When voting closes
+without a majority (a split, or a silent seat), a tiebreaker takes a silent seat
+and votes; if none can decide, the contract ends Inconclusive and refunds.
 
 Each watcher claims only the contracts whose **panel it sits on** and that it has
 not voted on yet, so three watchers can work the same contract side by side

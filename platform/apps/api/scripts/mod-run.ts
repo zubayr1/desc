@@ -41,6 +41,7 @@ import {
   moderatorPda,
 } from "../src/solana/moderation";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
+import { mischiefMode } from "../src/moderation/judge/mischief";
 import {
   VOTE_COMMITTED,
   chainNow,
@@ -158,6 +159,10 @@ async function main(): Promise<number> {
   }
   if (seat.vote !== 0) {
     console.log(`${s} has already voted on this contract — nothing to do.`);
+    return 0;
+  }
+  if (mischiefMode(s) === "silent") {
+    console.log(`${s} is a TEST moderator set to stay silent — not voting.`);
     return 0;
   }
 

@@ -301,9 +301,9 @@ The tiebreakers need SOL to vote. Local: `../../../fund-wallets.sh --tiebreakers
 Devnet: send the 4 addresses it prints SOL from the faucet, and register them with
 `MOD_DIR=./moderators/devnet` so the prod compose mounts them.
 
-> **Mischief is a deliberately wrong moderator.** It judges for real, then
-> submits the OPPOSITE verdict, so a 3-moderator panel can be shown outvoting a
-> bad panellist. Register it on local and devnet only — never mainnet.
+> **Mischief is a deliberately bad moderator.** It either submits the OPPOSITE
+> verdict or never votes, picked by `DESC_MISCHIEF_MODS` below. Register it on
+> local and devnet only — never mainnet.
 
 Then set the judge and each moderator's model in `apps/api/.env` (register prints the
 exact variable name — the slug upper-cased):
@@ -313,7 +313,8 @@ MODEL_OLYMPUS_MOD_CLAUDE_OPUS=claude-opus-5
 MODEL_SONGOKU_MOD_CLAUDE_SONNET=claude-sonnet-5
 MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
 MODEL_MISCHIEF=claude-haiku-4-5           # test moderator — local/devnet only
-DESC_MISCHIEF_MODS=mischief               # slugs that invert their verdict
+DESC_MISCHIEF_MODS=mischief               # Mischief votes the OPPOSITE verdict
+# DESC_MISCHIEF_MODS=mischief:silent      # Mischief never votes — a tiebreaker takes its seat
 DESC_TIEBREAK_MODEL=claude-opus-5         # optional; the default
 ```
 
@@ -339,12 +340,24 @@ first outcome to reach a majority settles it.
 pnpm mod-watch --mod olympus-mod-claude-opus
 pnpm mod-watch --mod songoku-mod-claude-sonnet
 pnpm mod-watch --mod hikaru-mod-claude-haiku
-pnpm mod-watch --mod mischief            # test moderator — votes the OPPOSITE
+pnpm mod-watch --mod mischief            # test moderator — wrong or silent
 pnpm tiebreak-watch                      # all 4 tiebreakers, one process
 ```
 Run one per moderator you registered, plus `tiebreak-watch`. When voting closes
 without a majority (a split, or a silent seat), a tiebreaker takes a silent seat
 and votes; if none can decide, the contract ends Inconclusive and refunds.
+
+Testing with Mischief (restart the api and Mischief's watcher after switching mode;
+local windows are 5 min per phase):
+
+| Mode | Panel | Expect |
+|---|---|---|
+| `mischief` | Olympus + SonGoku + Mischief | all commit, reveals open at once, the honest two settle it, all three paid |
+| `mischief:silent` | Olympus + SonGoku + Mischief | reveals open after the 5-min commit window, the honest two settle it; Mischief unpaid, `missed +1`. If the two split, a tiebreaker takes Mischief's seat |
+| `mischief:silent` | Mischief alone | after the 5-min vote window a tiebreaker takes the seat, decides, and earns Mischief's fee |
+
+Inconclusive (two tiebreakers splitting) can't be forced with real judges —
+`pnpm e2e:tiebreak` covers it.
 
 Each watcher claims only the contracts whose **panel it sits on** and that it has
 not voted on yet, so three watchers can work the same contract side by side
@@ -352,9 +365,8 @@ without colliding — claims are per seat, in `moderation_claims`. `--mod` is th
 slug of the label (lowercased, dashes). `--once` does a single sweep and exits.
 Set `DESC_JUDGE=manual` in `.env` to settle contracts by hand instead.
 
-Mischief prints a loud banner at startup. It judges for real and then submits the
-opposite verdict, so keep it off any panel whose outcome you care about — it is
-there to be outvoted.
+Mischief prints a loud banner at startup saying which mode it is in. Keep it off
+any panel whose outcome you care about.
 
 > **`DESC_JUDGE=claude` runs on your Claude subscription**, through Claude Code in
 > headless mode (`claude -p`, tools and MCP disabled) — no API credits are used. It

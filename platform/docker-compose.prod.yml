@@ -144,7 +144,7 @@ services:
     <<: *moderator
     environment:
       <<: *moderator-env
-      DESC_MISCHIEF_MODS: mischief
+      DESC_MISCHIEF_MODS: ${DESC_MISCHIEF_MODS:-mischief}   # mischief:silent to never vote
     command: ["pnpm", "mod-watch", "--mod", "mischief"]
 
   # --- the tiebreakers: all 4 in one process --------------------------------

@@ -31,7 +31,7 @@ import { rpcUrl } from "../src/config/cluster";
 import { revealCommitted } from "../src/moderation/commit";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
 import { moderatorModel } from "../src/moderation/moderatorModel";
-import { isMischief } from "../src/moderation/judge/mischief";
+import { mischiefMode } from "../src/moderation/judge/mischief";
 import type { WorkItem } from "../src/moderation/watch/source";
 
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
@@ -100,12 +100,15 @@ async function main() {
   console.log(`  source: ${source.name}`);
   console.log(`  judge:  ${judgeName}`);
   console.log(once ? "  mode:   single sweep" : `  mode:   polling every ${INTERVAL_MS}ms`);
-  if (isMischief(slug)) {
-    // Loud on purpose: a watcher that inverts verdicts must never be mistaken
-    // for a real one in a terminal someone is half-watching.
+  const mischief = mischiefMode(slug);
+  if (mischief) {
+    // Loud on purpose: a test watcher must never be mistaken for a real one.
     console.log(
-      `\n!! ${slug} is a TEST moderator (DESC_MISCHIEF_MODS) — it judges for real\n` +
-        "   and then submits the OPPOSITE verdict. Local and devnet only.\n"
+      `\n!! ${slug} is a TEST moderator (DESC_MISCHIEF_MODS) — ` +
+        (mischief === "silent"
+          ? "it never votes, so a tiebreaker\n   takes its seat."
+          : "it judges for real\n   and then submits the OPPOSITE verdict.") +
+        " Local and devnet only.\n"
     );
   }
   if (judgeName === "manual") {

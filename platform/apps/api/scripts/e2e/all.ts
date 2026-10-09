@@ -20,6 +20,7 @@ const FLOWS = [
   "e2e_mutual_cancel",
   "e2e_panel",
   "e2e_panel_refund",
+  "e2e_tiebreak",
 ];
 
 const results: { name: string; ok: boolean }[] = [];

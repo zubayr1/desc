@@ -22,6 +22,7 @@
     "e2e:mutual-cancel": "tsx scripts/e2e/e2e_mutual_cancel.ts",
     "e2e:panel": "tsx scripts/e2e/e2e_panel.ts",
     "e2e:panel-refund": "tsx scripts/e2e/e2e_panel_refund.ts",
+    "e2e:tiebreak": "tsx scripts/e2e/e2e_tiebreak.ts",
     "test": "pnpm test:bundle && pnpm test:crypto && pnpm test:tiebreak",
     "test:bundle": "tsx scripts/test-bundle.ts",
     "test:crypto": "tsx scripts/test-crypto.ts",

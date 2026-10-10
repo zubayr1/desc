@@ -58,6 +58,15 @@ export async function listTiebreakerRecipients(): Promise<string[]> {
   return (await registered()).filter((m) => m.account.isTiebreaker).map((m) => m.account.recipient);
 }
 
+/** Tiebreaker wallet → its label. */
+export async function listTiebreakerLabels(): Promise<Map<string, string>> {
+  return new Map(
+    (await registered())
+      .filter((m) => m.account.isTiebreaker)
+      .map((m) => [m.account.authority.toBase58(), m.account.label])
+  );
+}
+
 /**
  * Every active moderator under THIS platform's config that a contract can seat — tiebreakers never. The single
  * definition of "a moderator you can use" — the fee quote and the create path

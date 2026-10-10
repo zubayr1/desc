@@ -9,6 +9,7 @@ import { tiebreakPhase } from "../moderation/tiebreak/phase";
 import { buildRefund } from "../solana/instructions/refund";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
+import { snapshotPanel } from "./read";
 import { getRow, cacheFields } from "./repo";
 
 /** Build the unsigned `refund` tx for the initiator. Valid on a ghost-timeout
@@ -66,6 +67,7 @@ export async function submitRefund(
   signedTx: string
 ): Promise<Contract> {
   const row = await getRow(id);
+  await snapshotPanel(row);
   await submitSignedTx(signedTx);
   const oc = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db

@@ -331,7 +331,13 @@ export function ContractView() {
     queryKey,
     queryFn: () =>
       api.get<Contract>(byLink ? `/links/${id}` : `/contracts/${id}`),
-    refetchInterval: (q) => (q.state.data?.status === "submitted" ? 15_000 : false),
+    // Every 15 s while submitted, and right as the current phase ends.
+    refetchInterval: (q) => {
+      if (q.state.data?.status !== "submitted") return false;
+      const ends = q.state.data.verdict?.endsAt;
+      const untilEnd = ends ? Date.parse(ends) - Date.now() + 1_500 : Infinity;
+      return Math.max(1_000, Math.min(15_000, untilEnd));
+    },
   });
 
   if (isLoading) {

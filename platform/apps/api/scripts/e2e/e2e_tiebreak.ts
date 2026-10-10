@@ -71,7 +71,7 @@ interface Live {
   status: string;
   outcome: string | null;
   verdict?: { phase: string } | null;
-  panel: { wallet: string; vote?: string | null; filledBy?: string }[];
+  panel: { wallet: string; vote?: string | null; filledBy?: string; filledByLabel?: string }[];
 }
 
 /** A funded, accepted, delivered contract on a panel of 3. */
@@ -129,7 +129,8 @@ async function decidedByTiebreaker() {
   live = await getJson<Live>(`/contracts/${c.id}`);
   if (live.outcome !== "pass") throw new Error(`the tiebreaker's PASS should decide it, got ${live.outcome}`);
   if (live.panel[2]?.filledBy !== t.toBase58()) throw new Error("the api should show the tiebreaker on seat 3");
-  console.log(`tiebreaker ${t.toBase58().slice(0, 4)}… filled seat 3 → PASS`);
+  if (!live.panel[2]?.filledByLabel?.startsWith("Tiebreaker")) throw new Error("the api should name the tiebreaker");
+  console.log(`${live.panel[2].filledByLabel} filled seat 3 → PASS`);
 
   const before = await balance(t);
   const rel = (await postJson(`/contracts/${c.id}/release/prepare`, {

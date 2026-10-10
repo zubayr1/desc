@@ -273,6 +273,8 @@ export interface ContractModerator {
   vote?: SeatVote | null;
   /** A tiebreaker took this silent seat; `vote` is then the tiebreaker's. */
   filledBy?: Address;
+  /** That tiebreaker's on-chain label, e.g. "Tiebreaker 2". */
+  filledByLabel?: string;
 }
 
 /**

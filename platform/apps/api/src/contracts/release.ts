@@ -7,6 +7,7 @@ import { program, platformConfigPda, readEscrow } from "../solana/program";
 import { buildRelease } from "../solana/instructions/release";
 import { submitSignedTx } from "../solana/rpc";
 import { toContract } from "./mapper";
+import { snapshotPanel } from "./read";
 import { getRow, cacheFields } from "./repo";
 
 /** Build the unsigned `release` tx. Signed by either party; requires a Pass
@@ -60,6 +61,7 @@ export async function submitRelease(
   signedTx: string
 ): Promise<Contract> {
   const row = await getRow(id);
+  await snapshotPanel(row);
   await submitSignedTx(signedTx);
   const oc = await readEscrow(new PublicKey(row.escrowAddress));
   const [updated] = await db

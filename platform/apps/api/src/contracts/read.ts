@@ -10,6 +10,7 @@ import {
   connection,
   mapEscrowAccount,
   mapPanelSeats,
+  panelPda,
   program,
   readEscrows,
   readPanels,
@@ -17,6 +18,7 @@ import {
   type PanelSeat,
 } from "../solana/program";
 import { chainNow } from "../moderation/commit";
+import { listTiebreakerLabels } from "../solana/moderation";
 import { verdictTiming } from "../moderation/tiebreak/phase";
 import { toContract } from "./mapper";
 import {
@@ -46,22 +48,48 @@ const TERMINAL: ReadonlySet<ContractStatus> = new Set([
  * Matched by seat index, the on-chain order: a tiebreaker replaces the wallet of
  * the silent seat it fills, and is recorded as `filledBy`.
  */
-function overlayVotes(
+let tiebreakerLabels = new Map<string, string>();
+async function tiebreakerLabel(wallet: string): Promise<string> {
+  try {
+    if (!tiebreakerLabels.has(wallet)) tiebreakerLabels = await listTiebreakerLabels();
+  } catch {
+    // RPC hiccup — fall back to the generic name
+  }
+  return tiebreakerLabels.get(wallet) ?? "Tiebreaker";
+}
+
+async function overlayVotes(
   stored: ContractModerator[],
   live: PanelSeat[] | undefined
-): { seats: ContractModerator[]; changed: boolean } {
+): Promise<{ seats: ContractModerator[]; changed: boolean }> {
   if (!live?.length) return { seats: stored, changed: false };
   let changed = false;
-  const seats = stored.map((m, i) => {
+  const seats: ContractModerator[] = [];
+  for (const [i, m] of stored.entries()) {
     const seat = live[i];
-    if (!seat) return m;
-    const wallet = seat.moderator.toBase58();
-    const filledBy = wallet === m.wallet ? m.filledBy : wallet;
-    if (seat.vote === m.vote && filledBy === m.filledBy) return m;
+    const wallet = seat?.moderator.toBase58();
+    const filledBy = !seat || wallet === m.wallet ? m.filledBy : wallet;
+    if (!seat || (seat.vote === m.vote && filledBy === m.filledBy && (!filledBy || m.filledByLabel))) {
+      seats.push(m);
+      continue;
+    }
     changed = true;
-    return { ...m, vote: seat.vote, ...(filledBy ? { filledBy } : {}) };
-  });
+    const filledByLabel = filledBy ? (m.filledByLabel ?? (await tiebreakerLabel(filledBy))) : undefined;
+    seats.push({ ...m, vote: seat.vote, ...(filledBy ? { filledBy, filledByLabel } : {}) });
+  }
   return { seats, changed };
+}
+
+/** Cache the live panel just before settlement closes it, so the last votes and tiebreaks survive. */
+export async function snapshotPanel(row: ContractRow): Promise<void> {
+  try {
+    const panel = await program.account.panel.fetchNullable(panelPda(new PublicKey(row.escrowAddress)));
+    if (!panel) return;
+    const { seats, changed } = await overlayVotes(row.panel ?? [], mapPanelSeats(panel));
+    if (changed) await writePanelVotes(row.id, seats);
+  } catch {
+    // best-effort: the reconciler may already have it
+  }
 }
 
 /** Detail read: live chain state. Null if the escrow isn't on-chain yet. */
@@ -81,7 +109,7 @@ async function merge(row: ContractRow): Promise<Contract | null> {
   try {
     const panel = await program.account.panel.fetchNullable(raw.panel);
     if (panel) {
-      const { seats, changed } = overlayVotes(contract.panel, mapPanelSeats(panel));
+      const { seats, changed } = await overlayVotes(contract.panel, mapPanelSeats(panel));
       contract.panel = seats;
       if (changed) await writePanelVotes(row.id, seats);
       if (oc.status === "submitted") contract.verdict = verdictTiming(raw, panel, await chainNow(connection));
@@ -156,7 +184,7 @@ export async function reconcileRows(
       writes.push(writeCache(r.id, oc));
       updated++;
     }
-    const votes = overlayVotes(r.panel ?? [], panels.get(r.escrowAddress));
+    const votes = await overlayVotes(r.panel ?? [], panels.get(r.escrowAddress));
     if (votes.changed) writes.push(writePanelVotes(r.id, votes.seats));
   }
   if (writes.length) await Promise.all(writes);

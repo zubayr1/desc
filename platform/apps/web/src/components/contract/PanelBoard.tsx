@@ -52,7 +52,7 @@ export function PanelBoard({ c }: { c: Contract }) {
           >
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium">
-                {m.filledBy ? "Tiebreaker" : m.label}
+                {m.filledBy ? (m.filledByLabel ?? "Tiebreaker") : m.label}
               </span>
               <span className="block truncate font-mono text-[0.68rem] text-muted">
                 {m.filledBy ? `for ${m.label} · ${short(m.filledBy)}` : short(m.wallet)} · {usd(m.fee)}
@@ -62,6 +62,14 @@ export function PanelBoard({ c }: { c: Contract }) {
           </li>
         ))}
       </ul>
+      {seats
+        .filter((m) => m.filledBy)
+        .map((m) => (
+          <p key={m.wallet} className="mt-2 text-xs text-st-submitted">
+            {m.label} didn&apos;t vote in time — {m.filledByLabel ?? "a platform tiebreaker"} took its seat
+            {m.vote === "pass" || m.vote === "fail" ? ` and voted ${m.vote.toUpperCase()}` : ""}.
+          </p>
+        ))}
       {seats.length > 1 && (
         <p className="mt-2 text-xs text-muted">
           Each moderator judges on its own and is paid its own price — the fees are

@@ -120,12 +120,15 @@ async function main() {
     console.log(`  ${t.slug} → ${result.outcome.toUpperCase()} · tx ${sig}`);
   }
 
-  async function handle(c: Contested) {
+  /** Returns seconds until this contract's voting closes, if it hasn't yet. */
+  async function handle(c: Contested): Promise<number | undefined> {
     const escrow = new PublicKey(c.escrowAddress);
     const esc = await escrowProgram.account.escrow.fetch(escrow);
     if (!("submitted" in esc.status)) return;
     const panel = await escrowProgram.account.panel.fetch(esc.panel);
-    const phase = tiebreakPhase(esc, panel, await chainNow(connection));
+    const now = await chainNow(connection);
+    const phase = tiebreakPhase(esc, panel, now);
+    if (!esc.outcome && now <= esc.revealDeadline.toNumber()) return esc.revealDeadline.toNumber() - now;
 
     if (phase === "finalize") {
       await escrowProgram.methods.finalize().accountsPartial({ escrow, panel: esc.panel }).rpc();
@@ -150,10 +153,12 @@ async function main() {
   }
 
   for (;;) {
+    let wait = INTERVAL_MS;
     try {
       for (const c of await submittedWithPanel()) {
         try {
-          await handle(c);
+          const left = await handle(c);
+          if (left !== undefined) wait = Math.min(wait, (left + 1) * 1000);
         } catch (err) {
           console.error(`  ! ${c.id}: ${(err as Error).message}`);
         }
@@ -162,7 +167,8 @@ async function main() {
       console.error(`  ! sweep failed: ${(err as Error).message}`);
     }
     if (once) return;
-    await new Promise((r) => setTimeout(r, INTERVAL_MS));
+    // Wake right as the next contract's voting closes, so its tiebreak starts at once.
+    await new Promise((r) => setTimeout(r, wait));
   }
 }
 

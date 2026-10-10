@@ -243,6 +243,7 @@ default Solana keypair (`~/.config/solana/id.json`, the deployer that ran bootst
 |---|---|
 | **Initiator** (creates a contract) | SOL (fees + rent) **and** USDC (the escrow amount + 2% fee) |
 | **Committer** (accepts / submits / claims) | **SOL only** |
+| **Moderators + tiebreakers** (sign votes) | **SOL only** — `./fund-wallets.sh` gives each 1 SOL on local |
 
 ```bash
 # SOL (both wallets)
@@ -297,9 +298,10 @@ pnpm moderator-register "Mischief"                    --base-bps 50  # 0.5% — 
 pnpm tiebreaker-register              # the 4 platform tiebreakers, tiebreaker-1..4
 ```
 
-The tiebreakers need SOL to vote. Local: `../../../fund-wallets.sh --tiebreakers`.
-Devnet: send the 4 addresses it prints SOL from the faucet, and register them with
-`MOD_DIR=./moderators/devnet` so the prod compose mounts them.
+Moderators and tiebreakers need SOL to vote. Local: `./fund-wallets.sh <USDC_MINT>` (repo root)
+gives every one of them 1 SOL, or `./fund-wallets.sh --moderators` for SOL only.
+Devnet: send SOL from the faucet to the addresses the register scripts print, and
+register with `MOD_DIR=./moderators/devnet` so the prod compose mounts them.
 
 > **Mischief is a deliberately bad moderator.** It either submits the OPPOSITE
 > verdict or never votes, picked by `DESC_MISCHIEF_MODS` below. Register it on

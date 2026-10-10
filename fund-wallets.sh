@@ -5,7 +5,10 @@
 #
 #   ./fund-wallets.sh <USDC_MINT> [amount]
 #   SOLANA_URL=devnet WALLETS="<pubkey>" ./fund-wallets.sh <USDC_MINT> 1000
-#   ./fund-wallets.sh --tiebreakers   SOL only, for the wallets `pnpm tiebreaker-register` wrote
+#   ./fund-wallets.sh --moderators   SOL only, for every moderator + tiebreaker wallet
+#
+# On localhost it also gives SOL to every moderator and tiebreaker wallet in
+# platform/apps/api/moderators (what they pay vote fees with). Devnet: use the faucet.
 #
 # - <USDC_MINT>  (required) the dev mint printed by bootstrap
 # - [amount]     (optional) USDC to mint per wallet (default 1_000_000)
@@ -19,20 +22,28 @@
 # once --url is set). Re-runnable: a pre-existing token account is not an error.
 set -uo pipefail
 
-if [[ "${1:-}" == "--tiebreakers" ]]; then
-  DIR="${MOD_DIR:-$(dirname "$0")/platform/apps/api/moderators}"
-  URL="${SOLANA_URL:-localhost}"
+MOD_DIR="${MOD_DIR:-$(dirname "$0")/platform/apps/api/moderators}"
+
+fund_moderators() {
   shopt -s nullglob
-  files=("$DIR"/tiebreaker-*-wallet.json)
+  local files=("$MOD_DIR"/*-wallet.json)
   if [[ ${#files[@]} -eq 0 ]]; then
-    echo "no tiebreaker wallets in $DIR — run \`pnpm tiebreaker-register\` first" >&2
-    exit 1
+    echo "no moderator wallets in $MOD_DIR — run \`pnpm moderator-register\` / \`pnpm tiebreaker-register\`"
+    return
   fi
+  echo "== moderators + tiebreakers (SOL only) =="
   for f in "${files[@]}"; do
+    local w
     w=$(solana-keygen pubkey "$f")
-    solana airdrop "${SOL_PER_WALLET:-1}" "$w" -u "$URL" >/dev/null || echo "  (airdrop refused for $w)"
-    echo "$(basename "$f" -wallet.json)  $w  $(solana balance "$w" -u "$URL")"
+    solana airdrop "${MOD_SOL:-1}" "$w" -u "$URL" >/dev/null || echo "  (airdrop refused for $w)"
+    echo "  $(basename "$f" -wallet.json)  $w  $(solana balance "$w" -u "$URL")"
   done
+  echo
+}
+
+if [[ "${1:-}" == "--moderators" ]]; then
+  URL="${SOLANA_URL:-localhost}"
+  fund_moderators
   exit 0
 fi
 
@@ -76,5 +87,7 @@ for w in "${WALLETS[@]}"; do
   echo "  USDC: $(spl-token balance "$USDC_MINT" --owner "$w" --url "$URL" 2>/dev/null || echo '?')"
   echo
 done
+
+[[ "$URL" == "localhost" ]] && fund_moderators
 
 echo "done."

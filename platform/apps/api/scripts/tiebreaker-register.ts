@@ -102,7 +102,7 @@ async function main() {
   }
 
   console.log(`\nFiles: ${MOD_DIR}/tiebreaker-*-{wallet.json,identity.key} — never commit them.`);
-  console.log("Give them SOL to vote: local `./fund-wallets.sh --tiebreakers`, devnet the faucet.");
+  console.log("Give them SOL to vote: local `./fund-wallets.sh <USDC_MINT>`, devnet the faucet.");
   console.log("Then run: DESC_JUDGE=claude pnpm tiebreak-watch");
 }
 

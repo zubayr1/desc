@@ -10,6 +10,7 @@
  *   pnpm update-config --min-amount 50000000        (smallest contract — $50)
  *   pnpm update-config --treasury <PUBKEY>
  *   pnpm update-config --settlement <PUBKEY>
+ *   pnpm update-config --window 300                (seconds per moderation phase)
  *   pnpm update-config --fee-bps 150 --pause       (combine)
  *
  * Prereq: validator running with the program + Config initialized.
@@ -41,6 +42,7 @@ async function main() {
   const feeMin = val("--fee-min");
   const minAmount = val("--min-amount");
   const paused = has("--pause") ? true : has("--unpause") ? false : null;
+  const windowArg = val("--window") !== undefined ? new BN(val("--window")!) : null;
 
   const settlementArg = settlement ? new PublicKey(settlement) : null;
   const treasuryArg = treasury ? new PublicKey(treasury) : null;
@@ -54,10 +56,11 @@ async function main() {
     feeArg === null &&
     feeMinArg === null &&
     minAmountArg === null &&
-    paused === null
+    paused === null &&
+    windowArg === null
   ) {
     console.error(
-      "Nothing to update. Flags: --settlement <pk> --treasury <pk> --fee-bps <n> --fee-min <baseUnits> --min-amount <baseUnits> --pause --unpause"
+      "Nothing to update. Flags: --settlement <pk> --treasury <pk> --fee-bps <n> --fee-min <baseUnits> --min-amount <baseUnits> --window <seconds> --pause --unpause"
     );
     process.exit(1);
   }
@@ -77,7 +80,7 @@ async function main() {
   );
 
   await program.methods
-    .updateConfig(settlementArg, treasuryArg, feeArg, feeMinArg, minAmountArg, paused)
+    .updateConfig(settlementArg, treasuryArg, feeArg, feeMinArg, minAmountArg, paused, windowArg)
     .accountsPartial({ authority: authority.publicKey, config })
     .rpc();
 
@@ -88,6 +91,7 @@ async function main() {
   console.log("  protocolFeeBps     :", cfg.protocolFeeBps);
   console.log("  protocolFeeMin     :", cfg.protocolFeeMin.toString());
   console.log("  minAmount          :", cfg.minAmount.toString());
+  console.log("  verdictWindow      :", `${cfg.verdictWindow.toString()}s`);
   console.log("  paused             :", cfg.paused);
 }
 

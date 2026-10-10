@@ -48,6 +48,27 @@ function Passive({ ok, children }: { ok?: boolean; children: React.ReactNode }) 
 }
 
 
+const until = (at: string | null | undefined) =>
+  at ? ` (until ${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "";
+
+function phaseText(c: Contract): string {
+  const v = c.verdict;
+  switch (v?.phase) {
+    case "vote":
+      return `The moderator is judging${until(v.endsAt)}.`;
+    case "commit":
+      return `Moderators are judging; votes stay hidden until all are in${until(v.endsAt)}.`;
+    case "reveal":
+      return `Moderators are revealing their votes${until(v.endsAt)}.`;
+    case "tiebreak":
+      return `No majority — a platform tiebreaker is deciding${until(v.endsAt)}.`;
+    case "finalizable":
+      return "No majority — INCONCLUSIVE. The initiator can reclaim the deposit.";
+    default:
+      return "Awaiting verdict from the moderators.";
+  }
+}
+
 /** The contextual action — depends on (status × role). */
 function Actions({
   contract: c,
@@ -202,6 +223,23 @@ function Actions({
         );
 
       case "submitted":
+        if (c.verdict?.phase === "awaiting-reveals") {
+          return (
+            <Passive>
+              Verdict: {c.outcome?.toUpperCase()} — settles once every moderator has revealed{until(c.verdict.endsAt)}.
+            </Passive>
+          );
+        }
+        if (c.verdict?.phase === "finalizable" && isInitiator) {
+          return (
+            <div>
+              <div className="mb-3 text-sm text-st-submitted">No majority — INCONCLUSIVE</div>
+              <Button variant="accent" className="w-full" disabled={busy} onClick={() => refund.mutate()}>
+                {refund.isPending ? spin : "Reclaim deposit"}
+              </Button>
+            </div>
+          );
+        }
         if (c.outcome === "pass") {
           if (isInitiator || isCommitter) {
             return (
@@ -222,11 +260,12 @@ function Actions({
           }
           return <Passive ok>Verdict: PASS — awaiting release.</Passive>;
         }
-        if (c.outcome === "fail") {
+        if (c.outcome === "fail" || c.outcome === "inconclusive") {
+          const verdict = c.outcome === "fail" ? "Verdict: FAIL" : "No majority — INCONCLUSIVE";
           if (isInitiator) {
             return (
               <div>
-                <div className="mb-3 text-sm text-st-submitted">Verdict: FAIL</div>
+                <div className="mb-3 text-sm text-st-submitted">{verdict}</div>
                 <Button
                   variant="accent"
                   className="w-full"
@@ -241,16 +280,14 @@ function Actions({
           // Committer (and any other viewer): just the outcome, no action.
           return (
             <div className="flex items-center gap-2 text-sm text-st-submitted">
-              <span className="size-2 rounded-full bg-st-submitted" /> Verdict: FAIL
+              <span className="size-2 rounded-full bg-st-submitted" /> {verdict}
             </div>
           );
         }
         return (
           <Passive>
             <span className="size-2 animate-pulse rounded-full bg-st-submitted" />
-            {c.noMod
-              ? "Submitted — settling."
-              : "Awaiting verdict from the moderators."}
+            {c.noMod ? "Submitted — settling." : phaseText(c)}
           </Passive>
         );
 
@@ -294,6 +331,13 @@ export function ContractView() {
     queryKey,
     queryFn: () =>
       api.get<Contract>(byLink ? `/links/${id}` : `/contracts/${id}`),
+    // Every 15 s while submitted, and right as the current phase ends.
+    refetchInterval: (q) => {
+      if (q.state.data?.status !== "submitted") return false;
+      const ends = q.state.data.verdict?.endsAt;
+      const untilEnd = ends ? Date.parse(ends) - Date.now() + 1_500 : Infinity;
+      return Math.max(1_000, Math.min(15_000, untilEnd));
+    },
   });
 
   if (isLoading) {

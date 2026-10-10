@@ -7,6 +7,7 @@ import {
   recordVerdict,
   newFundedKeypair,
   addModerator,
+  expectError,
 } from "./helpers";
 
 async function toSubmitted() {
@@ -40,7 +41,7 @@ describe("record_verdict", () => {
   it("rejects a verdict from a non-settlement-authority", async () => {
     const { s } = await toSubmitted();
     const stranger = await newFundedKeypair();
-    try {
+    await expectError(async () => {
       await program.methods
         .recordVerdict({ pass: {} }, Array(32).fill(0), stranger.publicKey)
         .accountsPartial({
@@ -50,45 +51,33 @@ describe("record_verdict", () => {
         })
         .signers([stranger])
         .rpc();
-      assert.fail("expected a failure");
-    } catch (e) {
-      assert.ok(e.toString().length > 0);
-    }
+    });
   });
 
   it("rejects a verdict before submission", async () => {
     const s = await createEscrow();
     await acceptEscrow(s);
-    try {
+    await expectError(async () => {
       await recordVerdict(s, "pass");
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 
   it("rejects a second verdict (one-shot)", async () => {
     const { s } = await toSubmitted();
     await recordVerdict(s, "pass");
-    try {
+    // One vote per SEAT. A decided escrow no longer rejects further votes —
+    // late ones from other moderators are recorded, paid and scored — so what
+    // stops this is the moderator having already used its own seat.
+    await expectError(async () => {
       await recordVerdict(s, "fail");
-      assert.fail("expected AlreadyVoted");
-    } catch (e) {
-      // One vote per SEAT. A decided escrow no longer rejects further votes —
-      // late ones from other moderators are recorded, paid and scored — so what
-      // stops this is the moderator having already used its own seat.
-      assert.include(e.toString(), "AlreadyVoted");
-    }
+    }, "AlreadyVoted");
   });
 
   it("rejects a verdict from a registered moderator that was not assigned", async () => {
     const { s } = await toSubmitted();
     const other = await addModerator(s.world); // real, active, same platform
-    try {
+    await expectError(async () => {
       await recordVerdict(s, "pass", Array(32).fill(3), other.wallet);
-      assert.fail("expected NotAssignedModerator");
-    } catch (e) {
-      assert.include(e.toString(), "NotAssignedModerator");
-    }
+    }, "NotAssignedModerator");
   });
 });

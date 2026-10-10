@@ -1,6 +1,6 @@
 /**
  * End-to-end check for a THREE-moderator contract that FAILS verification:
- *   create(3 mods) → fund → accept → deliver → 3 verdicts → refund.
+ *   create(3 mods) → fund → accept → deliver → 3 hidden commits → reveals → refund.
  *
  * The refund branch is where the panel is easiest to get wrong, and until this
  * script existed nothing exercised it at all — `e2e_panel` only covers a Pass
@@ -29,6 +29,7 @@ import {
   getAccount,
 } from "@solana/spl-token";
 import {
+  BASE,
   RPC,
   AUTHORITY_PATH,
   loadKeypair,
@@ -36,7 +37,8 @@ import {
   postJson,
   signAndSubmit,
   deliverBundle,
-  recordVerdict,
+  commitVerdict,
+  revealVerdict,
   panelSeats,
   panelAddress,
   accountExists,
@@ -121,19 +123,26 @@ async function main() {
   const honest = seats.filter((s) => !badWallet || !s.wallet.equals(badWallet));
   const bad = badWallet ? seats.find((s) => s.wallet.equals(badWallet))! : null;
 
-  await recordVerdict(created.escrowAddress, "fail", honest[0].wallet);
-  await recordVerdict(created.escrowAddress, "fail", honest[1].wallet);
+  const third = bad ? { wallet: bad.wallet, vote: "pass" as const } : { wallet: honest[2].wallet, vote: "fail" as const };
+  await commitVerdict(created.escrowAddress, "fail", honest[0].wallet);
+  await commitVerdict(created.escrowAddress, "fail", honest[1].wallet);
+  await commitVerdict(created.escrowAddress, third.vote, third.wallet);
+  await revealVerdict(created.escrowAddress, "fail", honest[0].wallet);
+  await revealVerdict(created.escrowAddress, "fail", honest[1].wallet);
   let live = (await getJson(`/contracts/${created.id}`)) as { outcome: string | null };
   if (live.outcome !== "fail") throw new Error(`two agreeing FAILs settle it, got ${live.outcome}`);
 
-  if (bad) {
-    await recordVerdict(created.escrowAddress, "pass", bad.wallet);
-    live = (await getJson(`/contracts/${created.id}`)) as { outcome: string | null };
-    if (live.outcome !== "fail") {
-      throw new Error(`the dissenting PASS changed the verdict to ${live.outcome}`);
-    }
-    console.log("after the test moderator's PASS → outcome still: fail");
-  }
+  const early = await fetch(`${BASE}/contracts/${created.id}/refund/prepare`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (early.status !== 409) throw new Error(`refund must wait for the third reveal, got ${early.status}`);
+
+  await revealVerdict(created.escrowAddress, third.vote, third.wallet);
+  live = (await getJson(`/contracts/${created.id}`)) as { outcome: string | null };
+  if (live.outcome !== "fail") throw new Error(`the third reveal changed the verdict to ${live.outcome}`);
+  if (bad) console.log("after the test moderator's PASS → outcome still: fail");
 
   // ── refund ────────────────────────────────────────────────────
   const before = new Map<string, bigint>();

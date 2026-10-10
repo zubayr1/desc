@@ -21,6 +21,8 @@ export interface BuildRefundParams {
   /** = Config.treasury. Receives the verification fee on a Fail verdict; nothing
    *  on a ghost-timeout, but the account is always required by the program. */
   treasury: PublicKey;
+  /** No outcome yet but nothing can still decide it: `finalize` (→ Inconclusive) runs first, in the same transaction. */
+  finalize?: boolean;
 }
 
 /**
@@ -40,6 +42,11 @@ export async function buildRefund(p: BuildRefundParams): Promise<string> {
   const initiatorTokenAccount = getAssociatedTokenAddressSync(usdcMint, p.initiator);
 
   const ixs: TransactionInstruction[] = [];
+  if (p.finalize) {
+    ixs.push(
+      await program.methods.finalize().accountsPartial({ escrow: p.escrow, panel: panelPda(p.escrow) }).instruction()
+    );
+  }
   const seats = await readPanelWallets(p.escrow);
   const seatTokenAccounts = seats.map((moderator) => {
     const ata = getAssociatedTokenAddressSync(usdcMint, moderator);

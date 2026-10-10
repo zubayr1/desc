@@ -30,6 +30,9 @@ export async function generateModerationKeypair(): Promise<AgeKeypair> {
   return { identity, recipient };
 }
 
+/** The public recipient of an existing identity. */
+export const recipientFromIdentity = (identity: string): Promise<string> => identityToRecipient(identity);
+
 /**
  * Fixed, domain-separated message the **initiator** signs with their wallet to
  * derive their deliverable-encryption key. ed25519 signing is deterministic, so

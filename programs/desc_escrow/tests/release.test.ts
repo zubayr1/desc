@@ -9,6 +9,7 @@ import {
   tokenBalance,
   accountExists,
   releaseEscrow,
+  expectError,
 } from "./helpers";
 
 async function ready(outcome: "pass" | "fail" | null) {
@@ -55,21 +56,15 @@ describe("release", () => {
 
   it("rejects release before a verdict", async () => {
     const { s, c, committerAta } = await ready(null);
-    try {
+    await expectError(async () => {
       await release(s, c, committerAta);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 
   it("rejects release when the verdict is Fail", async () => {
     const { s, c, committerAta } = await ready("fail");
-    try {
+    await expectError(async () => {
       await release(s, c, committerAta);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 });

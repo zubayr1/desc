@@ -11,14 +11,14 @@
  * timeout-and-refund path. Converting a failure here into a Pass would release
  * funds for a deliverable nobody checked.
  */
-import type { InputFile, Outcome } from "@repo/shared";
+import type { InputFile, Vote } from "@repo/shared";
 import { selectJudge } from "./judge";
 import type { AcceptanceCriterion, CriterionVerdict, Usage } from "./judge";
 
 export type { AcceptanceCriterion };
 
 export interface CheckResult {
-  outcome: Outcome; // "pass" | "fail"
+  outcome: Vote; // "pass" | "fail"
   reasoning: string;
   /** Which judge decided, for the audit trail. */
   judge: string;
@@ -29,7 +29,7 @@ export interface CheckResult {
 export async function runCheck(
   criteria: AcceptanceCriterion[],
   files: InputFile[],
-  manual?: { outcome: Outcome; note?: string },
+  manual?: { outcome: Vote; note?: string },
   /** Which moderator is judging. Only a test moderator behaves differently for
    *  it, but the judge has to know who it is running as to tell. */
   slug?: string

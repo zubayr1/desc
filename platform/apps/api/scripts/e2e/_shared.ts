@@ -18,7 +18,7 @@ import "dotenv/config";
 import { createHash } from "node:crypto";
 import { readdirSync } from "node:fs";
 import anchorPkg, { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { buildBundle, encryptToRecipients, type Contract } from "@repo/shared";
 import type { DescModeration } from "../../src/solana/idl/desc_moderation";
 import moderationIdl from "../../src/solana/idl/desc_moderation.json";
@@ -29,10 +29,12 @@ import {
   verdictAuthorityPda,
   moderatorPda,
 } from "../../src/solana/moderation";
+import { moderatorReputationPda, platformConfigPda } from "../../src/solana/program";
+import { chainNow, commitHash, commitSalt } from "../../src/moderation/commit";
 
-import { rpcUrl } from "../../src/config/cluster";
+import { cluster, rpcUrl } from "../../src/config/cluster";
 import { AUTHORITY_PATH, expand, loadKeypair } from "../_keys";
-const _ = anchorPkg; // keep the CJS default import referenced under ESM
+const { BN } = anchorPkg;
 
 export const RPC = rpcUrl;
 export const BASE = `http://localhost:${process.env.PORT ?? "3000"}`;
@@ -134,8 +136,9 @@ export async function deliverBundle(
     const mods = contract.panel?.length
       ? contract.panel.map((m) => m.recipient)
       : (await getJson<{ recipients: string[] }>("/config/moderators")).recipients;
+    const tiebreakers = (await getJson<{ recipients: string[] }>("/config/tiebreakers")).recipients;
     const initiatorKey = contract.initiatorRecipient;
-    recipients = initiatorKey ? [...mods, initiatorKey] : mods;
+    recipients = [...new Set([...mods, ...tiebreakers, ...(initiatorKey ? [initiatorKey] : [])])];
     if (!recipients.length) {
       throw new Error("no moderators registered — run `pnpm moderator-register`");
     }
@@ -250,8 +253,8 @@ export interface Seat {
   wallet: PublicKey;
   /** Its own fee on this contract, base units. */
   fee: bigint;
-  /** null until it votes. */
-  vote: "pass" | "fail" | null;
+  /** null until it votes; `committed` while its vote is hidden. */
+  vote: "pass" | "fail" | "committed" | null;
 }
 
 /**
@@ -269,7 +272,7 @@ export async function panelSeats(escrowAddress: string): Promise<Seat[]> {
   );
   const acc = await reader.account.escrow.fetch(new PublicKey(escrowAddress));
   const panel = await reader.account.panel.fetch(acc.panel as PublicKey);
-  const VOTES = [null, "pass", "fail"] as const;
+  const VOTES = [null, "pass", "fail", "committed"] as const;
   return panel.entries.slice(0, panel.count).map((e) => ({
     wallet: e.moderator as PublicKey,
     fee: BigInt(e.fee.toString()),
@@ -329,6 +332,122 @@ export async function recordVerdict(
       descEscrowProgram: escrowProgram.programId,
     })
     .rpc();
+}
+
+type Vote = "pass" | "fail";
+const voteArg = (v: Vote) => (v === "pass" ? { pass: {} } : ({ fail: {} } as never));
+
+function programsFor(kp: Keypair) {
+  const provider = new AnchorProvider(new Connection(RPC, "confirmed"), new Wallet(kp), {
+    commitment: "confirmed",
+  });
+  return {
+    moderation: new Program<DescModeration>(moderationIdl as DescModeration, provider),
+    escrow: new Program<DescEscrow>(escrowIdl as DescEscrow, provider),
+  };
+}
+
+/** The verdict hash an e2e vote commits to — recomputable, so a reveal needs nothing stored. */
+async function e2eVote(escrowAddress: string, kp: Keypair, outcome: Vote) {
+  const { moderation, escrow: escrowProgram } = programsFor(kp);
+  const escrow = new PublicKey(escrowAddress);
+  const acc = await escrowProgram.account.escrow.fetch(escrow);
+  const deliverableHash = Buffer.from(acc.deliverableHash as number[]).toString("hex");
+  const verdictHash = createHash("sha256")
+    .update(JSON.stringify({ deliverableHash, outcome, reasoning: "e2e" }))
+    .digest();
+  const accounts = {
+    authority: kp.publicKey,
+    config: moderationConfigPda,
+    verdictAuthority: verdictAuthorityPda,
+    moderator: moderatorPda(kp.publicKey),
+    escrowConfig: acc.config as PublicKey,
+    escrow,
+    panel: acc.panel as PublicKey,
+    descEscrowProgram: escrowProgram.programId,
+  };
+  return { moderation, escrowProgram, escrow, acc, verdictHash, accounts };
+}
+
+/** Panel of 3: a seat posts its hidden vote. */
+export async function commitVerdict(escrowAddress: string, outcome: Vote, moderator: PublicKey) {
+  const kp = modKeypairFor(moderator);
+  const v = await e2eVote(escrowAddress, kp, outcome);
+  const commit = commitHash(outcome, v.verdictHash, commitSalt(kp, v.escrow), kp.publicKey, v.escrow);
+  await v.moderation.methods.commitVerdict(Array.from(commit)).accountsPartial(v.accounts).rpc();
+}
+
+/** Reveal a vote `commitVerdict` posted. */
+export async function revealVerdict(escrowAddress: string, outcome: Vote, moderator: PublicKey) {
+  const kp = modKeypairFor(moderator);
+  const v = await e2eVote(escrowAddress, kp, outcome);
+  await v.escrowProgram.methods
+    .revealVerdict(kp.publicKey, voteArg(outcome), Array.from(v.verdictHash), Array.from(commitSalt(kp, v.escrow)))
+    .accountsPartial({ payer: kp.publicKey, escrow: v.escrow, panel: v.acc.panel as PublicKey })
+    .rpc();
+}
+
+/** A tiebreaker from $MOD_DIR not already on the panel takes the first silent seat. Returns its wallet. */
+export async function tiebreak(escrowAddress: string, outcome: Vote): Promise<PublicKey> {
+  const seats = await panelSeats(escrowAddress);
+  const seated = new Set(seats.map((s) => s.wallet.toBase58()));
+  const kp = readdirSync(MOD_DIR)
+    .filter((f) => /^tiebreaker-.+-wallet\.json$/.test(f))
+    .sort()
+    .map((f) => loadKeypair(`${MOD_DIR}/${f}`))
+    .find((k) => !seated.has(k.publicKey.toBase58()));
+  if (!kp) throw new Error(`no free tiebreaker wallet in ${MOD_DIR} — run \`pnpm tiebreaker-register\``);
+  const silent = seats.find((s) => s.vote !== "pass" && s.vote !== "fail");
+  if (!silent) throw new Error("no silent seat to fill");
+
+  const v = await e2eVote(escrowAddress, kp, outcome);
+  await v.moderation.methods
+    .submitTiebreak(voteArg(outcome), Array.from(v.verdictHash))
+    .accountsPartial({ ...v.accounts, replacedReputation: moderatorReputationPda(silent.wallet) })
+    .rpc();
+  return kp.publicKey;
+}
+
+/** The escrow's deadlines, in chain seconds. */
+export async function verdictDeadlines(escrowAddress: string) {
+  const { escrow } = programsFor(Keypair.generate());
+  const acc = await escrow.account.escrow.fetch(new PublicKey(escrowAddress));
+  return { commit: acc.commitDeadline.toNumber(), reveal: acc.revealDeadline.toNumber() };
+}
+
+/** Wait until the chain's clock is past `t`. */
+export async function waitPastChain(t: number) {
+  const connection = new Connection(RPC, "confirmed");
+  while ((await chainNow(connection)) <= t) await new Promise((r) => setTimeout(r, 1000));
+}
+
+/** Run `fn` with a short verdict window, so the timeout paths take seconds. Restores the cluster's window after. */
+export async function withVerdictWindow<T>(seconds: number, fn: () => Promise<T>): Promise<T> {
+  const admin = loadKeypair(AUTHORITY_PATH);
+  const { escrow } = programsFor(admin);
+  const set = (w: number) =>
+    escrow.methods
+      .updateConfig(null, null, null, null, null, null, new BN(w))
+      .accountsPartial({ authority: admin.publicKey, config: platformConfigPda })
+      .rpc();
+  await set(seconds);
+  try {
+    return await fn();
+  } finally {
+    await set(cluster.verdictWindow);
+  }
+}
+
+/** SOL for fresh test wallets, sent from the local deployer key. */
+export async function fundSol(wallets: PublicKey[], sol = 1) {
+  const connection = new Connection(RPC, "confirmed");
+  const admin = loadKeypair(AUTHORITY_PATH);
+  const tx = new Transaction().add(
+    ...wallets.map((w) =>
+      SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: w, lamports: sol * LAMPORTS_PER_SOL })
+    )
+  );
+  await connection.sendTransaction(tx, [admin]).then((sig) => connection.confirmTransaction(sig, "confirmed"));
 }
 
 export { AUTHORITY_PATH, expand, loadKeypair };

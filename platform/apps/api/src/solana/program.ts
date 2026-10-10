@@ -6,6 +6,7 @@ import {
   type ContractStatus,
   type ModeratorReputation,
   type Outcome,
+  type SeatVote,
 } from "@repo/shared";
 import type { DescEscrow } from "./idl/desc_escrow";
 import idl from "./idl/desc_escrow.json";
@@ -99,7 +100,7 @@ export interface OnChainEscrow {
 
 /** Map a decoded escrow account into domain fields. */
 type EscrowAccount = Awaited<ReturnType<typeof program.account.escrow.fetch>>;
-function mapEscrowAccount(acc: EscrowAccount): OnChainEscrow {
+export function mapEscrowAccount(acc: EscrowAccount): OnChainEscrow {
   return {
     status: mapStatus(acc.status as Record<string, unknown>),
     committer: acc.committer ? acc.committer.toBase58() : null,
@@ -121,7 +122,7 @@ export interface PanelSeat {
   /** Its own price for this contract, snapshotted at creation. */
   fee: string;
   /** How it voted, or null if it has not. Only voters are paid on settle. */
-  vote: Outcome | null;
+  vote: SeatVote | null;
 }
 
 /**
@@ -132,9 +133,14 @@ export interface PanelSeat {
  * `Pubkey::default()` on a panel of three.
  */
 export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
-  const acc = await program.account.panel.fetch(panelPda(escrow));
-  // Mirrors the program's VOTE_NONE / VOTE_PASS / VOTE_FAIL.
-  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
+  return mapPanelSeats(await program.account.panel.fetch(panelPda(escrow)));
+}
+
+/** Mirrors the program's VOTE_NONE / VOTE_PASS / VOTE_FAIL / VOTE_COMMITTED. */
+const VOTES: (SeatVote | null)[] = [null, "pass", "fail", "committed"];
+
+type PanelAccount = Awaited<ReturnType<typeof program.account.panel.fetch>>;
+export function mapPanelSeats(acc: PanelAccount): PanelSeat[] {
   return acc.entries.slice(0, acc.count).map((e) => ({
     moderator: e.moderator,
     fee: e.fee.toString(),
@@ -167,21 +173,13 @@ export async function readPanels(
 ): Promise<Map<string, PanelSeat[]>> {
   const out = new Map<string, PanelSeat[]>();
   if (!escrows.length) return out;
-  const VOTES: (Outcome | null)[] = [null, "pass", "fail"];
   const CHUNK = 100;
   for (let i = 0; i < escrows.length; i += CHUNK) {
     const slice = escrows.slice(i, i + CHUNK);
     const accs = await program.account.panel.fetchMultiple(slice.map(panelPda));
     accs.forEach((acc, j) => {
       if (!acc) return;
-      out.set(
-        slice[j].toBase58(),
-        acc.entries.slice(0, acc.count).map((e) => ({
-          moderator: e.moderator,
-          fee: e.fee.toString(),
-          vote: VOTES[e.vote] ?? null,
-        }))
-      );
+      out.set(slice[j].toBase58(), mapPanelSeats(acc));
     });
   }
   return out;

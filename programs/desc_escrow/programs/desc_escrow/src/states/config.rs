@@ -31,11 +31,13 @@ pub struct Config {
     /// `protocol_fee_min`: below the crossover the floor is a rising share of a
     /// shrinking contract. Zero disables it.
     pub min_amount: u64,
-    pub reserved: [u8; 48],
+    /// Seconds per moderation phase. Zero = `Escrow::DEFAULT_VERDICT_WINDOW`.
+    pub verdict_window: i64,
+    pub reserved: [u8; 40],
 }
 
 impl Config {
-    pub const VERSION: u8 = 1;
+    pub const VERSION: u8 = 2;
 
     /// See `Escrow::check_version` for why this is `<=` and not `==`.
     pub fn check_version(&self) -> Result<()> {
@@ -56,6 +58,8 @@ impl Config {
     /// amount, not a rate, so unbounded it could make every contract
     /// unaffordable with no clear error.
     pub const MAX_FEE_MIN: u64 = 100_000_000;
+
+    pub const MAX_VERDICT_WINDOW: i64 = 7 * 86_400;
 
     /// Fee coherence, checked on the FINISHED config rather than per field: one
     /// `update_config` may raise the floor and the minimum together, and

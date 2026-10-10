@@ -60,6 +60,22 @@ pub mod desc_moderation {
         ctx.accounts.set_moderator_active(active)
     }
 
+    pub fn set_tiebreaker(ctx: Context<SetTiebreaker>, is_tiebreaker: bool) -> Result<()> {
+        ctx.accounts.set_tiebreaker(is_tiebreaker)
+    }
+
+    pub fn commit_verdict(ctx: Context<CommitVerdict>, commit: [u8; 32]) -> Result<()> {
+        ctx.accounts.commit_verdict(commit)
+    }
+
+    pub fn submit_tiebreak(
+        ctx: Context<SubmitTiebreak>,
+        outcome: Outcome,
+        verdict_hash: [u8; 32],
+    ) -> Result<()> {
+        ctx.accounts.submit_tiebreak(outcome, verdict_hash)
+    }
+
     /// A registered, active moderator records a verdict → CPI into the escrow.
     pub fn submit_verdict(
         ctx: Context<SubmitVerdict>,

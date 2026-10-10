@@ -2,8 +2,8 @@
 #
 #   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 #
-# Six services: Postgres, the api, the web (which also terminates TLS and
-# proxies /api), and one moderator per seat on the panel. A single box runs the
+# Postgres, the api, the web (which also terminates TLS and proxies /api), one
+# moderator per seat on the panel, and one container for all 4 tiebreakers. A single box runs the
 # lot for the price of a coffee, and every service here is a plain container —
 # nothing ties this to one hosting provider.
 #
@@ -144,8 +144,18 @@ services:
     <<: *moderator
     environment:
       <<: *moderator-env
-      DESC_MISCHIEF_MODS: mischief
+      DESC_MISCHIEF_MODS: ${DESC_MISCHIEF_MODS:-mischief}   # mischief:silent to never vote
     command: ["pnpm", "mod-watch", "--mod", "mischief"]
+
+  # --- the tiebreakers: all 4 in one process --------------------------------
+  # Fill silent seats when voting closes with no majority. Their files sit in
+  # the same mounted moderators directory (`tiebreaker-*`).
+  tiebreakers:
+    <<: *moderator
+    environment:
+      <<: *moderator-env
+      DESC_TIEBREAK_MODEL: ${DESC_TIEBREAK_MODEL:-claude-opus-5}
+    command: ["pnpm", "tiebreak-watch"]
 
 volumes:
   desc_pg:

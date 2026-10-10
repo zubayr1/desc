@@ -1,7 +1,7 @@
 /**
  * End-to-end check for a THREE-moderator contract, with a deliberately wrong
  * moderator on the panel:
- *   create(3 mods) → fund → accept → deliver → 3 verdicts → release.
+ *   create(3 mods) → fund → accept → deliver → 3 hidden commits → reveals → release.
  *
  * What it proves, which no single-moderator run can:
  *   - the deposit is the SUM of three prices, not one fee split three ways
@@ -37,7 +37,8 @@ import {
   postJson,
   signAndSubmit,
   deliverBundle,
-  recordVerdict,
+  commitVerdict,
+  revealVerdict,
   panelSeats,
   pickPanel,
 } from "./_shared";
@@ -131,24 +132,36 @@ async function main() {
   const honest = seats.filter((s) => !badWallet || !s.wallet.equals(badWallet));
   const bad = badWallet ? seats.find((s) => s.wallet.equals(badWallet))! : null;
 
-  await recordVerdict(created.escrowAddress, "pass", honest[0].wallet);
-  let live = (await getJson(`/contracts/${created.id}`)) as { outcome: string | null };
+  const third = bad ? { wallet: bad.wallet, vote: "fail" as const } : { wallet: honest[2].wallet, vote: "pass" as const };
+  await commitVerdict(created.escrowAddress, "pass", honest[0].wallet);
+  await commitVerdict(created.escrowAddress, "pass", honest[1].wallet);
+  let live = (await getJson(`/contracts/${created.id}`)) as {
+    outcome: string | null;
+    verdict?: { phase: string } | null;
+  };
+  if (live.verdict?.phase !== "commit") throw new Error(`expected the commit phase, got ${live.verdict?.phase}`);
+  await commitVerdict(created.escrowAddress, third.vote, third.wallet);
+  live = (await getJson(`/contracts/${created.id}`)) as typeof live;
+  if (live.verdict?.phase !== "reveal") throw new Error(`all committed → reveal opens early, got ${live.verdict?.phase}`);
+  console.log("3 hidden commits → reveal opened early");
+
+  await revealVerdict(created.escrowAddress, "pass", honest[0].wallet);
+  live = (await getJson(`/contracts/${created.id}`)) as typeof live;
   if (live.outcome !== null) throw new Error("one vote is not a majority of three");
 
-  await recordVerdict(created.escrowAddress, "pass", honest[1].wallet);
-  live = (await getJson(`/contracts/${created.id}`)) as { outcome: string | null };
+  await revealVerdict(created.escrowAddress, "pass", honest[1].wallet);
+  live = (await getJson(`/contracts/${created.id}`)) as typeof live;
   if (live.outcome !== "pass") throw new Error(`two agreeing votes settle it, got ${live.outcome}`);
-  console.log("after 2 agreeing votes → outcome:", live.outcome);
-
-  if (bad) {
-    // Late AND wrong. It is recorded and paid, and it cannot move the verdict.
-    await recordVerdict(created.escrowAddress, "fail", bad.wallet);
-    live = (await getJson(`/contracts/${created.id}`)) as { outcome: string | null };
-    if (live.outcome !== "pass") {
-      throw new Error(`the outvoted moderator changed the verdict to ${live.outcome}`);
-    }
-    console.log("after the test moderator's FAIL → outcome still:", live.outcome);
+  if (live.verdict?.phase !== "awaiting-reveals") {
+    throw new Error(`settlement must wait for the third reveal, got ${live.verdict?.phase}`);
   }
+  console.log("after 2 agreeing reveals → outcome:", live.outcome, "(waiting for the third reveal)");
+
+  // Late, and wrong when it is Mischief. Recorded and paid; it cannot move the verdict.
+  await revealVerdict(created.escrowAddress, third.vote, third.wallet);
+  live = (await getJson(`/contracts/${created.id}`)) as typeof live;
+  if (live.outcome !== "pass") throw new Error(`the third reveal changed the verdict to ${live.outcome}`);
+  if (bad) console.log("after the test moderator's FAIL → outcome still:", live.outcome);
 
   // ── release: every voter paid its own price ───────────────────
   const before = new Map<string, bigint>();

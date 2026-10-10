@@ -14,6 +14,107 @@ export type DescModeration = {
   },
   "instructions": [
     {
+      "name": "commitVerdict",
+      "discriminator": [
+        59,
+        124,
+        35,
+        166,
+        55,
+        64,
+        206,
+        209
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "relations": [
+            "moderator"
+          ]
+        },
+        {
+          "name": "verdictAuthority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "moderator",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  111,
+                  100,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrowConfig"
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "panel",
+          "writable": true
+        },
+        {
+          "name": "descEscrowProgram",
+          "address": "4Q1jTgR9UVpbbVo57Dx1cpjo77Hx8oBn78ieex4gY2CU"
+        }
+      ],
+      "args": [
+        {
+          "name": "commit",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "initialize",
       "docs": [
         "Bootstrap the program config + verdict-authority PDA."
@@ -259,6 +360,176 @@ export type DescModeration = {
         {
           "name": "active",
           "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "setTiebreaker",
+      "discriminator": [
+        144,
+        40,
+        129,
+        35,
+        215,
+        16,
+        81,
+        139
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              }
+            ]
+          },
+          "relations": [
+            "moderator"
+          ]
+        },
+        {
+          "name": "moderator",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "isTiebreaker",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "submitTiebreak",
+      "discriminator": [
+        42,
+        92,
+        209,
+        11,
+        13,
+        199,
+        101,
+        62
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "relations": [
+            "moderator"
+          ]
+        },
+        {
+          "name": "verdictAuthority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "config"
+              }
+            ]
+          }
+        },
+        {
+          "name": "moderator",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  111,
+                  100,
+                  101,
+                  114,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrowConfig"
+        },
+        {
+          "name": "escrow",
+          "writable": true
+        },
+        {
+          "name": "panel",
+          "writable": true
+        },
+        {
+          "name": "replacedReputation",
+          "writable": true
+        },
+        {
+          "name": "descEscrowProgram",
+          "address": "4Q1jTgR9UVpbbVo57Dx1cpjo77Hx8oBn78ieex4gY2CU"
+        }
+      ],
+      "args": [
+        {
+          "name": "outcome",
+          "type": {
+            "defined": {
+              "name": "outcome"
+            }
+          }
+        },
+        {
+          "name": "verdictHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -513,6 +784,19 @@ export type DescModeration = {
       ]
     },
     {
+      "name": "moderatorReputation",
+      "discriminator": [
+        175,
+        32,
+        46,
+        220,
+        208,
+        191,
+        165,
+        208
+      ]
+    },
+    {
       "name": "panel",
       "discriminator": [
         223,
@@ -551,6 +835,11 @@ export type DescModeration = {
       "code": 6004,
       "name": "sizePricingWithoutLimit",
       "msg": "A per-KB price needs a maximum bundle size"
+    },
+    {
+      "code": 6005,
+      "name": "notATiebreaker",
+      "msg": "Signer is not a registered tiebreaker"
     }
   ],
   "types": [
@@ -629,11 +918,18 @@ export type DescModeration = {
             "type": "u64"
           },
           {
+            "name": "verdictWindow",
+            "docs": [
+              "Seconds per moderation phase. Zero = `Escrow::DEFAULT_VERDICT_WINDOW`."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                48
+                40
               ]
             }
           }
@@ -858,11 +1154,32 @@ export type DescModeration = {
             "type": "pubkey"
           },
           {
+            "name": "verdictWindow",
+            "docs": [
+              "Snapshotted from `Config` so a config change can't move a live deadline."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "commitDeadline",
+            "docs": [
+              "Panel of 1: the vote deadline."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "revealDeadline",
+            "docs": [
+              "Panel of 1: equals `commit_deadline`."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                41
+                17
               ]
             }
           }
@@ -1046,6 +1363,13 @@ export type DescModeration = {
             "type": "u32"
           },
           {
+            "name": "isTiebreaker",
+            "docs": [
+              "Read raw by `desc_escrow` — keep it directly after the pricing fields."
+            ],
+            "type": "bool"
+          },
+          {
             "name": "reserved",
             "docs": [
               "V2: stake, slashing history. Reputation lives in `desc_escrow`, which is",
@@ -1054,7 +1378,91 @@ export type DescModeration = {
             "type": {
               "array": [
                 "u8",
-                50
+                49
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "moderatorReputation",
+      "docs": [
+        "A moderator's lifetime record (PDA, seeds = [b\"mod_rep\", moderator]).",
+        "",
+        "Counters only — no authority, no funds. Written exclusively by `release` /",
+        "`refund`, as each panel seat is paid.",
+        "",
+        "It lives here and not beside `Moderator` in `desc_moderation` because that",
+        "program already depends on this crate to CPI into `record_verdict`; the",
+        "reverse would be circular.",
+        "",
+        "It has to exist because settlement CLOSES the escrow and the panel, and",
+        "neither program emits events — so without it the chain keeps no record that",
+        "a deal happened, and a moderator's track record would be our database's word."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "moderator",
+            "docs": [
+              "The wallet this scores. Also the PDA seed."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "verdictsCast",
+            "docs": [
+              "Verdicts paid on any panel size. Volume, and cheap to inflate — a",
+              "moderator can seat itself on contracts it creates. Never show alone."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "panelVerdicts",
+            "docs": [
+              "Verdicts on a panel of three or more: the accuracy denominator."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "majorityAgreements",
+            "docs": [
+              "Of those, how many matched the outcome the panel settled on."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "failVotes",
+            "docs": [
+              "How many of ALL votes were Fail — failing everything earns the same fee",
+              "for near-zero work, so the bias is worth seeing before there is any",
+              "stake to slash for it."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "missed",
+            "docs": [
+              "Never voted in time. Counted so withholding a reveal can't protect a record."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "reserved",
+            "type": {
+              "array": [
+                "u8",
+                44
               ]
             }
           }
@@ -1076,6 +1484,9 @@ export type DescModeration = {
           },
           {
             "name": "fail"
+          },
+          {
+            "name": "inconclusive"
           }
         ]
       }
@@ -1138,11 +1549,15 @@ export type DescModeration = {
             "type": "u8"
           },
           {
+            "name": "tiebreakFills",
+            "type": "u8"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                64
+                63
               ]
             }
           }
@@ -1159,16 +1574,12 @@ export type DescModeration = {
         "fields": [
           {
             "name": "moderator",
-            "docs": [
-              "The wallet that signs this seat's verdict."
-            ],
             "type": "pubkey"
           },
           {
             "name": "fee",
             "docs": [
-              "Its own price for THIS contract, snapshotted at creation. Paid on settle",
-              "only if it voted; otherwise returned to the initiator."
+              "Snapshotted at creation; paid only if it votes. A tiebreaker inherits it."
             ],
             "type": "u64"
           },
@@ -1179,7 +1590,7 @@ export type DescModeration = {
           {
             "name": "verdictHash",
             "docs": [
-              "sha256 of the verdict signed. Zero until it votes."
+              "The commit hash while `VOTE_COMMITTED`, the verdict hash once revealed."
             ],
             "type": {
               "array": [

@@ -15,12 +15,12 @@
  * gets its real judge wrapped so the verdict comes out backwards (see
  * `mischief.ts`). Every other moderator is unaffected.
  */
-import type { Outcome } from "@repo/shared";
+import type { Vote } from "@repo/shared";
 import type { Judge } from "./types";
 import { claudeJudge } from "./claude";
 import { claudeCodeJudge } from "./claudeCode";
 import { manualJudge } from "./manual";
-import { isMischief, mischiefJudge } from "./mischief";
+import { mischiefJudge, mischiefMode } from "./mischief";
 
 /** True when DESC_JUDGE selects one of the AI moderators. */
 export const aiJudgeSelected = () =>
@@ -35,11 +35,11 @@ export const aiJudgeSelected = () =>
  */
 export function aiJudge(slug?: string): Judge {
   const base = process.env.DESC_JUDGE === "claude-api" ? claudeJudge() : claudeCodeJudge();
-  return slug && isMischief(slug) ? mischiefJudge(base, slug) : base;
+  return slug && mischiefMode(slug) === "wrong" ? mischiefJudge(base, slug) : base;
 }
 
 export function selectJudge(
-  manual?: { outcome: Outcome; note?: string },
+  manual?: { outcome: Vote; note?: string },
   slug?: string
 ): Judge {
   if (aiJudgeSelected()) return aiJudge(slug);

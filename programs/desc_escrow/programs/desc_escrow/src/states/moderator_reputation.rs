@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;
-use crate::states::{Outcome, VOTE_FAIL, VOTE_NONE, VOTE_PASS};
+use crate::states::{is_cast, Outcome, VOTE_FAIL, VOTE_PASS};
 
 /// A moderator's lifetime record (PDA, seeds = [b"mod_rep", moderator]).
 ///
@@ -35,11 +35,13 @@ pub struct ModeratorReputation {
     pub fail_votes: u32,
 
     pub bump: u8,
-    pub reserved: [u8; 48],
+    /// Never voted in time. Counted so withholding a reveal can't protect a record.
+    pub missed: u32,
+    pub reserved: [u8; 44],
 }
 
 impl ModeratorReputation {
-    pub const VERSION: u8 = 1;
+    pub const VERSION: u8 = 2;
 
     /// Seed prefix; full seeds = [SEED_PREFIX, moderator].
     pub const SEED_PREFIX: &'static [u8] = b"mod_rep";
@@ -68,7 +70,7 @@ impl ModeratorReputation {
     /// Saturating, not checked: a counter pinning at `u32::MAX` beats a
     /// settlement that cannot execute.
     pub fn record(&mut self, vote: u8, outcome: Outcome, panel_count: u8) {
-        if vote == VOTE_NONE {
+        if !is_cast(vote) {
             return;
         }
 
@@ -77,7 +79,7 @@ impl ModeratorReputation {
             self.fail_votes = self.fail_votes.saturating_add(1);
         }
 
-        if panel_count < Self::MIN_PANEL_FOR_ACCURACY {
+        if panel_count < Self::MIN_PANEL_FOR_ACCURACY || outcome == Outcome::Inconclusive {
             return;
         }
         self.panel_verdicts = self.panel_verdicts.saturating_add(1);
@@ -85,9 +87,14 @@ impl ModeratorReputation {
         let agreed = match outcome {
             Outcome::Pass => vote == VOTE_PASS,
             Outcome::Fail => vote == VOTE_FAIL,
+            Outcome::Inconclusive => false,
         };
         if agreed {
             self.majority_agreements = self.majority_agreements.saturating_add(1);
         }
+    }
+
+    pub fn record_missed(&mut self) {
+        self.missed = self.missed.saturating_add(1);
     }
 }

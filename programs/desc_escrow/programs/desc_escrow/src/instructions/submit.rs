@@ -13,7 +13,7 @@ use crate::states::{Escrow, EscrowStatus, Outcome};
 ///
 /// On a **no-mod** escrow the outcome is set to Pass here, so the committer can
 /// `release` immediately. On-chain rather than in a backend job, so the payout
-/// never waits on a server being up.
+/// never waits on a server being up. Otherwise it starts the voting clock.
 #[derive(Accounts)]
 pub struct Submit<'info> {
     pub committer: Signer<'info>,
@@ -47,6 +47,15 @@ impl<'info> Submit<'info> {
 
         if self.escrow.no_mod {
             self.escrow.outcome = Some(Outcome::Pass);
+        } else {
+            let window = self.escrow.window();
+            let commit_deadline = now.checked_add(window).ok_or(EscrowError::MathOverflow)?;
+            self.escrow.commit_deadline = commit_deadline;
+            self.escrow.reveal_deadline = if self.escrow.moderator_count > 1 {
+                commit_deadline.checked_add(window).ok_or(EscrowError::MathOverflow)?
+            } else {
+                commit_deadline
+            };
         }
 
         Ok(())

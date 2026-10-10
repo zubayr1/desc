@@ -40,6 +40,7 @@ pub mod desc_escrow {
         protocol_fee_min: Option<u64>,
         min_amount: Option<u64>,
         paused: Option<bool>,
+        verdict_window: Option<i64>,
     ) -> Result<()> {
         ctx.accounts.update_config(
             settlement_authority,
@@ -48,6 +49,7 @@ pub mod desc_escrow {
             protocol_fee_min,
             min_amount,
             paused,
+            verdict_window,
         )
     }
 
@@ -102,6 +104,39 @@ pub mod desc_escrow {
     ) -> Result<()> {
         ctx.accounts
             .record_verdict(outcome, verdict_hash, moderator)
+    }
+
+    pub fn record_commit(
+        ctx: Context<RecordCommit>,
+        commit: [u8; 32],
+        moderator: Pubkey,
+    ) -> Result<()> {
+        ctx.accounts.record_commit(commit, moderator)
+    }
+
+    pub fn reveal_verdict(
+        ctx: Context<RevealVerdict>,
+        moderator: Pubkey,
+        outcome: Outcome,
+        verdict_hash: [u8; 32],
+        salt: [u8; 32],
+    ) -> Result<()> {
+        ctx.accounts
+            .reveal_verdict(moderator, outcome, verdict_hash, salt)
+    }
+
+    pub fn record_tiebreak(
+        ctx: Context<RecordTiebreak>,
+        outcome: Outcome,
+        verdict_hash: [u8; 32],
+        tiebreaker: Pubkey,
+    ) -> Result<()> {
+        ctx.accounts
+            .record_tiebreak(outcome, verdict_hash, tiebreaker)
+    }
+
+    pub fn finalize(ctx: Context<Finalize>) -> Result<()> {
+        ctx.accounts.finalize()
     }
 
     pub fn release<'info>(

@@ -86,6 +86,11 @@ impl<'info> Release<'info> {
             self.escrow.outcome == Some(Outcome::Pass),
             EscrowError::InvalidStatus
         );
+        require!(
+            self.escrow
+                .settlement_ready(&self.panel, Clock::get()?.unix_timestamp),
+            EscrowError::AwaitingReveals
+        );
 
         // Either party may execute the payout.
         let signer = self.signer.key();

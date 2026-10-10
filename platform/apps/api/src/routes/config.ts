@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ChainConfig, FeeConfig } from "@repo/shared";
-import { listActiveRecipients, listModeratorOffers } from "../solana/moderation";
+import { listActiveRecipients, listModeratorOffers, listTiebreakerRecipients } from "../solana/moderation";
 import { program, platformConfigPda } from "../solana/program";
 import { cluster, env } from "../config/env";
 
@@ -39,5 +39,9 @@ export function registerConfigRoutes(app: FastifyInstance) {
   // Read from the chain — the `desc_moderation` registry is the source of truth.
   app.get("/config/moderators", async () => {
     return { recipients: await listActiveRecipients() };
+  });
+
+  app.get("/config/tiebreakers", async () => {
+    return { recipients: await listTiebreakerRecipients() };
   });
 }

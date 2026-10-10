@@ -5,9 +5,12 @@ import {
   acceptEscrow,
   submitEscrow,
   recordVerdict,
+  commitVote,
+  revealVote,
   setupWorld,
   addModerator,
   usdc,
+  expectError,
 } from "./helpers";
 
 /** A submitted 3-moderator escrow, ready to be voted on. */
@@ -26,102 +29,82 @@ async function panelOfThree() {
 }
 
 describe("consensus", () => {
-  it("settles on the second agreeing vote, without waiting for the third", async () => {
+  it("settles on the second agreeing reveal, without waiting for the third", async () => {
     const { s, mods } = await panelOfThree();
+    await commitVote(s, "pass", Array(32).fill(1), mods[0]);
+    await commitVote(s, "pass", Array(32).fill(2), mods[1]);
+    await commitVote(s, "pass", Array(32).fill(3), mods[2]);
 
-    await recordVerdict(s, "pass", Array(32).fill(1), mods[0]);
+    await revealVote(s, mods[0]);
     let esc = await program.account.escrow.fetch(s.escrow);
     assert.isNull(esc.outcome, "one vote is not a majority of three");
 
-    await recordVerdict(s, "pass", Array(32).fill(2), mods[1]);
+    await revealVote(s, mods[1]);
     esc = await program.account.escrow.fetch(s.escrow);
     assert.property(esc.outcome, "pass");
-    // The deciding vote's hash is what the escrow records.
     assert.deepEqual(Array.from(esc.verdictHash), Array(32).fill(2));
 
     const panel = await program.account.panel.fetch(s.panel);
     assert.deepEqual(
       panel.entries.slice(0, 3).map((e) => e.vote),
-      [1, 1, 0] // pass, pass, never voted
+      [1, 1, 3] // pass, pass, committed and not yet revealed
     );
   });
 
-  it("lets the third vote break a 1-1 split", async () => {
+  it("lets the third reveal break a 1-1 split", async () => {
     const { s, mods } = await panelOfThree();
+    await commitVote(s, "pass", Array(32).fill(1), mods[0]);
+    await commitVote(s, "fail", Array(32).fill(2), mods[1]);
+    await commitVote(s, "fail", Array(32).fill(3), mods[2]);
 
-    await recordVerdict(s, "pass", Array(32).fill(1), mods[0]);
-    await recordVerdict(s, "fail", Array(32).fill(2), mods[1]);
-    let esc = await program.account.escrow.fetch(s.escrow);
-    assert.isNull(esc.outcome, "a 1-1 split has no majority");
+    await revealVote(s, mods[0]);
+    await revealVote(s, mods[1]);
+    assert.isNull((await program.account.escrow.fetch(s.escrow)).outcome);
 
-    // The outvoted moderator's vote stays on the panel — it did the work.
-    await recordVerdict(s, "fail", Array(32).fill(3), mods[2]);
-    esc = await program.account.escrow.fetch(s.escrow);
-    assert.property(esc.outcome, "fail");
-
+    await revealVote(s, mods[2]);
+    assert.property((await program.account.escrow.fetch(s.escrow)).outcome, "fail");
     const panel = await program.account.panel.fetch(s.panel);
-    assert.deepEqual(
-      panel.entries.slice(0, 3).map((e) => e.vote),
-      [1, 2, 2] // pass, fail, fail
-    );
+    assert.deepEqual(panel.entries.slice(0, 3).map((e) => e.vote), [1, 2, 2]);
   });
 
-  it("records a late vote without letting it change the outcome", async () => {
+  it("records a late reveal without letting it change the outcome", async () => {
     const { s, mods } = await panelOfThree();
-    await recordVerdict(s, "pass", Array(32).fill(1), mods[0]);
-    await recordVerdict(s, "pass", Array(32).fill(2), mods[1]);
-
-    // The third moderator was already judging when the majority formed. Its
-    // vote is kept — it did the same work, and it is paid on settle — but it
-    // cannot move a verdict that is already final.
-    await recordVerdict(s, "fail", Array(32).fill(3), mods[2]);
+    await commitVote(s, "pass", Array(32).fill(1), mods[0]);
+    await commitVote(s, "pass", Array(32).fill(2), mods[1]);
+    await commitVote(s, "fail", Array(32).fill(3), mods[2]);
+    await revealVote(s, mods[0]);
+    await revealVote(s, mods[1]);
+    await revealVote(s, mods[2]);
 
     const esc = await program.account.escrow.fetch(s.escrow);
     assert.property(esc.outcome, "pass");
-    assert.deepEqual(
-      Array.from(esc.verdictHash),
-      Array(32).fill(2),
-      "the deciding vote's hash stands"
-    );
-
+    assert.deepEqual(Array.from(esc.verdictHash), Array(32).fill(2), "the deciding vote's hash stands");
     const panel = await program.account.panel.fetch(s.panel);
-    assert.deepEqual(
-      panel.entries.slice(0, 3).map((e) => e.vote),
-      [1, 1, 2] // pass, pass, and the late dissent on record
-    );
+    assert.deepEqual(panel.entries.slice(0, 3).map((e) => e.vote), [1, 1, 2]);
   });
 
-  it("rejects a second vote from the same moderator", async () => {
+  it("rejects a second commit from the same moderator", async () => {
     const { s, mods } = await panelOfThree();
-    await recordVerdict(s, "pass", Array(32).fill(1), mods[0]);
-    try {
-      await recordVerdict(s, "fail", Array(32).fill(9), mods[0]);
-      assert.fail("expected AlreadyVoted");
-    } catch (e) {
-      assert.include(e.toString(), "AlreadyVoted");
-    }
+    await commitVote(s, "pass", Array(32).fill(1), mods[0]);
+    await expectError(async () => {
+      await commitVote(s, "fail", Array(32).fill(9), mods[0]);
+    }, "AlreadyVoted");
   });
 
   it("rejects a registered moderator that is not on this panel", async () => {
     const world = await setupWorld();
     const b = await addModerator(world);
     const c = await addModerator(world);
-    const outsider = await addModerator(world); // real, active, not seated
-    const s = await createEscrow({
-      world,
-      moderators: [world.moderatorPda, b.pda, c.pda],
-    });
+    const outsider = await addModerator(world);
+    const s = await createEscrow({ world, moderators: [world.moderatorPda, b.pda, c.pda] });
     const committer = await acceptEscrow(s);
     await submitEscrow(s, committer);
-    try {
-      await recordVerdict(s, "pass", Array(32).fill(1), outsider.wallet);
-      assert.fail("expected NotAssignedModerator");
-    } catch (e) {
-      assert.include(e.toString(), "NotAssignedModerator");
-    }
+    await expectError(async () => {
+      await commitVote(s, "pass", Array(32).fill(1), outsider.wallet);
+    }, "NotAssignedModerator");
   });
 
-  it("still settles a single-moderator escrow on one vote", async () => {
+  it("still settles a single-moderator escrow on one direct vote", async () => {
     const s = await createEscrow();
     const committer = await acceptEscrow(s);
     await submitEscrow(s, committer);

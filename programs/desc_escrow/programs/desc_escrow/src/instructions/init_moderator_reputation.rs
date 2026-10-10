@@ -48,7 +48,8 @@ impl<'info> InitModeratorReputation<'info> {
             majority_agreements: 0,
             fail_votes: 0,
             bump: bumps.reputation,
-            reserved: [0; 48],
+            missed: 0,
+            reserved: [0; 44],
         });
 
         Ok(())

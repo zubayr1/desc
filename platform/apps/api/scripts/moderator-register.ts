@@ -2,7 +2,8 @@
  * Step 4 — onboard a moderator (on-chain).
  *
  *   1. provision the mod's WALLET keypair + age identity (saved to files)
- *   2. fund the wallet: SOL (gas) + a USDC token account (to receive its fee)
+ *   2. a USDC token account (to receive its fee). SOL for gas is not sent here:
+ *      `./fund-wallets.sh <USDC_MINT>` locally, the faucet on devnet.
  *   3. register_moderator(wallet, recipient, label, price) — admin-signed; writes
  *      the `Moderator` account on-chain (recipient and price now live on-chain)
  *   4. init_moderator_reputation(wallet) — creates its reputation account on the
@@ -38,7 +39,6 @@ import { getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
 import {
   Connection,
   Keypair,
-  LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
 } from "@solana/web3.js";
@@ -53,7 +53,6 @@ import { rpcUrl, usdcMint } from "../src/config/cluster";
 import { AUTHORITY_PATH, expand, loadKeypair } from "./_keys";
 const RPC = rpcUrl;
 const MOD_DIR = process.env.MOD_DIR ?? "./moderators";
-const GAS_SOL = 0.05; // a tiny buffer — thousands of verdict txns
 
 const argv = process.argv.slice(2);
 const flag = (name: string) => {
@@ -82,26 +81,6 @@ const slug =
     .replace(/^-|-$/g, "") || "moderator";
 
 
-/**
- * Top the new moderator up with gas for its verdict transactions.
- *
- * Tries the faucet and gives up gracefully. It does NOT fall back to moving
- * funds from the admin wallet: a script that quietly spends the cold key is a
- * problem on mainnet, where there is no faucet and every such transfer is real
- * money. Fund it yourself when this says so — registration has already
- * succeeded by then, and the wallet address is printed below.
- */
-async function fundGas(connection: Connection, wallet: PublicKey): Promise<boolean> {
-  try {
-    const sig = await connection.requestAirdrop(wallet, GAS_SOL * LAMPORTS_PER_SOL);
-    await connection.confirmTransaction(sig, "confirmed");
-    return true;
-  } catch {
-    // Rate-limited (devnet caps airdrops per IP) or no faucet at all (mainnet).
-    return false;
-  }
-}
-
 async function main() {
   const baseBps = intFlag("--base-bps");
   const feePerKb = intFlag("--fee-per-kb", 0);
@@ -128,12 +107,7 @@ async function main() {
   writeFileSync(walletPath, JSON.stringify(Array.from(wallet.secretKey)));
   writeFileSync(identityPath, identity);
 
-  // 2. fund the wallet: SOL for gas + a USDC token account for rewards
-  //
-  // Never fatal: the wallet file is already on disk, so throwing here would
-  // leave an orphan keypair and an unregistered moderator, and re-running would
-  // mint a different wallet. Registration continues; you fund it by hand.
-  const funded = await fundGas(connection, wallet.publicKey);
+  // 2. a USDC token account for its fees
   const usdcAta = await getOrCreateAssociatedTokenAccount(
     connection,
     admin, // payer for the ATA rent
@@ -198,10 +172,7 @@ async function main() {
   console.log("  wallet (signer) :", wallet.publicKey.toBase58(), `→ ${walletPath}`);
   console.log(
     "  gas             :",
-    funded
-      ? `${GAS_SOL} SOL (airdrop)`
-      : `NONE — the faucet refused. Send it ~${GAS_SOL} SOL or it cannot sign verdicts:\n` +
-        `                    solana transfer ${wallet.publicKey.toBase58()} ${GAS_SOL} --allow-unfunded-recipient`
+    "none yet — local: `./fund-wallets.sh <USDC_MINT>`; devnet: the faucet"
   );
   console.log("  USDC account    :", usdcAta.address.toBase58());
   console.log(

@@ -5,10 +5,10 @@
  * and the on-chain tests need a verdict they control, and an operator needs a
  * way to settle a contract by hand when a check is inconclusive.
  */
-import type { InputFile, Outcome } from "@repo/shared";
+import type { InputFile, Vote } from "@repo/shared";
 import type { AcceptanceCriterion, Judge, JudgeResult } from "./types";
 
-export function manualJudge(manual: { outcome: Outcome; note?: string }): Judge {
+export function manualJudge(manual: { outcome: Vote; note?: string }): Judge {
   return {
     name: "manual",
     async judge(

@@ -50,4 +50,30 @@ pub enum EscrowError {
     AlreadyVoted,
     #[msg("The verdict is already final — a majority was reached without this vote")]
     VerdictAlreadyFinal,
+    #[msg("This panel votes by commit and reveal, not directly — or the reverse")]
+    WrongVotingMode,
+    #[msg("The voting window for this escrow has closed")]
+    VotingClosed,
+    #[msg("Reveals are not open yet — wait until every seat has committed or the commit window ends")]
+    RevealNotOpen,
+    #[msg("This seat has not committed a vote")]
+    NotCommitted,
+    #[msg("The revealed vote does not match the commit")]
+    CommitMismatch,
+    #[msg("A verdict must be Pass or Fail")]
+    InvalidVote,
+    #[msg("Tiebreaking is only possible after voting closes with no majority")]
+    TiebreakNotOpen,
+    #[msg("This escrow has used all its tiebreaks")]
+    TiebreakCapReached,
+    #[msg("Every seat has already voted")]
+    NoSilentSeat,
+    #[msg("Not finalizable yet — a vote or a tiebreak is still possible")]
+    NotFinalizable,
+    #[msg("A moderator that committed is still inside its reveal window")]
+    AwaitingReveals,
+    #[msg("A tiebreaker cannot be chosen as a panel moderator")]
+    TiebreakerNotSelectable,
+    #[msg("Verdict window must be between 1 second and 7 days")]
+    InvalidVerdictWindow,
 }

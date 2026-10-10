@@ -7,6 +7,7 @@ import {
   addModerator,
   usdc,
   BN,
+  expectError,
 } from "./helpers";
 
 // Its own file so it runs on a fresh validator (see run-tests.sh): each world
@@ -40,12 +41,9 @@ describe("moderator pricing", () => {
   it("rejects a size-priced moderator until size pricing ships", async () => {
     const world = await setupWorld();
     const sized = await addModerator(world, { feePerKb: 1_000, maxBundleKb: 500 });
-    try {
+    await expectError(async () => {
       await createEscrow({ world, moderators: [sized.pda] });
-      assert.fail("expected SizePricingNotEnabled");
-    } catch (e) {
-      assert.include(e.toString(), "SizePricingNotEnabled");
-    }
+    }, "SizePricingNotEnabled");
   });
 
   it("rejects a paused moderator", async () => {
@@ -55,34 +53,25 @@ describe("moderator pricing", () => {
       .accountsPartial({ authority: world.moderator.publicKey, moderator: world.moderatorPda })
       .signers([world.moderator])
       .rpc();
-    try {
+    await expectError(async () => {
       await createEscrow({ world });
-      assert.fail("expected ModeratorInactive");
-    } catch (e) {
-      assert.include(e.toString(), "ModeratorInactive");
-    }
+    }, "ModeratorInactive");
   });
 
   it("rejects a moderator registered with a different settlement authority", async () => {
     const ours = await setupWorld();
     const theirs = await setupWorld(); // a genuine Moderator, wrong platform
-    try {
+    await expectError(async () => {
       await createEscrow({ world: ours, moderators: [theirs.moderatorPda] });
-      assert.fail("expected ModeratorNotRecognized");
-    } catch (e) {
-      assert.include(e.toString(), "ModeratorNotRecognized");
-    }
+    }, "ModeratorNotRecognized");
   });
 
   it("rejects an account that is not a moderator at all", async () => {
     const world = await setupWorld();
-    try {
+    await expectError(async () => {
       // The escrow Config: a real account, wrong discriminator.
       await createEscrow({ world, moderators: [world.config] });
-      assert.fail("expected ModeratorNotRecognized");
-    } catch (e) {
-      assert.include(e.toString(), "ModeratorNotRecognized");
-    }
+    }, "ModeratorNotRecognized");
   });
 
   // --- Slippage guard: the initiator agreed to a price; a rise since fails ---
@@ -95,12 +84,9 @@ describe("moderator pricing", () => {
       .accountsPartial({ authority: world.moderator.publicKey, moderator: world.moderatorPda })
       .signers([world.moderator])
       .rpc();
-    try {
+    await expectError(async () => {
       await createEscrow({ world, amount: usdc(1000), maxModeratorFee: quoted });
-      assert.fail("expected ModeratorFeeAboveMax");
-    } catch (e) {
-      assert.include(e.toString(), "ModeratorFeeAboveMax");
-    }
+    }, "ModeratorFeeAboveMax");
   });
 
   it("accepts a price exactly at the agreed maximum", async () => {
@@ -112,11 +98,8 @@ describe("moderator pricing", () => {
   it("a zero maximum cannot make a moderator work for free", async () => {
     // The old bug, re-attempted through the new argument: 0 is a limit, not a
     // fee, so it refuses the escrow instead of creating an unpaid one.
-    try {
+    await expectError(async () => {
       await createEscrow({ amount: usdc(1000), maxModeratorFee: new BN(0) });
-      assert.fail("expected ModeratorFeeAboveMax");
-    } catch (e) {
-      assert.include(e.toString(), "ModeratorFeeAboveMax");
-    }
+    }, "ModeratorFeeAboveMax");
   });
 });

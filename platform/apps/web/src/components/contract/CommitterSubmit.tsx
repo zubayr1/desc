@@ -54,9 +54,10 @@ export function CommitterSubmit({ c, onDone }: { c: Contract; onDone: () => void
         const mods = c.panel?.length
           ? c.panel.map((m) => m.recipient)
           : (await api.get<{ recipients: string[] }>("/config/moderators")).recipients;
+        const tiebreakers = (await api.get<{ recipients: string[] }>("/config/tiebreakers")).recipients;
         // …and (if enrolled) the initiator, so a Pass delivers the exact
         // verified bytes — not a side-channel copy.
-        all = c.initiatorRecipient ? [...mods, c.initiatorRecipient] : mods;
+        all = [...new Set([...mods, ...tiebreakers, ...(c.initiatorRecipient ? [c.initiatorRecipient] : [])])];
         if (!all.length) {
           throw new Error("no moderator to seal to — run moderator-register on the api");
         }

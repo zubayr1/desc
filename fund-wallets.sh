@@ -5,6 +5,10 @@
 #
 #   ./fund-wallets.sh <USDC_MINT> [amount]
 #   SOLANA_URL=devnet WALLETS="<pubkey>" ./fund-wallets.sh <USDC_MINT> 1000
+#   ./fund-wallets.sh --moderators   SOL only, for every moderator + tiebreaker wallet
+#
+# On localhost it also gives SOL to every moderator and tiebreaker wallet in
+# platform/apps/api/moderators (what they pay vote fees with). Devnet: use the faucet.
 #
 # - <USDC_MINT>  (required) the dev mint printed by bootstrap
 # - [amount]     (optional) USDC to mint per wallet (default 1_000_000)
@@ -17,6 +21,31 @@
 # authority. spl-token needs --fee-payer explicitly (it ignores `solana config`
 # once --url is set). Re-runnable: a pre-existing token account is not an error.
 set -uo pipefail
+
+MOD_DIR="${MOD_DIR:-$(dirname "$0")/platform/apps/api/moderators}"
+
+fund_moderators() {
+  shopt -s nullglob
+  local files=("$MOD_DIR"/*-wallet.json)
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "no moderator wallets in $MOD_DIR — run \`pnpm moderator-register\` / \`pnpm tiebreaker-register\`"
+    return
+  fi
+  echo "== moderators + tiebreakers (SOL only) =="
+  for f in "${files[@]}"; do
+    local w
+    w=$(solana-keygen pubkey "$f")
+    solana airdrop "${MOD_SOL:-1}" "$w" -u "$URL" >/dev/null || echo "  (airdrop refused for $w)"
+    echo "  $(basename "$f" -wallet.json)  $w  $(solana balance "$w" -u "$URL")"
+  done
+  echo
+}
+
+if [[ "${1:-}" == "--moderators" ]]; then
+  URL="${SOLANA_URL:-localhost}"
+  fund_moderators
+  exit 0
+fi
 
 USDC_MINT="${1:-}"
 AMOUNT="${2:-1000000}"
@@ -58,5 +87,7 @@ for w in "${WALLETS[@]}"; do
   echo "  USDC: $(spl-token balance "$USDC_MINT" --owner "$w" --url "$URL" 2>/dev/null || echo '?')"
   echo
 done
+
+[[ "$URL" == "localhost" ]] && fund_moderators
 
 echo "done."

@@ -1,6 +1,7 @@
 /**
- * Step 7 — the mod runner. For one submitted contract, end to end:
- *   open+verify (5) → runCheck (6) → sign `submit_verdict` with the mod's wallet.
+ * The mod runner. For one submitted contract: open+verify → runCheck → vote
+ * with the mod's own wallet — a hidden commit on a panel of 3 (revealed later by
+ * `mod-watch`), a direct `submit_verdict` on a panel of 1.
  *
  * The runner is the real automated path; only the verdict *brain* is a V1 stub —
  * so you pass the outcome (there's no AI yet) and `runCheck` packages it. The
@@ -23,7 +24,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { AnchorProvider, Program, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import type { Outcome } from "@repo/shared";
+import type { Vote } from "@repo/shared";
 import type { DescModeration } from "../src/solana/idl/desc_moderation";
 import moderationIdl from "../src/solana/idl/desc_moderation.json";
 import type { DescEscrow } from "../src/solana/idl/desc_escrow";
@@ -39,6 +40,18 @@ import {
   verdictAuthorityPda,
   moderatorPda,
 } from "../src/solana/moderation";
+import { dbWorkSource } from "../src/moderation/watch/dbSource";
+import { mischiefMode } from "../src/moderation/judge/mischief";
+import {
+  VOTE_COMMITTED,
+  chainNow,
+  commitHash,
+  commitSalt,
+} from "../src/moderation/commit";
+
+/** Exit code for "hidden vote committed, reveal pending" — `mod-watch` must not
+ *  close the claim on it. */
+export const EXIT_COMMITTED = 3;
 
 import { rpcUrl } from "../src/config/cluster";
 const RPC = rpcUrl;
@@ -55,7 +68,7 @@ for (let i = 0; i < args.length; i++) {
   else positional.push(args[i]);
 }
 const ref = positional[0];
-const outcome = positional[1] as Outcome | undefined;
+const outcome = positional[1] as Vote | undefined;
 
 // With DESC_JUDGE=claude the AI decides, so demanding a pass/fail here would be
 // worse than pointless: you would type one verdict and a different one could be
@@ -74,7 +87,7 @@ if (!ref || (!aiJudge && !hasOutcome)) {
 if (aiJudge && (hasOutcome || note)) {
   console.warn("! DESC_JUDGE=claude — ignoring the outcome/note you passed; the AI decides.");
 }
-const manual = hasOutcome ? { outcome: outcome as Outcome, note } : undefined;
+const manual = hasOutcome ? { outcome: outcome as Vote, note } : undefined;
 
 function resolveSlug(): string {
   if (slug) return slug;
@@ -87,7 +100,7 @@ function resolveSlug(): string {
   );
 }
 
-async function main() {
+async function main(): Promise<number> {
   // 0. load the mod's wallet (signer) + age identity (decrypt key)
   const s = resolveSlug();
   const modKeypair = Keypair.fromSecretKey(
@@ -135,18 +148,30 @@ async function main() {
       `${s} does not hold a seat on this contract's panel — record_verdict would reject it`
     );
   }
-  if (seat.vote !== 0) {
-    // One vote per seat: `record_verdict` rejects a second with AlreadyVoted.
-    console.log(`${s} has already voted on this contract — nothing to do.`);
-    return;
+  const source = dbWorkSource();
+  if (seat.vote === VOTE_COMMITTED) {
+    // Committed on an earlier run that died before recording it.
+    if (await source.markCommitted(row.id, modKeypair.publicKey)) {
+      console.log(`${s} already committed — waiting to reveal.`);
+      return EXIT_COMMITTED;
+    }
+    throw new Error("committed on-chain but no reveal data stored — this vote cannot be revealed");
   }
-  if (esc.outcome) {
-    // Deliberately NOT a skip. A panel of three settles on the second agreeing
-    // vote, so the third moderator often arrives here after the outcome is
-    // final — but a late vote is still recorded and still PAID, and its fee
-    // (a share of the contract) dwarfs the inference it costs. The only way to
-    // lose is for `release` to land before the vote does.
-    console.log("the panel already reached a majority — this vote cannot change it, but it is still paid.");
+  if (seat.vote !== 0) {
+    console.log(`${s} has already voted on this contract — nothing to do.`);
+    return 0;
+  }
+  if (mischiefMode(s) === "silent") {
+    console.log(`${s} is a TEST moderator set to stay silent — not voting.`);
+    return 0;
+  }
+
+  // Past the window the chain rejects the vote — don't pay for a judgment first.
+  const commitReveal = panel.count > 1;
+  const now = await chainNow(connection);
+  const closesAt = (commitReveal ? esc.commitDeadline : esc.revealDeadline).toNumber();
+  if (now > closesAt) {
+    throw new Error(`the ${commitReveal ? "commit" : "vote"} window closed ${now - closesAt}s ago`);
   }
 
   // 5. open + verify the sealed bundle against the on-chain commitment
@@ -179,21 +204,44 @@ async function main() {
     )
     .digest();
 
-  // 7. submit_verdict — signed by the mod's wallet, CPI into the escrow
+  const accounts = {
+    authority: modKeypair.publicKey,
+    config: moderationConfigPda,
+    verdictAuthority: verdictAuthorityPda,
+    moderator: moderatorPda(modKeypair.publicKey),
+    escrowConfig: esc.config as PublicKey,
+    escrow: escrowAddr,
+    panel: esc.panel as PublicKey,
+    descEscrowProgram: escrowProgram.programId,
+  };
+
+  if (commitReveal) {
+    // 7a. Panel of 3: post the hidden vote. Saved first, so a crash after the
+    //     transaction can't leave a commit with nothing to reveal.
+    const verdict = result.outcome as "pass" | "fail";
+    await source.saveCommit(row.id, modKeypair.publicKey, verdict, verdictHash.toString("hex"));
+    const commit = commitHash(
+      verdict,
+      verdictHash,
+      commitSalt(modKeypair, escrowAddr),
+      modKeypair.publicKey,
+      escrowAddr
+    );
+    const sig = await moderation.methods
+      .commitVerdict(Array.from(commit))
+      .accountsPartial(accounts)
+      .rpc();
+    await source.markCommitted(row.id, modKeypair.publicKey);
+    console.log(`\nvote committed (hidden): ${s} · tx ${sig}`);
+    console.log("mod-watch reveals it once every seat has committed or the window ends.");
+    return EXIT_COMMITTED;
+  }
+
+  // 7b. Panel of 1: vote directly — nobody to copy.
   const outcomeArg = result.outcome === "pass" ? { pass: {} } : { fail: {} };
   const sig = await moderation.methods
     .submitVerdict(outcomeArg, Array.from(verdictHash))
-    .accountsPartial({
-      authority: modKeypair.publicKey,
-      config: moderationConfigPda,
-      verdictAuthority: verdictAuthorityPda,
-      moderator: moderatorPda(modKeypair.publicKey),
-      escrowConfig: esc.config as PublicKey,
-      escrow: escrowAddr,
-      // The panel holds the seats and the votes; the escrow tallies them.
-      panel: esc.panel as PublicKey,
-      descEscrowProgram: escrowProgram.programId,
-    })
+    .accountsPartial(accounts)
     .rpc();
 
   console.log(`\nverdict recorded: ${result.outcome.toUpperCase()}`);
@@ -204,10 +252,11 @@ async function main() {
   console.log(
     `\nThe verdict is on-chain. The ${result.outcome === "pass" ? "committer can Release" : "initiator can Reclaim"} now.`
   );
+  return 0;
 }
 
 main()
-  .then(() => process.exit(0))
+  .then((code) => process.exit(code))
   .catch((e) => {
     console.error(e);
     process.exit(1);

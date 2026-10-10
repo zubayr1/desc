@@ -4,7 +4,7 @@ use anchor_spl::token::spl_token::state::Account as SplTokenAccount;
 use anchor_spl::token::{transfer, Transfer};
 
 use crate::error::EscrowError;
-use crate::states::{Escrow, ModeratorReputation, Panel, VOTE_NONE};
+use crate::states::{is_cast, Escrow, ModeratorReputation, Panel};
 
 /// Pay AND score every moderator that voted. Shared by `release` and `refund`:
 /// a moderator is paid for rendering a verdict, not for it going one way —
@@ -46,9 +46,13 @@ pub fn settle_panel<'info>(
         .zip(token_accounts)
         .zip(reputation_accounts)
     {
-        // Seated but silent: not paid, account never read, fee returns to the
-        // initiator (see `release`).
-        if entry.vote == VOTE_NONE {
+        // Silent: unpaid, and `missed` unless this is a ghost-timeout (no outcome).
+        if !is_cast(entry.vote) {
+            if escrow.outcome.is_some() {
+                let mut rep = load_reputation(reputation, &entry.moderator)?;
+                rep.record_missed();
+                rep.exit(&crate::ID)?;
+            }
             continue;
         }
         // Unpacked by hand, not via `Account<TokenAccount>`: read the two
@@ -87,25 +91,27 @@ pub fn settle_panel<'info>(
         // a ghost-timeout refund has no votes, so the `continue` above fired for
         // every seat. Guarded anyway: a payout must never fail over a counter.
         if let Some(outcome) = escrow.outcome {
-            let mut rep = Account::<ModeratorReputation>::try_from(reputation)?;
-            rep.check_version()?;
-            // `try_from` proves ownership and discriminator, not WHICH seat.
-            // Re-derive from the seat's moderator.
-            let expected = Pubkey::create_program_address(
-                &[
-                    ModeratorReputation::SEED_PREFIX,
-                    entry.moderator.as_ref(),
-                    &[rep.bump],
-                ],
-                &crate::ID,
-            )
-            .map_err(|_| error!(EscrowError::Unauthorized))?;
-            require_keys_eq!(expected, reputation.key(), EscrowError::Unauthorized);
-
+            let mut rep = load_reputation(reputation, &entry.moderator)?;
             rep.record(entry.vote, outcome, panel.count);
             rep.exit(&crate::ID)?;
         }
     }
 
     Ok(paid)
+}
+
+/// `try_from` proves ownership, not WHICH seat — so re-derive the PDA.
+fn load_reputation<'info>(
+    reputation: &'info AccountInfo<'info>,
+    moderator: &Pubkey,
+) -> Result<Account<'info, ModeratorReputation>> {
+    let rep = Account::<ModeratorReputation>::try_from(reputation)?;
+    rep.check_version()?;
+    let expected = Pubkey::create_program_address(
+        &[ModeratorReputation::SEED_PREFIX, moderator.as_ref(), &[rep.bump]],
+        &crate::ID,
+    )
+    .map_err(|_| error!(EscrowError::Unauthorized))?;
+    require_keys_eq!(expected, reputation.key(), EscrowError::Unauthorized);
+    Ok(rep)
 }

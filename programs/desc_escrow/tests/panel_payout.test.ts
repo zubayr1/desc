@@ -4,7 +4,9 @@ import {
   createEscrow,
   acceptEscrow,
   submitEscrow,
-  recordVerdict,
+  commitVote,
+  revealVote,
+  voteOnPanel,
   setupWorld,
   addModerator,
   releaseEscrow,
@@ -17,6 +19,7 @@ import {
   Keypair,
   PublicKey,
   TOKEN_PROGRAM_ID,
+  expectError,
 } from "./helpers";
 
 /**
@@ -94,9 +97,7 @@ describe("panel payout", () => {
       seats.reduce((sum, x) => sum.add(x.fee), new BN(0)).toString()
     );
 
-    for (const seat of seats) {
-      await recordVerdict(s, "pass", Array(32).fill(1), seat.wallet);
-    }
+    await voteOnPanel(s, seats.map((x) => ({ by: x.wallet, outcome: "pass" as const })));
     await releaseEscrow(s, { signer: committer, committerTokenAccount: committerAta });
 
     assert.equal((await tokenBalance(committerAta)).toString(), s.amount.toString());
@@ -118,9 +119,11 @@ describe("panel payout", () => {
     const { s, seats } = await panelOfThree();
 
     // 1-1, then the third vote decides Fail — seat 0 is on the losing side.
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "fail", Array(32).fill(2), seats[1].wallet);
-    await recordVerdict(s, "fail", Array(32).fill(3), seats[2].wallet);
+    await voteOnPanel(s, [
+      { by: seats[0].wallet, outcome: "pass" },
+      { by: seats[1].wallet, outcome: "fail" },
+      { by: seats[2].wallet, outcome: "fail" },
+    ]);
     assert.property((await program.account.escrow.fetch(s.escrow)).outcome, "fail");
 
     await refundEscrow(s);
@@ -146,10 +149,12 @@ describe("panel payout", () => {
   it("pays a moderator whose vote landed after the majority", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
 
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
-    // Already decided — this one was still judging when the majority formed.
-    await recordVerdict(s, "fail", Array(32).fill(3), seats[2].wallet);
+    // Revealed in order, so the third lands after the majority.
+    await voteOnPanel(s, [
+      { by: seats[0].wallet, outcome: "pass" },
+      { by: seats[1].wallet, outcome: "pass" },
+      { by: seats[2].wallet, outcome: "fail" },
+    ]);
 
     await releaseEscrow(s, { signer: committer, committerTokenAccount: committerAta });
 
@@ -164,9 +169,11 @@ describe("panel payout", () => {
   it("returns a silent moderator's fee to the initiator", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
 
-    // Two agree and settle it; the third never votes at all.
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
+    // Two agree and settle it; the third never commits at all.
+    await voteOnPanel(s, [
+      { by: seats[0].wallet, outcome: "pass" },
+      { by: seats[1].wallet, outcome: "pass" },
+    ]);
 
     await releaseEscrow(s, { signer: committer, committerTokenAccount: committerAta });
 
@@ -183,53 +190,48 @@ describe("panel payout", () => {
 
   it("rejects a payout routed to the wrong moderator", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
+    await voteOnPanel(s, seats.map((x) => ({ by: x.wallet, outcome: "pass" as const })));
 
     // Seat 1's fee aimed at seat 0's wallet — the program checks each account
     // against its own panel entry, so this cannot be used to skim a fee.
-    try {
+    await expectError(async () => {
       await releaseEscrow(s, {
         signer: committer,
         committerTokenAccount: committerAta,
         moderatorAtas: [seats[0].ata, seats[0].ata, seats[2].ata],
       });
-      assert.fail("expected Unauthorized");
-    } catch (e) {
-      assert.include(e.toString(), "Unauthorized");
-    }
+    }, "Unauthorized");
   });
 
   it("rejects a release that does not carry one account per seat", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
+    await voteOnPanel(s, seats.map((x) => ({ by: x.wallet, outcome: "pass" as const })));
 
     // Two accounts for a panel of three: the count is per SEAT, not per voter,
     // so passing only the voters is rejected rather than silently mis-paid.
-    try {
+    await expectError(async () => {
       await releaseEscrow(s, {
         signer: committer,
         committerTokenAccount: committerAta,
         moderatorAtas: [seats[0].ata, seats[1].ata],
       });
-      assert.fail("expected ModeratorConfigMismatch");
-    } catch (e) {
-      assert.include(e.toString(), "ModeratorConfigMismatch");
-    }
+    }, "ModeratorConfigMismatch");
   });
 
   it("settles from a transaction built before the last vote landed", async () => {
     const { s, committer, committerAta, seats } = await panelOfThree();
-    await recordVerdict(s, "pass", Array(32).fill(1), seats[0].wallet);
-    await recordVerdict(s, "pass", Array(32).fill(2), seats[1].wallet);
+    for (const [i, x] of seats.entries()) {
+      await commitVote(s, "pass", Array(32).fill(i + 1), x.wallet);
+    }
+    await revealVote(s, seats[0].wallet);
+    await revealVote(s, seats[1].wallet);
 
     // The accounts are chosen while only two seats have voted — the shape a
     // wallet would be handed the moment the Release button appears. The third
     // vote then lands before the transaction does. One account per seat means
     // the list is already right; one per voter would have been one short.
     const atas = seats.map((x) => x.ata);
-    await recordVerdict(s, "pass", Array(32).fill(3), seats[2].wallet);
+    await revealVote(s, seats[2].wallet);
 
     await releaseEscrow(s, {
       signer: committer,

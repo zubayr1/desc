@@ -5,9 +5,10 @@ use crate::error::EscrowError;
 use crate::instructions::settle::settle_panel;
 use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel};
 
-/// Initiator reclaims the deposit. Fires on either trigger:
-///   1. `Active` & past deadline with no submission  -> committer ghosted, or
-///   2. `Submitted` & `outcome == Fail`              -> work rejected.
+/// Initiator reclaims the deposit. Fires on any of:
+///   1. `Active` & past deadline with no submission  -> committer ghosted,
+///   2. `Submitted` & `outcome == Fail`              -> work rejected, or
+///   3. `Submitted` & `outcome == Inconclusive`      -> voters paid, protocol keeps nothing.
 ///
 /// Payout policy — the protocol is paid for rendering a verdict, not for the
 /// verdict going one way:
@@ -80,9 +81,16 @@ impl<'info> Refund<'info> {
         let now = Clock::get()?.unix_timestamp;
 
         let ghosted = self.escrow.status == EscrowStatus::Active && now > self.escrow.deadline;
-        let failed = self.escrow.status == EscrowStatus::Submitted
-            && self.escrow.outcome == Some(Outcome::Fail);
-        require!(ghosted || failed, EscrowError::InvalidStatus);
+        let submitted = self.escrow.status == EscrowStatus::Submitted;
+        let failed = submitted && self.escrow.outcome == Some(Outcome::Fail);
+        let inconclusive = submitted && self.escrow.outcome == Some(Outcome::Inconclusive);
+        require!(ghosted || failed || inconclusive, EscrowError::InvalidStatus);
+        if submitted {
+            require!(
+                self.escrow.settlement_ready(&self.panel, now),
+                EscrowError::AwaitingReveals
+            );
+        }
 
         let initiator_key = self.initiator.key();
         let contract_id = self.escrow.contract_id;

@@ -8,6 +8,7 @@ import {
   chainUnixTs,
   waitForChainTime,
   setupWorld,
+  expectError,
 } from "./helpers";
 
 describe("submit", () => {
@@ -26,23 +27,17 @@ describe("submit", () => {
     const s = await createEscrow();
     await acceptEscrow(s);
     const stranger = await newFundedKeypair();
-    try {
+    await expectError(async () => {
       await submitEscrow(s, stranger);
-      assert.fail("expected Unauthorized");
-    } catch (e) {
-      assert.include(e.toString(), "Unauthorized");
-    }
+    }, "Unauthorized");
   });
 
   it("rejects submit before acceptance", async () => {
     const s = await createEscrow();
     const c = await newFundedKeypair();
-    try {
+    await expectError(async () => {
       await submitEscrow(s, c);
-      assert.fail("expected InvalidStatus");
-    } catch (e) {
-      assert.include(e.toString(), "InvalidStatus");
-    }
+    }, "InvalidStatus");
   });
 
   it("rejects submit after the deadline", async () => {
@@ -56,11 +51,8 @@ describe("submit", () => {
     const s = await createEscrow({ world, deadlineAbsolute: deadline });
     const c = await acceptEscrow(s);
     await waitForChainTime(deadline);
-    try {
+    await expectError(async () => {
       await submitEscrow(s, c);
-      assert.fail("expected DeadlinePassed");
-    } catch (e) {
-      assert.include(e.toString(), "DeadlinePassed");
-    }
+    }, "DeadlinePassed");
   });
 });

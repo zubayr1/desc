@@ -4,7 +4,7 @@ import { Reveal } from "@/components/landing/Reveal";
 import { SectionHead } from "@/components/SectionHead";
 import { useFees } from "@/lib/fees";
 import { explorerUrl } from "@/lib/chain";
-import { FormGuide, FormLegend } from "@/components/FormGuide";
+import { FormGuide, FormLegendTip } from "@/components/FormGuide";
 import { reputationOf } from "@/lib/reputation";
 import { short } from "@/lib/utils";
 
@@ -26,13 +26,18 @@ export function Moderators() {
         />
 
         <Reveal>
-          <FormLegend className="mb-4 px-1" />
           <div className="glass overflow-hidden">
             <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] gap-4 border-b border-white/[0.07] px-5 py-3 md:grid">
-              <span className="label">Moderator</span>
+              <span className="label inline-flex items-center gap-1.5">
+                Moderator <FormLegendTip />
+              </span>
               <span className="label">Wallet</span>
               <span className="label w-24 text-right">Price</span>
               <span className="label w-20 text-right">Status</span>
+            </div>
+            <div className="flex items-center gap-1.5 border-b border-white/[0.07] px-5 py-3 md:hidden">
+              <span className="label">Moderator form</span>
+              <FormLegendTip />
             </div>
 
             {!loaded && (

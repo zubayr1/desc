@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import type { ModeratorOffer } from "@repo/shared";
-import { reputationOf, TONE_CLASS } from "@/lib/reputation";
+import { FormGuide, FormLegend } from "@/components/FormGuide";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,6 +32,7 @@ export function ModeratorPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [legend, setLegend] = useState(false);
   const max = Math.max(...sizes);
 
   const list = useMemo(() => {
@@ -104,13 +105,21 @@ export function ModeratorPicker({
             {list.length === 0 && <li className="px-3 py-4 text-center text-sm text-muted">No moderator matches.</li>}
             {list.map((m) => {
               const on = selected.includes(m.wallet);
-              const rep = reputationOf(m);
               return (
                 <li key={m.wallet} role="option" aria-selected={on}>
-                  <button
-                    type="button"
+                  {/* Not a <button>: the form guide's "…" is a button of its own. */}
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => toggle(m.wallet)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggle(m.wallet);
+                      }
+                    }}
                     className={cn(
+                      "cursor-pointer",
                       "grid w-full grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-2.5 py-2 text-left transition",
                       on ? "bg-accent/10" : "hover:bg-white/[0.04]"
                     )}
@@ -136,18 +145,17 @@ export function ModeratorPicker({
                       <span className="block truncate font-mono text-[0.7rem] text-muted">
                         {m.wallet.slice(0, 4)}…{m.wallet.slice(-4)}
                       </span>
-                      {/* The record, read from the chain. This is the only
-                          thing on the row that says whether a moderator is any
-                          good — the price only says what it costs. */}
-                      <span className={cn("block truncate text-[0.7rem]", TONE_CLASS[rep.tone])}>
-                        {rep.summary}
+                      {/* The only thing on the row that says whether a moderator
+                          is any good — the price only says what it costs. */}
+                      <span className="mt-1 block">
+                        <FormGuide m={m} />
                       </span>
                     </span>
                     <span className="text-right">
                       <span className="block text-sm font-semibold tracking-[-0.02em]">{(m.baseBps / 100).toFixed(2)}%</span>
                       {amount > 0 && <span className="block font-mono text-[0.68rem] text-muted">{fee(m.baseBps)}</span>}
                     </span>
-                  </button>
+                  </div>
                 </li>
               );
             })}
@@ -156,7 +164,11 @@ export function ModeratorPicker({
             {sizes.length === 1
               ? `${sizes[0]} moderator${sizes[0] === 1 ? "" : "s"} per contract`
               : `Choose ${sizes.slice(0, -1).join(", ")} or ${sizes.at(-1)}`}{" "}
-            · each is paid its own price, read on-chain
+            · each is paid its own price, read on-chain ·{" "}
+            <button type="button" className="text-lilac hover:underline" onClick={() => setLegend((l) => !l)}>
+              {legend ? "hide" : "what do the circles mean?"}
+            </button>
+            {legend && <FormLegend className="mt-2 font-sans" />}
           </div>
         </div>
       )}

@@ -24,6 +24,7 @@ import {
 } from "@repo/shared";
 import { Card } from "@/components/ui/Card";
 import { ModeratorPicker } from "@/components/ModeratorPicker";
+import { FormLegend } from "@/components/FormGuide";
 import { Button } from "@/components/ui/Button";
 import { api, createAndFund, getFeeConfig } from "@/lib/api";
 import { deriveDeliverableKey } from "@/lib/deliverableKey";
@@ -462,7 +463,8 @@ export function NewContract() {
 
         {/* Every line here is derived from the live on-chain config, so the total
             matches what the wallet asks the initiator to sign. */}
-        <Card className="space-y-4 p-6 lg:sticky lg:top-24">
+        <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+        <Card className="space-y-4 p-6">
           <div className="text-xl font-semibold tracking-[-0.035em]">You deposit</div>
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
@@ -539,6 +541,8 @@ export function NewContract() {
             </Button>
           )}
         </Card>
+        {!noMod && <FormLegend />}
+        </div>
       </div>
     </div>
   );

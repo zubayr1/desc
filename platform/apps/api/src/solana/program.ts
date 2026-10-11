@@ -236,6 +236,7 @@ export async function readModeratorReputations(
       panelVerdicts: acc.panelVerdicts,
       majorityAgreements: acc.majorityAgreements,
       failVotes: acc.failVotes,
+      missed: acc.missed,
     });
   });
   return out;

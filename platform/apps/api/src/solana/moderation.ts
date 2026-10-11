@@ -7,6 +7,7 @@ import { env } from "../config/env";
 import { readModeratorReputations } from "./program";
 import { moderatorSlug } from "../moderation/moderatorModel";
 import { isMischief } from "../moderation/judge/mischief";
+import { recentResults } from "../moderation/recent";
 
 /**
  * Read-only view of the `desc_moderation` program. The chain is the source of
@@ -93,9 +94,11 @@ async function registered() {
  */
 export async function listModeratorOffers(): Promise<ModeratorOffer[]> {
   const active = await activeModerators();
-  const reputations = await readModeratorReputations(
-    active.map((m) => m.account.authority)
-  );
+  const [reputations, recent] = await Promise.all([
+    readModeratorReputations(active.map((m) => m.account.authority)),
+    // The form guide is a nicety: the quote still works without it.
+    recentResults().catch(() => undefined),
+  ]);
 
   return active.map((m) => ({
     wallet: m.account.authority.toBase58(),
@@ -108,6 +111,7 @@ export async function listModeratorOffers(): Promise<ModeratorOffer[]> {
     // verdicts while the site shows it as a normal one.
     test: isMischief(moderatorSlug(m.account.label)),
     reputation: reputations.get(m.account.authority.toBase58()),
+    recent: recent && (recent.get(m.account.authority.toBase58()) ?? []),
   }));
 }
 

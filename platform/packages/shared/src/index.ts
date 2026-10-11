@@ -328,7 +328,19 @@ export interface ModeratorOffer {
    *  account exists — a moderator registered before reputation shipped reads
    *  as "no record yet", not as "a bad record". */
   reputation?: ModeratorReputation;
+  /** Its last results, newest first, at most 5. Worked out from our database,
+   *  not the chain. Undefined when that lookup failed; empty when it has none. */
+  recent?: RecentResult[];
 }
+
+/** One finished contract, seen from one moderator's seat — a form-guide circle. */
+export type RecentResult =
+  | "majority" // with the majority on a panel of 3
+  | "solo" // decided alone, on a panel of 1
+  | "minority" // outvoted
+  | "split" // voted, but the contract ended Inconclusive
+  | "silent" // never voted, or a tiebreaker took the seat
+  | "withheld"; // committed a hidden vote and never revealed it
 
 /** A moderator's on-chain counters, read from its `ModeratorReputation` PDA. */
 export interface ModeratorReputation {
@@ -342,6 +354,9 @@ export interface ModeratorReputation {
   /** How many of ALL votes were Fail — the "fail everything for a free fee"
    *  detector. */
   failVotes: number;
+  /** Seats it left unanswered on a decided contract: never voted, never
+   *  revealed, or replaced by a tiebreaker. */
+  missed: number;
 }
 
 /**
@@ -355,6 +370,12 @@ export interface ModeratorReputation {
 export function moderatorAccuracy(rep?: ModeratorReputation): number | null {
   if (!rep || rep.panelVerdicts === 0) return null;
   return rep.majorityAgreements / rep.panelVerdicts;
+}
+
+/** Share of its seats a moderator left unanswered, 0–1. Null before it has any. */
+export function moderatorUnresponsive(rep?: ModeratorReputation): number | null {
+  const seats = rep ? rep.verdictsCast + rep.missed : 0;
+  return rep && seats > 0 ? rep.missed / seats : null;
 }
 
 /** One page of `GET /contracts`. `total` counts every match, not just this page. */

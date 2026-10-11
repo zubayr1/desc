@@ -3,30 +3,14 @@
  * panel votes on finished contracts — the chain keeps totals, not history.
  */
 import { and, desc, inArray, isNotNull, sql } from "drizzle-orm";
-import type { ContractModerator, Outcome, RecentResult } from "@repo/shared";
+import type { RecentResult } from "@repo/shared";
 import { db } from "../db/client";
 import { contracts } from "../db/schema";
+import { classifySeat } from "./seatResult";
 
 export const RECENT_LIMIT = 5;
 const SCAN = 500;
 const TTL_MS = 60_000;
-
-/** One seat of a finished contract, from its original moderator's side. Null: not counted. */
-export function classifySeat(
-  seat: ContractModerator,
-  outcome: Outcome | null,
-  panelSize: number
-): RecentResult | null {
-  if (!outcome) return null;
-  if (seat.filledBy) return "silent";
-  // Cached before votes were: skip rather than guess.
-  if (seat.vote === undefined) return null;
-  if (seat.vote === "committed") return "withheld";
-  if (seat.vote === null) return "silent";
-  if (outcome === "inconclusive") return "split";
-  if (panelSize === 1) return "solo";
-  return seat.vote === outcome ? "majority" : "minority";
-}
 
 let cache: { at: number; byWallet: Map<string, RecentResult[]> } | undefined;
 

@@ -136,8 +136,8 @@ export async function readPanel(escrow: PublicKey): Promise<PanelSeat[]> {
   return mapPanelSeats(await program.account.panel.fetch(panelPda(escrow)));
 }
 
-/** Mirrors the program's VOTE_NONE / VOTE_PASS / VOTE_FAIL / VOTE_COMMITTED. */
-const VOTES: (SeatVote | null)[] = [null, "pass", "fail", "committed"];
+/** Mirrors the program's VOTE_NONE / PASS / FAIL / COMMITTED / MISMATCH. */
+const VOTES: (SeatVote | null)[] = [null, "pass", "fail", "committed", "mismatch"];
 
 type PanelAccount = Awaited<ReturnType<typeof program.account.panel.fetch>>;
 export function mapPanelSeats(acc: PanelAccount): PanelSeat[] {
@@ -237,6 +237,7 @@ export async function readModeratorReputations(
       majorityAgreements: acc.majorityAgreements,
       failVotes: acc.failVotes,
       missed: acc.missed,
+      mismatched: acc.mismatched,
     });
   });
   return out;

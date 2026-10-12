@@ -98,8 +98,9 @@ export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 
 /** A moderator's vote. */
 export type Vote = "pass" | "fail";
-/** A seat's vote as seen on-chain: `committed` is cast but still hidden. */
-export type SeatVote = Vote | "committed";
+/** A seat's vote as seen on-chain: `committed` is cast but still hidden;
+ *  `mismatch` revealed something that didn't match its commit. */
+export type SeatVote = Vote | "committed" | "mismatch";
 
 /** Where a submitted contract's verdict stands. `awaiting-reveals`: decided, but
  *  settlement waits for committed seats to reveal. `finalizable`: nothing can
@@ -340,7 +341,8 @@ export type RecentResult =
   | "minority" // outvoted
   | "split" // voted, but the contract ended Inconclusive
   | "silent" // never voted, or a tiebreaker took the seat
-  | "withheld"; // committed a hidden vote and never revealed it
+  | "withheld" // committed a hidden vote and never revealed it
+  | "mismatch"; // revealed a different vote than it committed
 
 /** A moderator's on-chain counters, read from its `ModeratorReputation` PDA. */
 export interface ModeratorReputation {
@@ -357,6 +359,8 @@ export interface ModeratorReputation {
   /** Seats it left unanswered on a decided contract: never voted, never
    *  revealed, or replaced by a tiebreaker. */
   missed: number;
+  /** Reveals that didn't match their commit. */
+  mismatched: number;
 }
 
 /**
@@ -374,7 +378,7 @@ export function moderatorAccuracy(rep?: ModeratorReputation): number | null {
 
 /** Share of its seats a moderator left unanswered, 0–1. Null before it has any. */
 export function moderatorUnresponsive(rep?: ModeratorReputation): number | null {
-  const seats = rep ? rep.verdictsCast + rep.missed : 0;
+  const seats = rep ? rep.verdictsCast + rep.missed + rep.mismatched : 0;
   return rep && seats > 0 ? rep.missed / seats : null;
 }
 

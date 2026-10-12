@@ -10,6 +10,7 @@ export function classifySeat(
   if (seat.filledBy) return "silent";
   // Cached before votes were: skip rather than guess.
   if (seat.vote === undefined) return null;
+  if (seat.vote === "mismatch") return "mismatch";
   if (seat.vote === "committed") return "withheld";
   if (seat.vote === null) return "silent";
   if (outcome === "inconclusive") return "split";

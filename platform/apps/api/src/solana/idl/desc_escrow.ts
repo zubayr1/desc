@@ -2094,11 +2094,18 @@ export type DescEscrow = {
             "type": "u32"
           },
           {
+            "name": "mismatched",
+            "docs": [
+              "Revealed a vote that didn't match its commit."
+            ],
+            "type": "u32"
+          },
+          {
             "name": "reserved",
             "type": {
               "array": [
                 "u8",
-                44
+                40
               ]
             }
           }

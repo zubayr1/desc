@@ -17,7 +17,11 @@ const n = (v: number) => ({ toNumber: () => v });
 const esc = { outcome: null as unknown, verdictWindow: n(300), commitDeadline: n(700), revealDeadline: n(1000) };
 const panel = (votes: number[], fills = 0) => ({ count: 3, tiebreakFills: fills, entries: votes.map((vote) => ({ vote })) });
 
-assert.equal(tiebreakPhase(esc, panel([1, 2, 0]), 1000), "none", "voting still open");
+assert.equal(tiebreakPhase(esc, panel([1, 2, 0]), 650), "none", "the third seat can still commit");
+assert.equal(tiebreakPhase(esc, panel([1, 2, 0]), 701), "tiebreak", "commit window over: no seat can still vote");
+assert.equal(tiebreakPhase(esc, panel([1, 2, 3]), 900), "none", "a committed seat can still reveal");
+assert.equal(tiebreakPhase(esc, panel([1, 2, 4]), 650), "tiebreak", "a mismatch: no seat can still vote");
+assert.equal(tiebreakPhase(esc, panel([1, 4, 4], 2), 800), "finalize", "two mismatches, cap reached");
 assert.equal(tiebreakPhase(esc, panel([1, 2, 0]), 1001), "tiebreak", "1-1 with a silent seat");
 assert.equal(tiebreakPhase(esc, panel([1, 2, 3]), 1001), "tiebreak", "an unrevealed seat counts as silent");
 assert.equal(tiebreakPhase(esc, panel([0, 0, 0], 2), 1001), "finalize", "cap of two reached");
@@ -32,9 +36,13 @@ assert.equal(phase(esc, panel([0, 3, 0]), 600), "commit", "commit window");
 assert.equal(phase(esc, panel([3, 3, 3]), 600), "reveal", "reveal opens early once all committed");
 assert.equal(phase(esc, panel([3, 0, 0]), 701), "reveal", "reveal after the commit window");
 assert.equal(phase(esc, panel([1, 2, 0]), 1001), "tiebreak", "split after voting");
+assert.equal(phase(esc, panel([1, 2, 4]), 800), "tiebreak", "split with a mismatch, before the reveal deadline");
 assert.equal(phase(esc, panel([0, 0, 0], 2), 1001), "finalizable", "nothing left to decide it");
 assert.equal(phase({ ...esc, outcome: { pass: {} } }, panel([1, 1, 3]), 900), "awaiting-reveals", "decided, one still revealing");
 assert.equal(phase({ ...esc, outcome: { pass: {} } }, panel([1, 1, 3]), 1001), null, "reveal window over");
-assert.equal(phase(esc, { count: 1, tiebreakFills: 0, entries: [{ vote: 0 }] }, 900), "vote", "panel of one votes directly");
+// A panel of one has a single window: submit stamps both deadlines the same.
+const solo = { ...esc, commitDeadline: n(1000) };
+assert.equal(phase(solo, { count: 1, tiebreakFills: 0, entries: [{ vote: 0 }] }, 900), "vote", "panel of one votes directly");
+assert.equal(phase(solo, { count: 1, tiebreakFills: 0, entries: [{ vote: 0 }] }, 1001), "tiebreak", "silent panel of one");
 
 console.log("tiebreak ✓");

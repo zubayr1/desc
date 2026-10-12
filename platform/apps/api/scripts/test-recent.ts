@@ -20,5 +20,9 @@ is(seat(null), "inconclusive", 3, "silent", "silent on an Inconclusive contract"
 is(seat("fail"), "fail", 1, "solo", "decided alone");
 is(seat("pass"), "pass", 3, "majority", "with the majority");
 is(seat("fail"), "pass", 3, "minority", "outvoted");
+is(seat("mismatch"), "pass", 3, "mismatch", "revealed a different vote than it committed");
+is({ ...seat("pass", "tb"), replacedVote: "mismatch" }, "pass", 3, "mismatch", "a mismatched seat a tiebreaker took");
+is({ ...seat("pass", "tb"), replacedVote: "committed" }, "pass", 3, "withheld", "an unrevealed seat a tiebreaker took");
+is({ ...seat("pass", "tb"), replacedVote: null }, "pass", 3, "silent", "a silent seat a tiebreaker took");
 
 console.log("form guide ✓");

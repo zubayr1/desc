@@ -6,6 +6,9 @@
  *      moderator gets `missed +1`.
  *   B. all three silent → two tiebreakers split → Inconclusive → one-click
  *      refund (finalize + refund) → the initiator can't fetch the work.
+ *   C. 1 PASS, 1 FAIL, 1 reveal that doesn't match its commit → the seat is
+ *      burned, a tiebreaker takes it at once (no waiting for the deadline) →
+ *      release. The mismatched moderator is unpaid and gets `mismatched +1`.
  *
  * Votes and tiebreaks are signed directly, like every e2e — no watchers. Stop
  * `mod-watch` / `tiebreak-watch` while it runs.
@@ -64,14 +67,14 @@ const balance = async (owner: PublicKey): Promise<bigint> => {
     return 0n;
   }
 };
-const missed = async (w: PublicKey) =>
-  (await reader.account.moderatorReputation.fetch(moderatorReputationPda(w))).missed;
+const repOf = (w: PublicKey) => reader.account.moderatorReputation.fetch(moderatorReputationPda(w));
+const missed = async (w: PublicKey) => (await repOf(w)).missed;
 
 interface Live {
   status: string;
   outcome: string | null;
   verdict?: { phase: string } | null;
-  panel: { wallet: string; vote?: string | null; filledBy?: string; filledByLabel?: string }[];
+  panel: { wallet: string; vote?: string | null; filledBy?: string; filledByLabel?: string; replacedVote?: string | null }[];
 }
 
 /** A funded, accepted, delivered contract on a panel of 3. */
@@ -182,12 +185,53 @@ async function inconclusive() {
   console.log("ciphertext refused after Inconclusive ✓");
 }
 
+async function mismatched() {
+  console.log("\n── C: 1 PASS · 1 FAIL · 1 mismatched reveal → tiebreaker at once ──");
+  const c = await submitted("Split panel, one mismatched reveal");
+  const [a, b, bad] = c.seats;
+  const before = await repOf(bad.wallet);
+
+  await commitVerdict(c.escrow, "pass", a.wallet);
+  await commitVerdict(c.escrow, "fail", b.wallet);
+  await commitVerdict(c.escrow, "pass", bad.wallet);
+  await revealVerdict(c.escrow, "pass", a.wallet);
+  await revealVerdict(c.escrow, "fail", b.wallet);
+  await revealVerdict(c.escrow, "fail", bad.wallet); // committed PASS
+  const seats = await panelSeats(c.escrow);
+  if (seats[2].vote !== "mismatch") throw new Error(`the bad reveal should burn the seat, got ${seats[2].vote}`);
+
+  let live = await getJson<Live>(`/contracts/${c.id}`);
+  if (live.verdict?.phase !== "tiebreak") throw new Error(`a tiebreak should open at once, got ${live.verdict?.phase}`);
+  const t = await tiebreak(c.escrow, "pass");
+  live = await getJson<Live>(`/contracts/${c.id}`);
+  if (live.outcome !== "pass") throw new Error(`the tiebreaker's PASS should decide it, got ${live.outcome}`);
+  if (live.panel[2]?.filledBy !== t.toBase58() || live.panel[2]?.replacedVote !== "mismatch") {
+    throw new Error("the api should show the tiebreaker on seat 3, over a mismatch");
+  }
+  console.log(`seat 3 burned (≠) · ${live.panel[2].filledByLabel} took it at once → PASS`);
+
+  const paidBefore = await balance(bad.wallet);
+  const rel = (await postJson(`/contracts/${c.id}/release/prepare`, {
+    signer: c.committer.publicKey.toBase58(),
+  })) as { unsignedTx: string };
+  await signAndSubmit(rel.unsignedTx, c.committer, `/contracts/${c.id}/release/submit`);
+  const after = await repOf(bad.wallet);
+  if (after.mismatched !== before.mismatched + 1 || after.missed !== before.missed) {
+    throw new Error(`mismatched ${before.mismatched} → ${after.mismatched}, missed ${before.missed} → ${after.missed}`);
+  }
+  if ((await balance(bad.wallet)) !== paidBefore || after.verdictsCast !== before.verdictsCast) {
+    throw new Error("the mismatched moderator must not be paid or credited a verdict");
+  }
+  console.log(`released · mismatched ${before.mismatched} → ${after.mismatched}, missed unchanged`);
+}
+
 async function main() {
   await withVerdictWindow(WINDOW, async () => {
     await decidedByTiebreaker();
     await inconclusive();
+    await mismatched();
   });
-  console.log("\n✅ tiebreakers: a split is decided, a dead panel ends Inconclusive and refunds");
+  console.log("\n✅ tiebreakers: a split is decided, a dead panel ends Inconclusive, a mismatch is burned and replaced");
 }
 
 main()

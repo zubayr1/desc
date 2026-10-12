@@ -627,12 +627,18 @@ export async function commitVote(
     .rpc();
 }
 
-/** Reveal `by`'s committed vote. Permissionless — sent by the provider wallet. */
-export async function revealVote(s: EscrowSetup, by: Keypair, override?: Partial<Pending>) {
+/** Reveal `by`'s committed vote, signed by `by` (or `signer`, to test that only the seat's moderator can). */
+export async function revealVote(
+  s: EscrowSetup,
+  by: Keypair,
+  override?: Partial<Pending>,
+  signer: Keypair = by
+) {
   const p = { ...pending.get(pendingKey(s, by))!, ...override };
   await program.methods
     .revealVerdict(by.publicKey, voteObj(p.outcome), p.hash, Array.from(p.salt))
-    .accountsPartial({ payer: provider.wallet.publicKey, escrow: s.escrow, panel: s.panel })
+    .accountsPartial({ payer: signer.publicKey, escrow: s.escrow, panel: s.panel })
+    .signers([signer])
     .rpc();
 }
 

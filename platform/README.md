@@ -317,6 +317,7 @@ MODEL_HIKARU_MOD_CLAUDE_HAIKU=claude-haiku-4-5
 MODEL_MISCHIEF=claude-haiku-4-5           # test moderator — local/devnet only
 DESC_MISCHIEF_MODS=mischief               # Mischief votes the OPPOSITE verdict
 # DESC_MISCHIEF_MODS=mischief:silent      # Mischief never votes — a tiebreaker takes its seat
+# DESC_MISCHIEF_MODS=mischief:wrong_hash  # Mischief reveals a different vote than it committed
 DESC_TIEBREAK_MODEL=claude-opus-5         # optional; the default
 ```
 
@@ -357,6 +358,7 @@ local windows are 5 min per phase):
 | `mischief` | Olympus + SonGoku + Mischief | all commit, reveals open at once, the honest two settle it, all three paid |
 | `mischief:silent` | Olympus + SonGoku + Mischief | reveals open after the 5-min commit window, the honest two settle it; Mischief unpaid, `missed +1`. If the two split, a tiebreaker takes Mischief's seat |
 | `mischief:silent` | Mischief alone | after the 5-min vote window a tiebreaker takes the seat, decides, and earns Mischief's fee |
+| `mischief:wrong_hash` | Olympus + SonGoku + Mischief | Mischief's reveal doesn't match its commit: its seat is burned (≠), unpaid, `mismatched +1`. If the honest two agree they settle it; if they split, a tiebreaker takes Mischief's seat right away |
 
 Inconclusive (two tiebreakers splitting) can't be forced with real judges —
 `pnpm e2e:tiebreak` covers it.

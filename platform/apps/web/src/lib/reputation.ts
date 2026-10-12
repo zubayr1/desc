@@ -73,15 +73,18 @@ export function reputationOf(m: ModeratorOffer): RepDisplay {
 
   // No account yet, or an account that has never been written. Deliberately not
   // "0% accurate" — a moderator nobody has hired yet is not a bad moderator.
-  if (!rep || rep.verdictsCast + rep.missed === 0) {
+  if (!rep || rep.verdictsCast + rep.missed + rep.mismatched === 0) {
     return { ...base, summary: "no verdicts yet", totals: "no verdicts yet", tone: "none", hasRecord: false };
   }
 
-  const unanswered = `${pct(unresponsive ?? 0)} unresponsive`;
+  // Any mismatch is a moderator caught changing its vote, or one that lost its data.
+  const mismatches = rep.mismatched ? ` · ${plural(rep.mismatched, "hash mismatch")}` : "";
+  const unanswered = `${pct(unresponsive ?? 0)} unresponsive${mismatches}`;
+  const caught = rep.mismatched > 0;
 
   // Seated, but never answered.
   if (rep.verdictsCast === 0) {
-    const summary = `never voted · ${plural(rep.missed, "missed seat")}`;
+    const summary = rep.missed ? `never voted · ${plural(rep.missed, "missed seat")}` : "never voted";
     return { ...base, summary, totals: `${summary} · ${unanswered}`, tone: "bad", hasRecord: true };
   }
 
@@ -95,7 +98,7 @@ export function reputationOf(m: ModeratorOffer): RepDisplay {
       totals: `${summary} · ${unanswered}`,
       // No agreement to judge, so nothing to praise or warn about — except a
       // moderator that has failed everything, which is visible without a panel.
-      tone: failBias ? "bad" : "plain",
+      tone: failBias || caught ? "bad" : "plain",
       hasRecord: true,
     };
   }
@@ -109,7 +112,7 @@ export function reputationOf(m: ModeratorOffer): RepDisplay {
   // a panel that all fails the same submission agrees perfectly while being
   // useless, so this is checked first.
   const tone: Tone =
-    failBias || accuracy < OUTVOTED_MAJORITY || (unresponsive ?? 0) >= UNRESPONSIVE_BAD
+    failBias || caught || accuracy < OUTVOTED_MAJORITY || (unresponsive ?? 0) >= UNRESPONSIVE_BAD
       ? "bad"
       : accuracy === 1 && !rep.missed
         ? "good"

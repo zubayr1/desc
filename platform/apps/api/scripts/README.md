@@ -106,7 +106,8 @@ Local and devnet only.
 
 Registering it is not enough — it behaves normally until its slug is listed in
 `DESC_MISCHIEF_MODS` in `.env`. `mischief:silent` makes it never vote instead,
-so a tiebreaker takes its seat. The judge also refuses to start if `RPC_URL`
+so a tiebreaker takes its seat; `mischief:wrong_hash` makes it reveal a different
+vote than it committed. The judge also refuses to start if `RPC_URL`
 looks like mainnet, so the two guards have to both be wrong to do damage.
 
 | Flag | Default | Meaning |

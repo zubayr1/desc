@@ -66,7 +66,9 @@ export function PanelBoard({ c }: { c: Contract }) {
         .filter((m) => m.filledBy)
         .map((m) => (
           <p key={m.wallet} className="mt-2 text-xs text-st-submitted">
-            {m.label} didn&apos;t vote in time — {m.filledByLabel ?? "a platform tiebreaker"} took its seat
+            {m.replacedVote === "mismatch"
+              ? <>{m.label}&apos;s reveal didn&apos;t match its commit</>
+              : <>{m.label} didn&apos;t vote in time</>} — {m.filledByLabel ?? "a platform tiebreaker"} took its seat
             {m.vote === "pass" || m.vote === "fail" ? ` and voted ${m.vote.toUpperCase()}` : ""}.
           </p>
         ))}
@@ -87,6 +89,16 @@ function VoteBadge({ vote, closed }: { vote?: SeatVote | null; closed: boolean }
   }
   if (vote === "committed") {
     return <span className="font-mono text-[0.68rem] text-muted">voted · hidden</span>;
+  }
+  if (vote === "mismatch") {
+    return (
+      <span
+        title="Revealed a different vote than it committed"
+        className="rounded-md bg-fail/15 px-2 py-0.5 text-[0.68rem] font-semibold text-fail"
+      >
+        HASH MISMATCH
+      </span>
+    );
   }
   if (vote === null && closed) {
     return <span className="font-mono text-[0.68rem] text-muted">silent</span>;

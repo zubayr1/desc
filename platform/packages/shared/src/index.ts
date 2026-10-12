@@ -276,6 +276,8 @@ export interface ContractModerator {
   filledBy?: Address;
   /** That tiebreaker's on-chain label, e.g. "Tiebreaker 2". */
   filledByLabel?: string;
+  /** What the seat's own moderator had left before the tiebreaker took it. */
+  replacedVote?: SeatVote | null;
 }
 
 /**

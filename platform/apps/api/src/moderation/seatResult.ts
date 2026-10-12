@@ -7,7 +7,10 @@ export function classifySeat(
   panelSize: number
 ): RecentResult | null {
   if (!outcome) return null;
-  if (seat.filledBy) return "silent";
+  if (seat.filledBy) {
+    if (seat.replacedVote === "mismatch") return "mismatch";
+    return seat.replacedVote === "committed" ? "withheld" : "silent";
+  }
   // Cached before votes were: skip rather than guess.
   if (seat.vote === undefined) return null;
   if (seat.vote === "mismatch") return "mismatch";

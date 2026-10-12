@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;
-use crate::states::Panel;
+use crate::states::{is_cast, Panel, VOTE_MISMATCH, VOTE_NONE};
 
 /// On-chain lifecycle — only the transitions that move money. The richer
 /// off-chain states (draft, under_verification, disputed) have no on-chain form.
@@ -160,6 +160,16 @@ impl Escrow {
 
     pub fn voting_closed(&self, now: i64) -> bool {
         now > self.reveal_deadline
+    }
+
+    /// Voting closed, or no seat can still change the tally.
+    pub fn tiebreak_open(&self, panel: &Panel, now: i64) -> bool {
+        self.voting_closed(now)
+            || panel.seats().iter().all(|e| {
+                is_cast(e.vote)
+                    || e.vote == VOTE_MISMATCH
+                    || (e.vote == VOTE_NONE && now > self.commit_deadline)
+            })
     }
 
     pub fn tiebreak_deadline(&self, panel: &Panel) -> i64 {

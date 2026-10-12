@@ -2,11 +2,12 @@ use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;
 use crate::states::{
-    commit_hash, vote_byte, Escrow, EscrowStatus, Outcome, Panel, VOTE_COMMITTED,
+    commit_hash, vote_byte, Escrow, EscrowStatus, Outcome, Panel, VOTE_COMMITTED, VOTE_MISMATCH,
 };
 
-/// Permissionless: the reveal proves itself against the commit, so a relay can
-/// help but never censor. A reveal after the majority formed is still paid.
+/// Only the seat's own moderator can reveal: the salt comes from its key, so no
+/// one else could anyway. A reveal that doesn't match its commit is recorded
+/// and burns the seat. A reveal after the majority formed is still paid.
 #[derive(Accounts)]
 pub struct RevealVerdict<'info> {
     pub payer: Signer<'info>,
@@ -36,6 +37,7 @@ impl<'info> RevealVerdict<'info> {
         salt: [u8; 32],
     ) -> Result<()> {
         self.escrow.check_version()?;
+        require_keys_eq!(self.payer.key(), moderator, EscrowError::Unauthorized);
         require!(
             self.escrow.status == EscrowStatus::Submitted,
             EscrowError::InvalidStatus
@@ -56,7 +58,10 @@ impl<'info> RevealVerdict<'info> {
         require!(entry.vote == VOTE_COMMITTED, EscrowError::NotCommitted);
 
         let expected = commit_hash(vote, &verdict_hash, &salt, &moderator, &self.escrow.key());
-        require!(expected == entry.verdict_hash, EscrowError::CommitMismatch);
+        if expected != entry.verdict_hash {
+            self.panel.entries[seat].vote = VOTE_MISMATCH;
+            return Ok(());
+        }
 
         self.panel.entries[seat].vote = vote;
         self.panel.entries[seat].verdict_hash = verdict_hash;

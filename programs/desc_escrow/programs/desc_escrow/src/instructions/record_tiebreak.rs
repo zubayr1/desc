@@ -5,8 +5,9 @@ use crate::states::{
     vote_byte, Config, Escrow, EscrowStatus, ModeratorReputation, Outcome, Panel,
 };
 
-/// A tiebreaker fills the first silent seat after voting closes with no majority,
-/// inherits its fee, and the replaced moderator is marked `missed`.
+/// A tiebreaker fills the first silent seat once no seat can still vote and there's
+/// no majority, inherits its fee, and the replaced moderator is marked `missed`
+/// (or `mismatched`).
 #[derive(Accounts)]
 pub struct RecordTiebreak<'info> {
     pub settlement_authority: Signer<'info>,
@@ -49,7 +50,7 @@ impl<'info> RecordTiebreak<'info> {
             EscrowError::InvalidStatus
         );
         let now = Clock::get()?.unix_timestamp;
-        require!(self.escrow.voting_closed(now), EscrowError::TiebreakNotOpen);
+        require!(self.escrow.tiebreak_open(&self.panel, now), EscrowError::TiebreakNotOpen);
         require!(
             now <= self.escrow.tiebreak_deadline(&self.panel),
             EscrowError::VotingClosed
@@ -66,6 +67,7 @@ impl<'info> RecordTiebreak<'info> {
         let vote = vote_byte(outcome).ok_or(EscrowError::InvalidVote)?;
         let seat = self.panel.first_silent().ok_or(EscrowError::NoSilentSeat)?;
         let replaced = self.panel.entries[seat].moderator;
+        let replaced_vote = self.panel.entries[seat].vote;
 
         let rep = &mut self.replaced_reputation;
         rep.check_version()?;
@@ -75,7 +77,7 @@ impl<'info> RecordTiebreak<'info> {
         )
         .map_err(|_| error!(EscrowError::Unauthorized))?;
         require_keys_eq!(expected, rep.key(), EscrowError::Unauthorized);
-        rep.record_missed();
+        rep.record_unpaid(replaced_vote);
 
         let entry = &mut self.panel.entries[seat];
         entry.moderator = tiebreaker;

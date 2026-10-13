@@ -12,6 +12,7 @@ export const VOTE_NONE = 0;
 export const VOTE_PASS = 1;
 export const VOTE_FAIL = 2;
 export const VOTE_COMMITTED = 3;
+export const VOTE_MISMATCH = 4;
 
 type Vote = "pass" | "fail";
 
@@ -52,13 +53,15 @@ const voteArg = (v: Vote) => (v === "pass" ? { pass: {} } : { fail: {} });
 /**
  * Reveal every vote this moderator committed, as soon as reveals open. Run on
  * each watcher tick; a claim stays `committed` until it is revealed or can no
- * longer be.
+ * longer be. `tamper` reveals the opposite vote — only the `wrong_hash` test
+ * moderator sets it.
  */
 export async function revealCommitted(
   source: WorkSource,
   moderator: Keypair,
   escrowProgram: Program<DescEscrow>,
-  log: (line: string) => void = console.log
+  log: (line: string) => void = console.log,
+  tamper = false
 ): Promise<void> {
   const me = moderator.publicKey;
   for (const c of await source.committed(me)) {
@@ -70,6 +73,10 @@ export async function revealCommitted(
 
       if (seat && (seat.vote === VOTE_PASS || seat.vote === VOTE_FAIL)) {
         await source.release(c.contractId, me);
+        continue;
+      }
+      if (seat?.vote === VOTE_MISMATCH) {
+        await source.fail(c.contractId, me, "reveal didn't match the commit");
         continue;
       }
       if (!panel || !seat || !("submitted" in (esc.status as object))) {
@@ -85,15 +92,22 @@ export async function revealCommitted(
       const allCommitted = panel.entries.slice(0, panel.count).every((e) => e.vote !== 0);
       if (!allCommitted && now <= esc.commitDeadline.toNumber()) continue;
 
+      const outcome: Vote = tamper ? (c.outcome === "pass" ? "fail" : "pass") : c.outcome;
       await escrowProgram.methods
         .revealVerdict(
           me,
-          voteArg(c.outcome) as never,
+          voteArg(outcome) as never,
           Array.from(Buffer.from(c.verdictHash, "hex")),
           Array.from(commitSalt(moderator, escrow))
         )
         .accountsPartial({ payer: me, escrow, panel: esc.panel })
         .rpc();
+      const after = (await escrowProgram.account.panel.fetch(esc.panel)).entries.find((e) => e.moderator.equals(me));
+      if (after?.vote === VOTE_MISMATCH) {
+        await source.fail(c.contractId, me, "reveal didn't match the commit");
+        log(`  ! reveal on ${c.contractId} didn't match the commit — seat burned`);
+        continue;
+      }
       await source.release(c.contractId, me);
       log(`  revealed ${c.outcome.toUpperCase()} on ${c.contractId}`);
     } catch (err) {

@@ -48,8 +48,8 @@ function Passive({ ok, children }: { ok?: boolean; children: React.ReactNode }) 
 }
 
 
-const until = (at: string | null | undefined) =>
-  at ? ` (until ${new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : "";
+const clock = (at: string) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const until = (at: string | null | undefined) => (at ? ` (until ${clock(at)})` : "");
 
 function phaseText(c: Contract): string {
   const v = c.verdict;
@@ -61,7 +61,7 @@ function phaseText(c: Contract): string {
     case "reveal":
       return `Moderators are revealing their votes${until(v.endsAt)}.`;
     case "tiebreak":
-      return `No majority — a platform tiebreaker is deciding${until(v.endsAt)}.`;
+      return `No majority — a platform tiebreaker is deciding now${v.endsAt ? ` (at the latest by ${clock(v.endsAt)})` : ""}.`;
     case "finalizable":
       return "No majority — INCONCLUSIVE. The initiator can reclaim the deposit.";
     default:

@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import type { PublicKey } from "@solana/web3.js";
+import type { SeatVote } from "@repo/shared";
 import { db } from "../../db/client";
 import { contracts } from "../../db/schema";
 import type { AcceptanceCriterion } from "../runCheck";
@@ -44,6 +45,15 @@ export async function triedBy(contractId: string): Promise<Set<string>> {
       AND (state <> 'in_progress' OR started_at >= ${cutoff()}::timestamptz)
   `);
   return new Set(r.rows.map((x) => String(x.moderator)));
+}
+
+/** Record what a seat held before a tiebreaker took it — the chain overwrites it. */
+export async function markReplaced(contractId: string, seat: number, vote: SeatVote | null): Promise<void> {
+  await db.execute(sql`
+    UPDATE contracts
+    SET panel = jsonb_set(panel, ${`{${seat},replacedVote}`}::text[], ${JSON.stringify(vote)}::jsonb)
+    WHERE id = ${contractId} AND jsonb_array_length(panel) > ${seat}
+  `);
 }
 
 /** Atomic, like the panel claim: only a fresh row or an expired lease is taken. */

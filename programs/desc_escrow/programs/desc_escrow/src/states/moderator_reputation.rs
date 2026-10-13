@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::EscrowError;
-use crate::states::{is_cast, Outcome, VOTE_FAIL, VOTE_PASS};
+use crate::states::{is_cast, Outcome, VOTE_FAIL, VOTE_MISMATCH, VOTE_PASS};
 
 /// A moderator's lifetime record (PDA, seeds = [b"mod_rep", moderator]).
 ///
@@ -37,11 +37,13 @@ pub struct ModeratorReputation {
     pub bump: u8,
     /// Never voted in time. Counted so withholding a reveal can't protect a record.
     pub missed: u32,
-    pub reserved: [u8; 44],
+    /// Revealed a vote that didn't match its commit.
+    pub mismatched: u32,
+    pub reserved: [u8; 40],
 }
 
 impl ModeratorReputation {
-    pub const VERSION: u8 = 2;
+    pub const VERSION: u8 = 3;
 
     /// Seed prefix; full seeds = [SEED_PREFIX, moderator].
     pub const SEED_PREFIX: &'static [u8] = b"mod_rep";
@@ -96,5 +98,18 @@ impl ModeratorReputation {
 
     pub fn record_missed(&mut self) {
         self.missed = self.missed.saturating_add(1);
+    }
+
+    pub fn record_mismatch(&mut self) {
+        self.mismatched = self.mismatched.saturating_add(1);
+    }
+
+    /// An unpaid seat on a decided contract.
+    pub fn record_unpaid(&mut self, vote: u8) {
+        if vote == VOTE_MISMATCH {
+            self.record_mismatch();
+        } else {
+            self.record_missed();
+        }
     }
 }

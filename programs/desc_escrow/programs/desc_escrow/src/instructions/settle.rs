@@ -46,11 +46,11 @@ pub fn settle_panel<'info>(
         .zip(token_accounts)
         .zip(reputation_accounts)
     {
-        // Silent: unpaid, and `missed` unless this is a ghost-timeout (no outcome).
+        // Silent or mismatched: unpaid, and scored unless this is a ghost-timeout.
         if !is_cast(entry.vote) {
             if escrow.outcome.is_some() {
                 let mut rep = load_reputation(reputation, &entry.moderator)?;
-                rep.record_missed();
+                rep.record_unpaid(entry.vote);
                 rep.exit(&crate::ID)?;
             }
             continue;

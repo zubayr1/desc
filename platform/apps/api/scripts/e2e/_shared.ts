@@ -253,8 +253,8 @@ export interface Seat {
   wallet: PublicKey;
   /** Its own fee on this contract, base units. */
   fee: bigint;
-  /** null until it votes; `committed` while its vote is hidden. */
-  vote: "pass" | "fail" | "committed" | null;
+  /** null until it votes; `committed` while hidden; `mismatch` if its reveal didn't match. */
+  vote: "pass" | "fail" | "committed" | "mismatch" | null;
 }
 
 /**
@@ -272,7 +272,7 @@ export async function panelSeats(escrowAddress: string): Promise<Seat[]> {
   );
   const acc = await reader.account.escrow.fetch(new PublicKey(escrowAddress));
   const panel = await reader.account.panel.fetch(acc.panel as PublicKey);
-  const VOTES = [null, "pass", "fail", "committed"] as const;
+  const VOTES = [null, "pass", "fail", "committed", "mismatch"] as const;
   return panel.entries.slice(0, panel.count).map((e) => ({
     wallet: e.moderator as PublicKey,
     fee: BigInt(e.fee.toString()),

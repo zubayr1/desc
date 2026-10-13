@@ -35,7 +35,7 @@ impl<'info> Finalize<'info> {
             || self.panel.first_silent().is_none()
             || now > self.escrow.tiebreak_deadline(&self.panel);
         require!(
-            self.escrow.voting_closed(now) && exhausted,
+            self.escrow.tiebreak_open(&self.panel, now) && exhausted,
             EscrowError::NotFinalizable
         );
 

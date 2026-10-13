@@ -13,6 +13,12 @@ const RESULT: Record<RecentResult, { label: string; short: string; dot: string; 
   minority: { label: "Outvoted", short: "Outvoted", dot: "bg-fail text-bg", glyph: <X className={icon} /> },
   split: { label: "Voted, but the panel couldn't decide", short: "No majority", dot: "border-[1.5px] border-zinc-500", glyph: null },
   silent: { label: "Didn't respond", short: "No response", dot: "bg-zinc-600 text-bg", glyph: <Minus className={icon} /> },
+  mismatch: {
+    label: "Revealed a different vote than it committed",
+    short: "Vote didn't match",
+    dot: "bg-fail text-bg",
+    glyph: <span className="text-[10px] font-black leading-none">≠</span>,
+  },
   withheld: {
     label: "Committed a hidden vote and never revealed it",
     short: "Vote never revealed",

@@ -25,6 +25,7 @@ import {
   moderatorReputationPda,
   moderatorPda,
   expectError,
+  chainUnixTs,
   usdc,
   BN,
   Keypair,
@@ -34,6 +35,7 @@ import {
 } from "./helpers";
 
 const WINDOW = 8;
+const VOTE_MISMATCH = 4;
 
 interface Seat {
   wallet: Keypair;
@@ -43,6 +45,11 @@ interface Seat {
 
 async function rep(wallet: PublicKey) {
   return program.account.moderatorReputation.fetch(moderatorReputationPda(wallet));
+}
+
+async function seatVotes(s: EscrowSetup) {
+  const panel = await program.account.panel.fetch(s.panel);
+  return panel.entries.slice(0, panel.count).map((e) => e.vote);
 }
 
 async function escrowOf(s: EscrowSetup) {
@@ -85,10 +92,19 @@ async function panelOfOne() {
 }
 
 describe("commit–reveal", () => {
-  it("rejects a reveal that doesn't match its commit", async () => {
+  it("records a reveal that doesn't match its commit, and burns the seat", async () => {
     const { s, seats } = await panelOfThree();
     for (const x of seats) await commitVote(s, "pass", Array(32).fill(1), x.wallet);
-    await expectError(() => revealVote(s, seats[0].wallet, { outcome: "fail" }), "CommitMismatch");
+    await revealVote(s, seats[0].wallet, { outcome: "fail" });
+    assert.equal((await seatVotes(s))[0], VOTE_MISMATCH);
+    await expectError(() => revealVote(s, seats[0].wallet), "NotCommitted");
+  });
+
+  it("rejects a reveal not signed by the seat's moderator", async () => {
+    const { s, seats } = await panelOfThree();
+    for (const x of seats) await commitVote(s, "pass", Array(32).fill(1), x.wallet);
+    await expectError(() => revealVote(s, seats[0].wallet, undefined, seats[1].wallet), "Unauthorized");
+    assert.equal((await seatVotes(s))[0], 3, "still committed");
   });
 
   it("rejects a commit copied from another escrow", async () => {
@@ -102,10 +118,8 @@ describe("commit–reveal", () => {
     await commitVote(b.s, "pass", Array(32).fill(1), a.seats[1].wallet);
     await commitVote(b.s, "pass", Array(32).fill(1), a.seats[2].wallet);
 
-    await expectError(
-      () => revealVote(b.s, a.seats[0].wallet, { outcome: "pass", hash, salt }),
-      "CommitMismatch"
-    );
+    await revealVote(b.s, a.seats[0].wallet, { outcome: "pass", hash, salt });
+    assert.equal((await seatVotes(b.s))[0], VOTE_MISMATCH, "the copied commit is caught and burned");
   });
 
   it("rejects a reveal before reveals open", async () => {
@@ -281,5 +295,75 @@ describe("tiebreakers", () => {
     const { s } = await panelOfOne();
     await waitPastVoting(s);
     await expectError(() => finalizeEscrow(s), "NotFinalizable");
+  });
+});
+
+describe("reveal mismatch", () => {
+  it("doesn't hold settlement: the seat is unpaid and scored as mismatched", async () => {
+    const { s, seats, committer, committerAta } = await panelOfThree();
+    for (const x of seats) await commitVote(s, "pass", Array(32).fill(1), x.wallet);
+    await revealVote(s, seats[0].wallet);
+    await revealVote(s, seats[1].wallet);
+    await revealVote(s, seats[2].wallet, { outcome: "fail" });
+    assert.property((await escrowOf(s)).outcome, "pass");
+
+    await releaseEscrow(s, { signer: committer, committerTokenAccount: committerAta });
+    assert.equal((await tokenBalance(seats[2].ata)).toString(), "0");
+    assert.equal((await tokenBalance(s.initiatorAta)).toString(), seats[2].fee.toString());
+    const r = await rep(seats[2].wallet.publicKey);
+    assert.deepEqual([r.mismatched, r.missed], [1, 0]);
+  });
+
+  it("Pass + Fail + mismatch: a tiebreaker steps in at once and takes the mismatched seat", async () => {
+    const { world, s, seats } = await panelOfThree();
+    const t = await addTiebreaker(world);
+    await commitVote(s, "pass", Array(32).fill(1), seats[0].wallet);
+    await commitVote(s, "fail", Array(32).fill(2), seats[1].wallet);
+    await commitVote(s, "pass", Array(32).fill(3), seats[2].wallet);
+    await revealVote(s, seats[0].wallet);
+    await revealVote(s, seats[1].wallet);
+    await revealVote(s, seats[2].wallet, { outcome: "fail" });
+    assert.isNull((await escrowOf(s)).outcome);
+
+    assert.isBelow(await chainUnixTs(), (await escrowOf(s)).revealDeadline.toNumber(), "reveal window still open");
+    await submitTiebreak(s, "pass", t.wallet);
+    assert.property((await escrowOf(s)).outcome, "pass");
+    const panel = await program.account.panel.fetch(s.panel);
+    assert.ok(panel.entries[2].moderator.equals(t.wallet.publicKey));
+    const r = await rep(seats[2].wallet.publicKey);
+    assert.deepEqual([r.mismatched, r.missed], [1, 0]);
+  });
+
+  it("two mismatches: tiebreakers fill both", async () => {
+    const { world, s, seats } = await panelOfThree();
+    const [t1, t2] = [await addTiebreaker(world), await addTiebreaker(world)];
+    await commitVote(s, "fail", Array(32).fill(1), seats[0].wallet);
+    await commitVote(s, "pass", Array(32).fill(2), seats[1].wallet);
+    await commitVote(s, "pass", Array(32).fill(3), seats[2].wallet);
+    await revealVote(s, seats[0].wallet);
+    await revealVote(s, seats[1].wallet, { outcome: "fail" });
+    await revealVote(s, seats[2].wallet, { outcome: "fail" });
+
+    await submitTiebreak(s, "pass", t1.wallet);
+    assert.isNull((await escrowOf(s)).outcome, "1-1 after the first fill");
+    await submitTiebreak(s, "pass", t2.wallet);
+    assert.property((await escrowOf(s)).outcome, "pass");
+    assert.equal((await program.account.panel.fetch(s.panel)).tiebreakFills, 2);
+    for (const x of [seats[1], seats[2]]) assert.equal((await rep(x.wallet.publicKey)).mismatched, 1);
+  });
+
+  it("a seat that never committed doesn't hold the tiebreak back past the commit window", async () => {
+    const { world, s, seats } = await panelOfThree();
+    const t = await addTiebreaker(world);
+    await commitVote(s, "pass", Array(32).fill(1), seats[0].wallet);
+    await commitVote(s, "fail", Array(32).fill(2), seats[1].wallet);
+    await waitPastCommits(s);
+    await revealVote(s, seats[0].wallet);
+    await revealVote(s, seats[1].wallet);
+
+    assert.isBelow(await chainUnixTs(), (await escrowOf(s)).revealDeadline.toNumber(), "reveal window still open");
+    await submitTiebreak(s, "fail", t.wallet);
+    assert.property((await escrowOf(s)).outcome, "fail");
+    assert.equal((await rep(seats[2].wallet.publicKey)).missed, 1);
   });
 });

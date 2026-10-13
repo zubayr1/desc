@@ -75,7 +75,14 @@ async function overlayVotes(
     }
     changed = true;
     const filledByLabel = filledBy ? (m.filledByLabel ?? (await tiebreakerLabel(filledBy))) : undefined;
-    seats.push({ ...m, vote: seat.vote, ...(filledBy ? { filledBy, filledByLabel } : {}) });
+    // First sight of a tiebreaker: keep what the original moderator had, unless the watcher already did.
+    const replacedVote = filledBy && !m.filledBy && m.replacedVote === undefined ? (m.vote ?? null) : m.replacedVote;
+    seats.push({
+      ...m,
+      vote: seat.vote,
+      ...(filledBy ? { filledBy, filledByLabel } : {}),
+      ...(replacedVote !== undefined ? { replacedVote } : {}),
+    });
   }
   return { seats, changed };
 }

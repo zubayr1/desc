@@ -18,6 +18,8 @@ pub const VOTE_NONE: u8 = 0;
 pub const VOTE_PASS: u8 = 1;
 pub const VOTE_FAIL: u8 = 2;
 pub const VOTE_COMMITTED: u8 = 3;
+/// Revealed something that didn't match its commit. Burned: unpaid, never retried.
+pub const VOTE_MISMATCH: u8 = 4;
 
 pub fn is_cast(vote: u8) -> bool {
     vote == VOTE_PASS || vote == VOTE_FAIL

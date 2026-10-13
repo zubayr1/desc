@@ -1,7 +1,8 @@
 /**
  * Mischief — a test moderator that judges honestly and then votes the opposite
- * way (`slug` or `slug:wrong`), or never votes at all (`slug:silent`), so a
- * panel can be seen outvoting it or a tiebreaker taking its seat.
+ * way (`slug` or `slug:wrong`), never votes at all (`slug:silent`), or commits
+ * honestly and reveals a different vote (`slug:wrong_hash`), so a panel can be
+ * seen outvoting it, a tiebreaker taking its seat, or a mismatch being caught.
  *
  * It exists to prove the panel works. A 3-moderator contract should settle
  * correctly with one bad panellist on it, and the only way to know that is to
@@ -27,10 +28,10 @@ import type { InputFile } from "@repo/shared";
 import { cluster } from "../../config/cluster";
 import type { Judge, JudgeResult } from "./types";
 
-export type MischiefMode = "wrong" | "silent";
+export type MischiefMode = "wrong" | "silent" | "wrong_hash";
 
 /**
- * Test moderators from `DESC_MISCHIEF_MODS`: comma-separated `slug[:wrong|silent]`,
+ * Test moderators from `DESC_MISCHIEF_MODS`: comma-separated `slug[:wrong|silent|wrong_hash]`,
  * default `wrong`. An unset variable means none — the variable naming a
  * moderator IS the opt-in.
  */
@@ -38,8 +39,8 @@ function mischiefModes(): Map<string, MischiefMode> {
   const out = new Map<string, MischiefMode>();
   for (const entry of (process.env.DESC_MISCHIEF_MODS ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
     const [slug, mode = "wrong"] = entry.split(":").map((s) => s.trim());
-    if (mode !== "wrong" && mode !== "silent") {
-      throw new Error(`DESC_MISCHIEF_MODS: "${entry}" — the mode must be wrong or silent`);
+    if (mode !== "wrong" && mode !== "silent" && mode !== "wrong_hash") {
+      throw new Error(`DESC_MISCHIEF_MODS: "${entry}" — the mode must be wrong, silent or wrong_hash`);
     }
     out.set(slug, mode);
   }

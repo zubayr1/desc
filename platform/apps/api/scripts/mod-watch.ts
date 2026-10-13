@@ -107,7 +107,9 @@ async function main() {
       `\n!! ${slug} is a TEST moderator (DESC_MISCHIEF_MODS) — ` +
         (mischief === "silent"
           ? "it never votes, so a tiebreaker\n   takes its seat."
-          : "it judges for real\n   and then submits the OPPOSITE verdict.") +
+          : mischief === "wrong_hash"
+            ? "it commits honestly, then reveals\n   the OPPOSITE vote, so the reveal doesn't match."
+            : "it judges for real\n   and then submits the OPPOSITE verdict.") +
         " Local and devnet only.\n"
     );
   }
@@ -151,7 +153,7 @@ async function main() {
     }
 
     try {
-      await revealCommitted(source, modKeypair, escrowProgram);
+      await revealCommitted(source, modKeypair, escrowProgram, console.log, mischief === "wrong_hash");
     } catch (err) {
       console.error(`  ! reveal sweep failed: ${(err as Error).message}`);
     }

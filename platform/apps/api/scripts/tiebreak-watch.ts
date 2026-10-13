@@ -25,11 +25,11 @@ import * as storage from "../src/storage";
 import { openAndVerify } from "../src/moderation/openVerify";
 import { runCheck } from "../src/moderation/runCheck";
 import { aiJudgeSelected } from "../src/moderation/judge";
-import { VOTE_FAIL, VOTE_PASS, chainNow } from "../src/moderation/commit";
+import { VOTE_COMMITTED, VOTE_FAIL, VOTE_MISMATCH, VOTE_PASS, chainNow } from "../src/moderation/commit";
 import { dbWorkSource } from "../src/moderation/watch/dbSource";
 import { roundRobin } from "../src/moderation/tiebreak/roundRobin";
 import { tiebreakPhase } from "../src/moderation/tiebreak/phase";
-import { claimTiebreak, submittedWithPanel, triedBy, type Contested } from "../src/moderation/tiebreak/queue";
+import { claimTiebreak, markReplaced, submittedWithPanel, triedBy, type Contested } from "../src/moderation/tiebreak/queue";
 import { moderationConfigPda, moderatorPda, verdictAuthorityPda } from "../src/solana/moderation";
 import { moderatorReputationPda } from "../src/solana/program";
 
@@ -100,8 +100,9 @@ async function main() {
     const verdictHash = createHash("sha256")
       .update(JSON.stringify({ deliverableHash, outcome: result.outcome, reasoning: result.reasoning }))
       .digest();
-    const silent = panel.entries.slice(0, panel.count).find((e) => e.vote !== VOTE_PASS && e.vote !== VOTE_FAIL);
-    if (!silent) throw new Error("no silent seat left");
+    const seatIndex = panel.entries.slice(0, panel.count).findIndex((e) => e.vote !== VOTE_PASS && e.vote !== VOTE_FAIL);
+    const silent = panel.entries[seatIndex];
+    if (seatIndex < 0 || !silent) throw new Error("no silent seat left");
 
     const sig = await t.moderation.methods
       .submitTiebreak(result.outcome === "pass" ? { pass: {} } : { fail: {} }, Array.from(verdictHash))
@@ -118,9 +119,11 @@ async function main() {
       })
       .rpc();
     console.log(`  ${t.slug} → ${result.outcome.toUpperCase()} · tx ${sig}`);
+    const was = silent.vote === VOTE_MISMATCH ? "mismatch" : silent.vote === VOTE_COMMITTED ? "committed" : null;
+    await markReplaced(c.id, seatIndex, was).catch(() => undefined);
   }
 
-  /** Returns seconds until this contract's voting closes, if it hasn't yet. */
+  /** Returns seconds until this contract's next voting deadline, if it has one ahead. */
   async function handle(c: Contested): Promise<number | undefined> {
     const escrow = new PublicKey(c.escrowAddress);
     const esc = await escrowProgram.account.escrow.fetch(escrow);
@@ -128,7 +131,10 @@ async function main() {
     const panel = await escrowProgram.account.panel.fetch(esc.panel);
     const now = await chainNow(connection);
     const phase = tiebreakPhase(esc, panel, now);
-    if (!esc.outcome && now <= esc.revealDeadline.toNumber()) return esc.revealDeadline.toNumber() - now;
+    if (phase === "none" && !esc.outcome && now <= esc.revealDeadline.toNumber()) {
+      const commitEnd = esc.commitDeadline.toNumber();
+      return (now <= commitEnd ? commitEnd : esc.revealDeadline.toNumber()) - now;
+    }
 
     if (phase === "finalize") {
       await escrowProgram.methods.finalize().accountsPartial({ escrow, panel: esc.panel }).rpc();

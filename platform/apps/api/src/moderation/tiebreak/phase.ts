@@ -1,5 +1,5 @@
 import type { VerdictTiming } from "@repo/shared";
-import { VOTE_COMMITTED, VOTE_FAIL, VOTE_PASS, VOTE_NONE } from "../commit";
+import { VOTE_COMMITTED, VOTE_FAIL, VOTE_MISMATCH, VOTE_NONE, VOTE_PASS } from "../commit";
 
 const DEFAULT_WINDOW = 3_600;
 
@@ -18,12 +18,21 @@ export interface PanelVotes {
   entries: { vote: number }[];
 }
 
+const cast = (vote: number) => vote === VOTE_PASS || vote === VOTE_FAIL;
+
+/** Mirrors `Escrow::tiebreak_open`: voting closed, or no seat can still change the tally. */
+export function tiebreakOpen(esc: EscrowTimes, panel: PanelVotes, now: number): boolean {
+  if (now > esc.revealDeadline.toNumber()) return true;
+  return panel.entries
+    .slice(0, panel.count)
+    .every((e) => cast(e.vote) || e.vote === VOTE_MISMATCH || (e.vote === VOTE_NONE && now > esc.commitDeadline.toNumber()));
+}
+
 /** Mirrors `record_tiebreak` and `finalize`: what the chain accepts right now. */
 export function tiebreakPhase(esc: EscrowTimes, panel: PanelVotes, now: number): "none" | "tiebreak" | "finalize" {
-  const revealEnd = esc.revealDeadline.toNumber();
-  if (esc.outcome || panel.count === 0 || now <= revealEnd) return "none";
+  if (esc.outcome || panel.count === 0 || !tiebreakOpen(esc, panel, now)) return "none";
 
-  const silent = panel.entries.slice(0, panel.count).some((e) => e.vote !== VOTE_PASS && e.vote !== VOTE_FAIL);
+  const silent = panel.entries.slice(0, panel.count).some((e) => !cast(e.vote));
   const expired = now > tiebreakDeadline(esc, panel);
   return panel.tiebreakFills >= cap(panel) || !silent || expired ? "finalize" : "tiebreak";
 }
@@ -46,7 +55,7 @@ export function verdictTiming(esc: EscrowTimes, panel: PanelVotes, now: number):
     const unrevealed = seats.some((e) => e.vote === VOTE_COMMITTED);
     return unrevealed && now <= revealEnd ? { phase: "awaiting-reveals", endsAt: at(revealEnd) } : null;
   }
-  if (now <= revealEnd) {
+  if (!tiebreakOpen(esc, panel, now)) {
     if (panel.count === 1) return { phase: "vote", endsAt: at(revealEnd) };
     const commitEnd = esc.commitDeadline.toNumber();
     const revealing = seats.every((e) => e.vote !== VOTE_NONE) || now > commitEnd;

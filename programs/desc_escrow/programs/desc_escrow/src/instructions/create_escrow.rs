@@ -180,14 +180,10 @@ impl<'info> CreateEscrow<'info> {
             .ok_or(EscrowError::MathOverflow)? as u64;
         let protocol_fee = bps_fee.max(self.config.protocol_fee_min);
 
-        // The floor doubles as the non-refundable verification fee, kept once a
-        // moderator has rendered any verdict. `<= protocol_fee` by the `max`
-        // above. A no-mod escrow gets no verification, so it pays the fee only.
-        let verification_fee = if no_mod {
-            0
-        } else {
-            self.config.protocol_fee_min
-        };
+        // The whole fee is kept once a verdict lands, Pass or Fail alike, so the
+        // protocol has no stake in which way the judges vote. A no-mod escrow
+        // can't fail, so it has nothing to keep on one.
+        let verification_fee = if no_mod { 0 } else { protocol_fee };
 
         // Total the initiator must deposit: payout + protocol fee + surcharge.
         let total = amount

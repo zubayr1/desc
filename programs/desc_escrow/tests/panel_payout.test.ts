@@ -137,12 +137,9 @@ describe("panel payout", () => {
     for (const seat of seats.slice(1)) {
       assert.equal((await tokenBalance(seat.ata)).toString(), seat.fee.toString());
     }
-    // No fee floor configured -> no verification fee -> everything else back.
-    assert.equal(
-      (await tokenBalance(s.initiatorAta)).toString(),
-      s.amount.add(s.fee).toString()
-    );
-    assert.equal((await tokenBalance(s.world.treasury)).toString(), "0");
+    // The protocol keeps its fee, as on a Pass; the payout comes back.
+    assert.equal((await tokenBalance(s.initiatorAta)).toString(), s.amount.toString());
+    assert.equal((await tokenBalance(s.world.treasury)).toString(), s.fee.toString());
     assert.isFalse(await accountExists(s.panel), "panel closed on refund");
   });
 

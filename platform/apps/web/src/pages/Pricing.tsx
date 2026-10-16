@@ -18,7 +18,7 @@ export function Pricing() {
   const protocol = a > 0 ? Math.max((a * fees.protocolFeeBps) / 10_000, feeFloor) : 0;
   const modFee = mod ? (a * mod.baseBps) / 10_000 : 0;
   const total = a + protocol + modFee;
-  const failRefund = a + protocol - (a > 0 ? feeFloor : 0);
+  const failRefund = a;
 
   return (
     <div className="space-y-24 pb-10">
@@ -29,7 +29,7 @@ export function Pricing() {
           sub="No subscriptions, no listing fees. The committer always receives the full amount."
         />
         <div className="grid gap-4 md:grid-cols-3">
-          <Rate big={`${protocolPct}%`} label="Protocol fee" note={`of the amount, minimum $${feeFloor.toFixed(0)}`} />
+          <Rate big={`${protocolPct}%`} label="Protocol fee" note={`of the amount, minimum $${feeFloor.toFixed(0)}, the same on Pass or Fail`} />
           <Rate
             big={cheapestModPct === undefined ? "Set by each" : `from ${cheapestModPct}%`}
             label="Moderator fee"
@@ -85,7 +85,7 @@ export function Pricing() {
                 <dd className="text-3xl font-semibold tracking-[-0.045em]">{total.toFixed(2)}</dd>
               </div>
               <p className="pt-2 text-xs text-muted">
-                On a fail you get {failRefund.toFixed(2)} back. If it's never delivered, you get all of it back.
+                On a fail you get {failRefund.toFixed(2)} back. The fees are the same either way. If it's never delivered, you get all of it back.
               </p>
             </dl>
           </div>

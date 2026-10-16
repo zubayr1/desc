@@ -174,10 +174,9 @@ export interface Contract {
   mint: Address;
   amount: TokenAmount;
   protocolFee: TokenAmount;
-  /** The slice of `protocolFee` the treasury keeps when a moderator renders a
-   *  verdict — on a Pass (inside the full fee) or a Fail (this much only). The
-   *  rest of the fee is returned on a Fail, and nothing at all is charged on a
-   *  ghost-timeout or a cancel. Cost recovery, not margin. */
+  /** What the treasury keeps on a Fail. The whole `protocolFee` on new
+   *  contracts, so Pass and Fail pay the same; older ones hold the old floor.
+   *  Nothing is kept on Inconclusive, a ghost-timeout or a cancel. */
   verificationFee: TokenAmount;
   moderatorSurcharge: TokenAmount;
   moderatorCount: number;

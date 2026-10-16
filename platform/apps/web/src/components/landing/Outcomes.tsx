@@ -1,7 +1,7 @@
 /** Where the money goes in each ending — the part judges ask about first. */
 const CASES = [
   { tag: "PASS", big: "100%", who: "of the amount to the committer", mod: "its fee", proto: "its fee", tone: "pass" },
-  { tag: "FAIL", big: "Refund", who: "to the initiator, minus the check", mod: "its fee", proto: "check fee only", tone: "fail" },
+  { tag: "FAIL", big: "100%", who: "of the amount back to the initiator", mod: "its fee", proto: "its fee", tone: "fail" },
   { tag: "NEVER DELIVERED", big: "100%", who: "back to the initiator", mod: "nothing", proto: "nothing", tone: "ghost" },
 ] as const;
 

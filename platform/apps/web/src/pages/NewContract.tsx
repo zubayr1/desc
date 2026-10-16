@@ -146,10 +146,8 @@ export function NewContract() {
   );
   const total = amountNum + fee + surcharge;
 
-  // Kept only when a moderator actually rendered a verdict (Pass or Fail); the
-  // rest of the protocol fee comes back on a Fail. Mirrors Config.protocol_fee_min.
-  const verificationFee = amountNum > 0 && !noMod ? feeFloor : 0;
-  const refundedOnFail = amountNum + fee - verificationFee;
+  // A Fail keeps the protocol fee, as a Pass does, so only the payout comes back.
+  const refundedOnFail = amountNum;
 
   const belowMin = amountNum > 0 && amountNum < minAmount;
 
@@ -492,9 +490,8 @@ export function NewContract() {
             </span>
           </div>
 
-          {/* The verification fee is the only thing the protocol keeps when a deal
-              doesn't pass — cost recovery for the check that ran, never margin.
-              With no moderator there is no failure branch at all. */}
+          {/* The protocol fee is the same on a Pass or a Fail, so we gain nothing
+              from either verdict. With no moderator there is no Fail at all. */}
           <p className="text-xs leading-relaxed text-muted">
             {noMod ? (
               <>
@@ -504,8 +501,8 @@ export function NewContract() {
               </>
             ) : (
               <>
-                If the work fails verification you get {refundedOnFail.toFixed(2)} back — we
-                keep only the {verificationFee.toFixed(2)} check fee and the{" "}
+                If the work fails verification you get {refundedOnFail.toFixed(2)} back. We
+                keep the {fee.toFixed(2)} protocol fee, the same as on a Pass, and the{" "}
                 {panel.length > 1 ? "moderators keep their" : "moderator keeps its"}{" "}
                 {surcharge.toFixed(2)}. If it's never delivered, nothing is charged.
               </>

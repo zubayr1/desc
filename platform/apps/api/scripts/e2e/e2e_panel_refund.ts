@@ -8,9 +8,8 @@
  *   - every moderator that voted is paid its OWN price, on a Fail as on a Pass
  *   - the moderator that voted PASS against the majority is paid too: it is
  *     paid for judging, not for agreeing
- *   - the treasury keeps the verification fee and NOTHING else — the protocol
- *     never profits from a failed deal
- *   - the initiator gets back the amount plus the rest of the protocol fee
+ *   - the treasury keeps the same protocol fee as on a Pass, and nothing else
+ *   - the initiator gets back the full payout
  *   - the vault and the panel are both closed, so their rent comes back
  *
  * The dissenting PASS is Mischief's, which is what it would really submit here:
@@ -77,7 +76,7 @@ async function main() {
   );
   await mintTo(connection, mintAuthority, USDC_MINT, ata.address, mintAuthority, FUNDING);
 
-  // The protocol's own numbers — the verification fee is the fee floor.
+  // The protocol's own numbers.
   const fees = await getJson<{ protocolFeeBps: number; protocolFeeMin: string }>(
     "/config/fees"
   );
@@ -86,7 +85,6 @@ async function main() {
     const floor = BigInt(fees.protocolFeeMin);
     return bps > floor ? bps : floor;
   })();
-  const verificationFee = BigInt(fees.protocolFeeMin);
 
   const panel = await pickPanel(3);
   const mischief = panel.find((m) => m.test);
@@ -175,21 +173,20 @@ async function main() {
     paid += earned;
   }
 
-  // Everything the initiator minted, less the moderators' fees and the
-  // verification fee the treasury keeps. Checking the balance this way covers
-  // the treasury too: those are the only two deductions, so a wrong treasury
-  // cut shows up here as a wrong refund.
-  const expected = BigInt(FUNDING) - paid - verificationFee;
+  // Everything the initiator minted, less the moderators' fees and the protocol
+  // fee the treasury keeps. Checking the balance this way covers the treasury
+  // too: those are the only two deductions, so a wrong treasury cut shows up
+  // here as a wrong refund.
+  const expected = BigInt(FUNDING) - paid - protocolFee;
   const initiatorBalance = await balance(connection, initiator.publicKey);
   console.log(
     `\ninitiator: ${initiatorBalance} (minted ${FUNDING}, less ${paid} to moderators` +
-      ` and ${verificationFee} verification fee)`
+      ` and ${protocolFee} protocol fee)`
   );
   if (initiatorBalance !== expected) {
     throw new Error(`initiator should hold ${expected}, got ${initiatorBalance}`);
   }
-  // The deal itself cost nothing but the verification: the payout came back.
-  console.log(`refunded the full ${AMOUNT} payout and ${protocolFee - verificationFee} of the protocol fee`);
+  console.log(`refunded the full ${AMOUNT} payout; the protocol kept ${protocolFee}, as on a Pass`);
 
   if (await accountExists(panelPda)) {
     throw new Error("panel account survived refund — its rent is stranded");

@@ -54,15 +54,15 @@ describe("create_escrow", () => {
 
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.ok(acc.protocolFee.eq(usdc(20)));
-    // Only the floor is non-refundable; the other 19 USDC returns on a Fail.
-    assert.ok(acc.verificationFee.eq(usdc(1)));
+    // A Fail keeps the whole fee, as a Pass does.
+    assert.ok(acc.verificationFee.eq(usdc(20)));
   });
 
-  it("charges no floor and no verification fee when none is configured", async () => {
+  it("charges no floor when none is configured", async () => {
     const s = await createEscrow({ amount: usdc(10) });
     const acc = await program.account.escrow.fetch(s.escrow);
     assert.ok(acc.protocolFee.eq(usdc(10).mul(new BN(200)).div(new BN(10_000))));
-    assert.ok(acc.verificationFee.eq(new BN(0)));
+    assert.ok(acc.verificationFee.eq(acc.protocolFee));
   });
 
   it("rejects an amount below the configured minimum", async () => {

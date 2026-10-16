@@ -14,11 +14,11 @@ use crate::states::{Config, Escrow, EscrowStatus, Outcome, Panel};
 /// verdict going one way:
 /// - Ghost-timeout: the ENTIRE vault returns; nobody did any work.
 /// - Fail: every moderator that voted earns its fee (including one outvoted,
-///   which did the same work), the treasury keeps `verification_fee` as cost
-///   recovery, and everything else returns to the initiator.
+///   which did the same work), the treasury keeps `verification_fee` (the
+///   whole protocol fee, as on a Pass), and everything else returns to the
+///   initiator.
 ///
-/// So the protocol never profits from a failed deal, and is never paid to pass
-/// one either.
+/// So the protocol earns the same whichever way the verdict goes.
 ///
 /// `remaining_accounts` is two per SEAT, in panel order (see `settle_panel`).
 /// Vault and panel are closed (rents -> initiator); the escrow is kept as a

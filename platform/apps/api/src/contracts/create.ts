@@ -57,9 +57,8 @@ export async function createContract(
   const bpsFee = (BigInt(req.amount) * BigInt(cfg.protocolFeeBps)) / 10_000n;
   const feeMin = BigInt(cfg.protocolFeeMin.toString());
   const protocolFee = (bpsFee > feeMin ? bpsFee : feeMin).toString();
-  // The floor doubles as the non-refundable verification fee — kept only once a
-  // moderator has rendered a verdict. Same snapshot the program stores.
-  const verificationFee = noMod ? "0" : feeMin.toString();
+  // What a Fail keeps: the whole fee, as a Pass does. Same snapshot the program stores.
+  const verificationFee = noMod ? "0" : protocolFee;
 
   // The panel's fee is each moderator's OWN on-chain price, which the program
   // reads from the Moderator accounts at create_escrow. We compute the same

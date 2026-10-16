@@ -2,8 +2,8 @@
  * End-to-end check for the refund flow (Fail verdict path):
  *   create → fund → accept → submit → verdict(fail) → refund.
  * Verifies the escrow is `refunded` and the initiator gets the deposit back less
- * the moderator surcharge and the verification fee (both earned once a verdict
- * was rendered). Reads the expected split off the contract rather than assuming.
+ * the moderator surcharge and the protocol fee, which a Fail keeps as a Pass
+ * does. Reads the expected split off the contract rather than assuming.
  *
  * Prereq: validator + program, bootstrap done, db:push done, api running.
  * Run: `pnpm e2e:refund`.
@@ -91,16 +91,16 @@ async function main() {
     refPrep.unsignedTx,
     initiator,
     `/contracts/${created.id}/refund/submit`
-  )) as { status: string; moderatorSurcharge: string; verificationFee: string };
+  )) as { status: string; moderatorSurcharge: string; protocolFee: string };
 
   const balance = (await getAccount(connection, ata.address)).amount;
   console.log("after refund → status:", refunded.status, "initiator USDC:", balance.toString());
 
   if (refunded.status !== "refunded") throw new Error("expected refunded, got " + refunded.status);
-  // A Fail verdict earns the moderator its surcharge and the treasury the
-  // verification fee; everything else comes back.
+  // A Fail earns the moderator its surcharge and the treasury its protocol fee,
+  // the same as a Pass; the payout comes back.
   const expected =
-    BigInt(TOTAL) - BigInt(refunded.moderatorSurcharge) - BigInt(refunded.verificationFee);
+    BigInt(TOTAL) - BigInt(refunded.moderatorSurcharge) - BigInt(refunded.protocolFee);
   if (balance !== expected) {
     throw new Error(`expected refund of ${expected}, got ${balance}`);
   }

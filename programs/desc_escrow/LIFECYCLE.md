@@ -66,7 +66,7 @@ stateDiagram-v2
 | `submit` | committer | Active → **Submitted** | is bound committer; now ≤ deadline | — (records deliverable hash) |
 | `record_verdict` | settlement_authority (`desc_moderation` verdict PDA) | Submitted → Submitted | must hold a **seat on the panel**; one vote per seat | — (attestation only). Records the vote; the **first side to reach quorum** sets the outcome and is final. A later vote is still recorded and still paid, but cannot move it |
 | `release` | initiator **or** committer | Submitted → **Settled** | outcome = Pass | `amount`→committer, `fee`→treasury, **each voting moderator its own fee** (token accounts as remaining accounts, in panel order), unspent fees of moderators that never voted → initiator; close vault **and panel** (rents → initiator) |
-| `refund` | initiator | Active/Submitted → **Refunded** | ghost (past deadline, no submit) **or** outcome = Fail | **ghost:** full vault → initiator. **Fail:** each voting moderator its own fee, `verification_fee`→treasury, rest→initiator; close vault **and panel** (rents → initiator) |
+| `refund` | initiator | Active/Submitted → **Refunded** | ghost (past deadline, no submit) **or** outcome = Fail | **ghost:** full vault → initiator. **Fail:** each voting moderator its own fee, `verification_fee` (the whole protocol fee)→treasury, rest→initiator; close vault **and panel** (rents → initiator) |
 | `mutual_cancel` | initiator **+** committer | Active/Submitted → **Refunded** | both sign | full vault → initiator; close vault. **Does not close the panel and pays no voter** — open issue |
 
 ## Key invariants

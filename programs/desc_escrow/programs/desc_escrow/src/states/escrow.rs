@@ -89,10 +89,9 @@ pub struct Escrow {
     /// and on no-mod — read `panel` instead.
     pub moderator: Pubkey,
 
-    /// The non-refundable slice of `protocol_fee`. Charged whenever a moderator
-    /// actually rendered a verdict, so the protocol recovers the cost of a Fail
-    /// without profiting from one. Zero means the old fee-on-Pass-only
-    /// behaviour.
+    /// What the treasury keeps on a Fail. New escrows set it to the whole
+    /// `protocol_fee`, so a Pass and a Fail pay the protocol the same. Escrows
+    /// created before that hold the old fee floor here.
     ///
     /// Invariant: `verification_fee <= protocol_fee`.
     pub verification_fee: u64,

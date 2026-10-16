@@ -154,7 +154,7 @@ out the clock.
 | Outcome | Committer | Initiator | Moderators | Protocol |
 |---|---|---|---|---|
 | **Pass** | the payout | unused moderator fees | each voter its own price | fee |
-| **Fail** | — | payout + most of the fee | each voter its own price | verification fee only |
+| **Fail** | — | the payout | each voter its own price | fee |
 | Nobody delivered | — | everything | — | — |
 | Cancelled before acceptance | — | everything | — | — |
 

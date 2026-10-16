@@ -82,21 +82,21 @@ Settled in **USDC**. SOL is only transaction fees and refundable rent.
 | Protocol fee | `max(2%, $1)` | on-chain `Config` |
 | Moderator fee | set by each moderator (1% today, max 5%) | on-chain `Moderator` account |
 | Smallest contract | $50 | on-chain `Config` |
-| Verification fee | $1 (= the floor) | snapshotted per escrow |
+| Kept on a Fail | the whole protocol fee, as on a Pass | snapshotted per escrow (`verification_fee`) |
 
 ### Who gets paid, by outcome
 
 | Outcome | Protocol | Moderator | Initiator |
 |---|---|---|---|
 | **Pass** | full fee | its price | — (committer paid in full) |
-| **Fail** | $1 only | its price | everything else back |
+| **Fail** | full fee | its price | the payout back |
 | **Ghost timeout** | nothing | nothing | everything back |
 | **Cancel / mutual cancel** | nothing | nothing | everything back |
 
 Two principles behind this:
 
-- The protocol is paid for **running the check**, not for the answer. So it never
-  profits from a failed deal, and is never paid to pass one.
+- The protocol is paid for **running the check**, not for the answer. It keeps the
+  same fee on a Pass and a Fail, so it gains nothing from either verdict.
 - The floor exists because cost-to-serve is roughly fixed per contract while a
   percentage is not. $50 is where 2% meets the $1 floor.
 
@@ -112,7 +112,7 @@ Two principles behind this:
 | API + Postgres read model | ✅ |
 | Web app | ✅ |
 | Admin console (read-only) | ✅ |
-| Fee model (floor, verification fee, minimum) | ✅ |
+| Fee model (floor, same fee on Pass and Fail, minimum) | ✅ |
 | No-mod mode | ✅ |
 | Verdict consensus (panel of 1 or 3, majority) | ✅ |
 | **AI moderator** — Claude, on the subscription | ✅ |
@@ -427,7 +427,7 @@ Settled — don't relitigate without a reason.
 | Decision | Detail |
 |---|---|
 | Moderator is paid on **any** verdict | Pass *or* Fail. Paying only on Pass creates pass-bias. |
-| Protocol keeps only the verification fee on a Fail | Never profits from failure, never paid to pass. |
+| Protocol keeps the same fee on a Pass and a Fail | No stake in the verdict: the platform runs the judges, so a bigger cut on a Pass would be a reason to pass. |
 | No settlement keypair | Mods sign with their own wallets via `desc_moderation`. |
 | Deliverable types are bundle-checkable | `mergeable`, `deployable`, `tests_pass`, `spec_met` — not "merged"/"deployed". |
 | Initiator is an encryption recipient | A Pass delivers the verified bytes, not a side-channel promise. |
